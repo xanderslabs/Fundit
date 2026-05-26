@@ -1,6 +1,6 @@
 # FundIt.Fun 🪙 - Smart Contracts & Indexer
 
-**FundIt.Fun** is a decentralized crowdfunding platform that makes fundraising interactive, fun, and transparent. This repository contains the **smart contracts, indexer, and backend logic** for the project.
+**FundIt.Fun**  is an open-source onchain crowdfunding platform for transparent public-good and community fundraising. It provides smart contracts, indexing infrastructure, and a frontend for creating campaigns, accepting crypto donations, and verifying campaign activity onchain.
 
 
 ## 📂 Repository Structure
