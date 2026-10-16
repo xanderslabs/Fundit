@@ -18,8 +18,9 @@ export async function fetchForwardFee(srcDomain: number, dstDomain: number, amou
   const threshold = fast ? FAST_THRESHOLD : STANDARD_THRESHOLD
   const tier = Array.isArray(tiers) ? tiers.find((t) => t.finalityThreshold === threshold) : undefined
   if (!tier) throw new Error('Circle did not return a fee quote for this speed.')
+  // high, as Bridge Kit budgets: the fee charged is never above it, so "at least" amounts stay true.
   // BigInt throws on a fractional or missing value, so a malformed quote fails loudly.
-  const forwardFee = BigInt(tier.forwardFee.med)
+  const forwardFee = BigInt(tier.forwardFee.high)
   // minimumFee is in basis points with up to two decimals: amount * bps / 10,000.
   const protocolFee = (amount * BigInt(Math.round(tier.minimumFee * 100))) / 1_000_000n
   return { maxFee: forwardFee + protocolFee, protocolFee, forwardFee }

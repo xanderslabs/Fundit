@@ -23,21 +23,21 @@ afterEach(() => {
 
 describe('fetchForwardFee', () => {
   // The donor sees this before paying, so it must match what Circle will take from the amount.
-  it('adds the bps protocol fee to the medium forwarding fee for a fast transfer', async () => {
+  it('adds the bps protocol fee to the high forwarding fee for a fast transfer', async () => {
     const fetchFn = mockFetch(200, FEE_SAMPLE)
     const fee = await fetchForwardFee(6, 26, 25_000000n, true)
     expect(fetchFn.mock.calls[0]![0]).toBe('https://iris-api.circle.com/v2/burn/USDC/fees/6/26?forward=true')
-    expect(fee.forwardFee).toBe(16217n)
+    expect(fee.forwardFee).toBe(20000n)
     // 0.325 bps rounds to 33 hundredths of a bp.
     expect(fee.protocolFee).toBe((25_000000n * 33n) / 1_000_000n)
-    expect(fee.maxFee).toBe(16217n + (25_000000n * 33n) / 1_000_000n)
+    expect(fee.maxFee).toBe(20000n + (25_000000n * 33n) / 1_000_000n)
   })
 
   it('uses the standard tier (threshold 2000) when not fast', async () => {
     mockFetch(200, FEE_SAMPLE)
     const fee = await fetchForwardFee(0, 26, 25_000000n, false)
     expect(fee.protocolFee).toBe(0n)
-    expect(fee.maxFee).toBe(16217n)
+    expect(fee.maxFee).toBe(20000n)
   })
 
   it('throws when Iris does not answer, so the UI never shows a made-up fee', async () => {

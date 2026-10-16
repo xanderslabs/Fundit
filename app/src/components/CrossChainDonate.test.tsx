@@ -123,9 +123,9 @@ describe('CrossChainDonate', () => {
     const user = userEvent.setup()
     await user.selectOptions(screen.getByLabelText('From'), 'Base')
     await user.type(screen.getByLabelText('Amount'), '25')
-    // 25 - (16217 + 825) units = 24.982958, shown truncated.
+    // 25 - (20000 + 825) units = 24.979175, shown truncated.
     // The real fee can be lower than the quote, so the landed amount is a floor.
-    expect(await screen.findByText('At least 24.98 USDC')).toBeTruthy()
+    expect(await screen.findByText('At least 24.97 USDC')).toBeTruthy()
     expect(screen.getByText('Reaches the campaign')).toBeTruthy()
     expect(screen.getByText(/about a minute/i)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Connect wallet to donate' })).toBeTruthy()
@@ -155,7 +155,7 @@ describe('CrossChainDonate fees with a wallet', () => {
     wrap(<CrossChainDonate view={view('USDC')} />)
     await userEvent.setup().type(screen.getByLabelText('Amount'), '25')
     expect(await screen.findByText("Estimated fee (could not reach your wallet's network)")).toBeTruthy()
-    expect(screen.getByText('At least 24.98 USDC')).toBeTruthy()
+    expect(screen.getByText('At least 24.97 USDC')).toBeTruthy()
     await waitFor(() => expect((screen.getByRole('button', { name: 'Donate' }) as HTMLButtonElement).disabled).toBe(false))
   })
 
