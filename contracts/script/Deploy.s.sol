@@ -23,8 +23,9 @@ contract Deploy is Script {
         address treasury = vm.envAddress("TREASURY");
         uint256 donationFeeBps = vm.envUint("DONATION_FEE_BPS");
         uint256 withdrawFeeBps = vm.envUint("WITHDRAW_FEE_BPS");
-        require(owner != address(0), "Deploy: OWNER unset");
-        require(donationFeeBps <= type(uint16).max && withdrawFeeBps <= type(uint16).max, "Deploy: fee out of range");
+        require(owner != address(0), "Deploy: OWNER is zero");
+        require(treasury != address(0), "Deploy: TREASURY is zero");
+        require(donationFeeBps <= 500 && withdrawFeeBps <= 500, "Deploy: fee above 500");
         uint32[] memory domains = parseDomains(vm.envOr("EURC_PAYOUT_DOMAINS", string("")));
 
         vm.startBroadcast(deployerKey);
@@ -69,7 +70,10 @@ contract Deploy is Script {
             uint32 domain = uint32(value);
             bool seen = false;
             for (uint256 j = 0; j < n; ++j) {
-                if (tmp[j] == domain) seen = true;
+                if (tmp[j] == domain) {
+                    seen = true;
+                    break;
+                }
             }
             if (!seen) tmp[n++] = domain;
         }

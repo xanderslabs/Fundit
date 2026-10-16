@@ -22,9 +22,11 @@ interface ITokenMessengerV2View {
     function remoteTokenMessengers(uint32 domain) external view returns (bytes32);
 }
 
-// forge-lint: disable-start(unused-return, calls-loop)
+// forge-lint: disable-start(unused-return, calls-loop, require-revert-in-loop)
 /// @notice Checks against Arc mainnet state. Skipped unless ARC_FORK=1.
 /// Run: ARC_FORK=1 arc-forge test --match-path test/fork/ArcFork.t.sol --fork-url arc -vv
+/// Add ARC_FORK_STRICT=1 to turn the recorded findings (Memo, EIP-3009/2612, EURC domains)
+/// into assertions, as a gate before a mainnet deploy. Without it those tests only log.
 /// Upstream forge cannot run these: Arc USDC moves balances through the native-coin
 /// precompile at 0x1800...0000, which only Arc Foundry (circlefin/arc-foundry) executes.
 contract ArcForkTest is Test {
@@ -48,6 +50,7 @@ contract ArcForkTest is Test {
     address internal creator = makeAddr("creator");
     address internal donor = makeAddr("donor");
     address internal payee = makeAddr("payee");
+    bool internal strict;
 
     function setUp() public {
         if (vm.envOr("ARC_FORK", uint256(0)) != 1) {
@@ -55,6 +58,8 @@ contract ArcForkTest is Test {
             return;
         }
         require(block.chainid == ARC_CHAIN_ID, "fork: not Arc mainnet");
+        strict = vm.envOr("ARC_FORK_STRICT", uint256(0)) == 1;
+        console.log("strict mode", strict);
         factory = new CampaignFactory(
             owner,
             treasury,
@@ -140,7 +145,7 @@ contract ArcForkTest is Test {
     }
 
     /// @dev Records whether a donate() routed through Arc's Memo contract sees the EOA as msg.sender.
-    /// Logs the result either way and never fails on it.
+    /// Logs the result. Fails only in strict mode, when the donor is not the EOA.
     function test_Fork_MemoPreservesSender() public {
         Campaign c = _createUsdcCampaign();
         _fundUsdc(donor, 10e6);
@@ -155,30 +160,35 @@ contract ArcForkTest is Test {
             MEMO.call(abi.encodeCall(IArcMemo.memo, (address(c), call, bytes32(uint256(1)), bytes("fundit"))));
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
+        address seen = address(0);
         if (!ok) {
             console.log("MEMO: call reverted");
             console.logBytes(ret);
-            return;
-        }
-        bytes32 donatedTopic = keccak256("Donated(address,uint256,uint256,uint256,string)");
-        for (uint256 i = 0; i < logs.length; ++i) {
-            if (logs[i].emitter == address(c) && logs[i].topics[0] == donatedTopic) {
-                address seen = address(uint160(uint256(logs[i].topics[1])));
-                console.log("MEMO: Donated donor", seen);
-                console.log("MEMO: preserves EOA sender", seen == donor);
-                return;
+        } else {
+            bytes32 donatedTopic = keccak256("Donated(address,uint256,uint256,uint256,string)");
+            for (uint256 i = 0; i < logs.length; ++i) {
+                if (logs[i].emitter == address(c) && logs[i].topics[0] == donatedTopic) {
+                    seen = address(uint160(uint256(logs[i].topics[1])));
+                    break;
+                }
             }
+            console.log("MEMO: Donated donor", seen);
         }
-        console.log("MEMO: no Donated event");
+        console.log("MEMO: preserves EOA sender", seen == donor);
+        if (strict) {
+            assertEq(seen, donor, "strict: Memo no longer preserves the EOA as donor; keep messages in donate()");
+        }
     }
 
     /// @dev Records whether Arc USDC and EURC expose EIP-3009 and EIP-2612 entry points.
+    /// Strict mode asserts all of them on both tokens.
     function test_Fork_UsdcSupportsEip3009() public view {
         _probeToken("USDC", address(USDC));
         _probeToken("EURC", address(EURC));
     }
 
-    /// @dev Records, per candidate domain, whether CCTP on Arc can burn EURC. Logs only.
+    /// @dev Records, per candidate domain, whether CCTP on Arc can burn EURC. Strict mode asserts the
+    /// 2026-10-16 finding (no domain works), so a change fails before a deploy with a stale list.
     function test_Fork_EurcCctpDomains() public {
         ITokenMinterV2 minter = ITokenMinterV2(ITokenMessengerV2View(TOKEN_MESSENGER).localMinter());
         console.log("EURC: TokenMinterV2", address(minter));
@@ -212,6 +222,15 @@ contract ArcForkTest is Test {
                     1e6, domains[i], bytes32(uint256(uint160(holder))), address(EURC), bytes32(0), 0, STANDARD_FINALITY
                 ) {
                 console.log("  depositForBurn(EURC) succeeded");
+                if (strict) {
+                    revert(
+                        string.concat(
+                            "strict: EURC burn now works for domain ",
+                            vm.toString(domains[i]),
+                            ". Update EURC_PAYOUT_DOMAINS (default empty) and the spec before deploying"
+                        )
+                    );
+                }
             } catch Error(string memory reason) {
                 console.log("  depositForBurn(EURC) reverted:", reason);
             } catch (bytes memory raw) {
@@ -233,6 +252,11 @@ contract ArcForkTest is Test {
         if (okDomain) console.logBytes32(abi.decode(sep, (bytes32)));
         console.log(label, "nonces (EIP-2612)", okNonces);
         if (okVersion) console.log(label, "version", abi.decode(version, (string)));
+        if (strict) {
+            assertTrue(ok3009, string.concat("strict: ", label, " lacks EIP-3009 authorizationState"));
+            assertTrue(okDomain, string.concat("strict: ", label, " lacks DOMAIN_SEPARATOR"));
+            assertTrue(okNonces, string.concat("strict: ", label, " lacks EIP-2612 nonces"));
+        }
     }
 
     function _createUsdcCampaign() internal returns (Campaign) {
@@ -250,7 +274,7 @@ contract ArcForkTest is Test {
     }
 }
 
-// forge-lint: disable-end(unused-return, calls-loop)
+// forge-lint: disable-end(unused-return, calls-loop, require-revert-in-loop)
 
 interface IERC20Decimals {
     function decimals() external view returns (uint8);
