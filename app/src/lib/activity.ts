@@ -47,9 +47,11 @@ const KINDS: Record<string, ActivityKind> = {
   CreatorChanged: 'creator-change',
 }
 
-// Messages public RPCs use when a range is too wide or returns too much. Other errors are rethrown,
-// so a dead network fails once instead of splitting into thousands of calls.
-const LIMIT_ERROR = /too many|limit|range|exceed|larger than|max/i
+// Messages Arc's public RPC returns when a range is too wide or returns too much. Other errors are
+// rethrown, so a dead network fails once instead of splitting into thousands of calls.
+const LIMIT_ERROR = /range too large|exceeds max results|too many results/i
+// Splitting on a rate limit would multiply the calls that caused it.
+const RATE_LIMITED = /\b429\b|rate limit/i
 
 type Decoded = ActivityItem & { prev: bigint }
 
@@ -80,7 +82,8 @@ async function getLogsSplit(client: LogClient, address: Address, from: bigint, t
     const logs = (await client.getLogs({ address, fromBlock: from, toBlock: to })) as Log[]
     if (logs.length < MAX_LOGS) return logs
   } catch (err) {
-    if (!LIMIT_ERROR.test(err instanceof Error ? err.message : String(err))) throw err
+    const message = err instanceof Error ? err.message : String(err)
+    if (RATE_LIMITED.test(message) || !LIMIT_ERROR.test(message)) throw err
     refused = err
   }
   if (from === to) throw refused ?? new Error(`Block ${from} has ${MAX_LOGS} or more logs`)

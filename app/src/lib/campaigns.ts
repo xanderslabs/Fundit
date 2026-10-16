@@ -69,3 +69,14 @@ export async function fetchFeatured(client: ReadClient): Promise<CampaignView | 
   const view = await fetchCampaign(client, featured)
   return view === 'not-a-campaign' ? null : view
 }
+
+export type FactoryFees = { donationFeeBps: number; withdrawFeeBps: number }
+
+// The rates a new campaign gets. A campaign keeps the rates it was created with.
+export async function fetchFactoryFees(client: ReadClient): Promise<FactoryFees> {
+  const [donationFeeBps, withdrawFeeBps] = await Promise.all([
+    client.readContract({ address: FACTORY_ADDRESS, abi: factoryAbi, functionName: 'donationFeeBps' }),
+    client.readContract({ address: FACTORY_ADDRESS, abi: factoryAbi, functionName: 'withdrawFeeBps' }),
+  ])
+  return { donationFeeBps, withdrawFeeBps }
+}

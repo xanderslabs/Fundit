@@ -1,6 +1,7 @@
 import { Link, Route, Routes } from 'react-router'
 import { Layout } from './components/Layout'
 import { CampaignPage } from './pages/CampaignPage'
+import { Create } from './pages/Create'
 import { Explore } from './pages/Explore'
 import { Home } from './pages/Home'
 
@@ -27,7 +28,7 @@ export function App() {
         <Route index element={<Home />} />
         <Route path="explore" element={<Explore />} />
         <Route path="c/:address" element={<CampaignPage />} />
-        <Route path="create" element={<Stub title="Start a fundraiser" />} />
+        <Route path="create" element={<Create />} />
         <Route path="manage/:address" element={<Stub title="Manage fundraiser" />} />
         <Route path="me" element={<Stub title="My page" />} />
         <Route path="terms" element={<Stub title="Terms" />} />

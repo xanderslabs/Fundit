@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import type { Address } from 'viem'
-import { fetchCampaign, fetchCampaignPage, fetchFeatured } from '../lib/campaigns'
+import { fetchCampaign, fetchCampaignPage, fetchFactoryFees, fetchFeatured } from '../lib/campaigns'
 import { arcClient } from '../lib/clients'
 
 export const PAGE_SIZE = 60n
@@ -31,4 +31,8 @@ export function useCampaign(address: Address | undefined) {
 
 export function useFeatured() {
   return useQuery({ queryKey: ['featured'], queryFn: () => fetchFeatured(arcClient), staleTime: STALE_TIME })
+}
+
+export function useFactoryFees() {
+  return useQuery({ queryKey: ['factory-fees'], queryFn: () => fetchFactoryFees(arcClient), staleTime: STALE_TIME })
 }

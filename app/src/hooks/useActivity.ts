@@ -17,14 +17,24 @@ export type ActivityPage = {
 
 type PageParam = { cursor: bigint; tip: bigint; last: bigint } | null
 
-// Block timestamps never change, so they are cached for the whole session.
-const blockTimes = new Map<bigint, bigint>()
+export type BlockClient = {
+  getBlock(args: { blockNumber: bigint }): Promise<{ number: bigint; timestamp: bigint }>
+}
 
-async function timesFor(blocks: bigint[]): Promise<Map<bigint, bigint>> {
-  const missing = [...new Set(blocks)].filter((b) => !blockTimes.has(b))
-  const fetched = await Promise.all(missing.map((blockNumber) => arcClient.getBlock({ blockNumber })))
-  for (const block of fetched) blockTimes.set(block.number, block.timestamp)
-  return new Map(blocks.map((b) => [b, blockTimes.get(b)!]))
+// Block timestamps never change, so they are cached for the whole session.
+const timeCache = new Map<bigint, bigint>()
+
+// A block whose getBlock fails is left out, and the list shows "Block N" for it instead of a date.
+export async function blockTimes(client: BlockClient, blocks: bigint[]): Promise<Map<bigint, bigint>> {
+  const missing = [...new Set(blocks)].filter((b) => !timeCache.has(b))
+  const fetched = await Promise.allSettled(missing.map((blockNumber) => client.getBlock({ blockNumber })))
+  for (const res of fetched) if (res.status === 'fulfilled') timeCache.set(res.value.number, res.value.timestamp)
+  const times = new Map<bigint, bigint>()
+  for (const b of blocks) {
+    const t = timeCache.get(b)
+    if (t !== undefined) times.set(b, t)
+  }
+  return times
 }
 
 async function loadPage(campaign: Address, createdAtBlock: bigint, param: PageParam): Promise<ActivityPage> {
@@ -42,7 +52,7 @@ async function loadPage(campaign: Address, createdAtBlock: bigint, param: PagePa
     limit: ACTIVITY_PAGE,
     cursor: param?.cursor,
   })
-  const times = await timesFor(page.items.map((i) => i.blockNumber))
+  const times = await blockTimes(arcClient, page.items.map((i) => i.blockNumber))
   return { ...page, times, tip, last }
 }
 

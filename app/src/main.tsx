@@ -7,6 +7,7 @@ import { App } from './App'
 import './styles/tokens.css'
 import './styles/base.css'
 import './styles/campaigns.css'
+import './styles/create.css'
 import { wagmiConfig } from './wagmi'
 
 const queryClient = new QueryClient()

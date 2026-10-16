@@ -1,0 +1,51 @@
+import {
+  BaseError,
+  encodeErrorResult,
+  RawContractError,
+  UserRejectedRequestError,
+  zeroAddress,
+} from 'viem'
+import { describe, expect, it } from 'vitest'
+import { campaignAbi } from '../abi/campaign'
+import { factoryAbi } from '../abi/factory'
+import { explainError } from './errors'
+
+const GENERIC = 'Something went wrong. Nothing was sent.'
+
+type AbiError = Extract<(typeof campaignAbi)[number] | (typeof factoryAbi)[number], { type: 'error' }>
+
+// Wraps revert data the way viem does when a wallet call fails: a BaseError with the raw data in its cause.
+function revertWith(abiError: AbiError) {
+  const args = (abiError.inputs as readonly { type: string }[]).map((i) => (i.type === 'address' ? zeroAddress : 0n))
+  const data = encodeErrorResult({ abi: [abiError], errorName: abiError.name, args } as never)
+  return new BaseError('Execution reverted', { cause: new RawContractError({ data }) })
+}
+
+describe('explainError', () => {
+  // A new custom error in either contract must get plain text, not the generic fallback.
+  const abiErrors = [...campaignAbi, ...factoryAbi].filter((x): x is AbiError => x.type === 'error')
+  it.each(abiErrors.map((e) => [e.name, e] as const))('explains %s', (_name, abiError) => {
+    const text = explainError(revertWith(abiError))
+    expect(text).not.toContain(GENERIC)
+    expect(text.length).toBeGreaterThan(0)
+  })
+
+  it('uses the agreed wording for two key errors', () => {
+    const find = (name: string) => campaignAbi.find((x) => x.type === 'error' && x.name === name) as AbiError
+    expect(explainError(revertWith(find('UnsupportedPayoutDomain')))).toBe('EURC can only be paid out on Arc.')
+    expect(explainError(revertWith(find('CampaignClosed')))).toBe('This campaign is closed.')
+  })
+
+  it('maps a wallet rejection to a cancel message', () => {
+    const rejected = new BaseError('Request failed', { cause: new UserRejectedRequestError(new Error('User denied')) })
+    expect(explainError(rejected)).toBe('You cancelled the request.')
+    expect(explainError({ code: 4001, message: 'User rejected the request.' })).toBe('You cancelled the request.')
+  })
+
+  it('falls back to a generic message with a short detail', () => {
+    const text = explainError(new Error('network down'))
+    expect(text.startsWith(GENERIC)).toBe(true)
+    expect(text).toContain('network down')
+    expect(explainError(new Error('x'.repeat(1000))).length).toBeLessThan(250)
+  })
+})

@@ -38,15 +38,16 @@ function donation(block: bigint, prev: bigint, logIndex = 0, amount = 1_000_000n
   return rawLog('Donated', { donor: DONOR, amount, fee: 0n, tip: 0n, message: 'hi', prevActivityBlock: prev }, block, logIndex)
 }
 
-// A fake Arc RPC that enforces the public limits: at most 10,000 blocks and fewer than 2,000 logs per call.
+// A fake Arc RPC that enforces the public limits: at most 10,000 blocks and at most 2,000 logs per call.
+// The error strings are the ones Arc's public RPC returns.
 function fakeClient(logs: FakeLog[]) {
   const calls: { fromBlock: bigint; toBlock: bigint }[] = []
   const client = {
     async getLogs({ address, fromBlock, toBlock }: { address: Address; fromBlock: bigint; toBlock: bigint }) {
       calls.push({ fromBlock, toBlock })
-      if (toBlock - fromBlock + 1n > MAX_LOG_RANGE) throw new Error('block range exceeds 10000')
+      if (toBlock - fromBlock + 1n > MAX_LOG_RANGE) throw new Error('requested range too large')
       const hit = logs.filter((l) => l.address === address && l.blockNumber >= fromBlock && l.blockNumber <= toBlock)
-      if (hit.length > MAX_LOGS) throw new Error('query returned too many results, limit is 2000')
+      if (hit.length > MAX_LOGS) throw new Error('query exceeds max results 2000')
       return hit
     },
   }
@@ -148,6 +149,37 @@ describe('walkActivity', () => {
     })
     expect(res.items.map((i) => i.blockNumber)).toEqual([150n])
     expect(calls.every((c) => c.toBlock <= 150n)).toBe(true)
+  })
+
+  // A result of exactly MAX_LOGS may be a silently truncated page, so it is split rather than trusted.
+  it('splits_window_that_returns_exactly_max_logs', async () => {
+    const logs: FakeLog[] = []
+    for (let b = 1001n; b < 1001n + BigInt(MAX_LOGS); b++) logs.push(donation(b, b - 1n))
+    const { client, calls } = fakeClient(logs)
+    const res = await walkActivity(client, CAMPAIGN, {
+      fromBlockTip: TIP,
+      createdAtBlock: 1000n,
+      lastActivityBlock: 1000n + BigInt(MAX_LOGS),
+      limit: 10_000,
+    })
+    expect(res.items.length).toBe(MAX_LOGS)
+    expect(new Set(res.items.map((i) => i.blockNumber)).size).toBe(MAX_LOGS)
+    expect(calls.length).toBeGreaterThan(1)
+  })
+
+  // Splitting on a rate limit would turn one refused call into many more, making the limit worse.
+  it('rethrows_rate_limit_errors_without_splitting', async () => {
+    const calls: unknown[] = []
+    const client = {
+      async getLogs(args: unknown) {
+        calls.push(args)
+        throw new Error('HTTP request failed. Status: 429. Details: rate limit exceeded, too many requests')
+      },
+    } as unknown as LogClient
+    await expect(
+      walkActivity(client, CAMPAIGN, { fromBlockTip: TIP, createdAtBlock: 1n, lastActivityBlock: 5000n, limit: 50 }),
+    ).rejects.toThrow('429')
+    expect(calls).toHaveLength(1)
   })
 
   it('rethrows errors that are not about the range or result size', async () => {
