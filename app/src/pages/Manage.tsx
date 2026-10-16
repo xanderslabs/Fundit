@@ -1,0 +1,551 @@
+import { useAppKit } from '@reown/appkit/react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { type FormEvent, useEffect, useState } from 'react'
+import { Link, Navigate, useParams } from 'react-router'
+import { type Address, encodeFunctionData, formatUnits, isAddress, isAddressEqual, zeroAddress } from 'viem'
+import { campaignAbi } from '../abi/campaign'
+import { TxStatus, useTx } from '../components/TxStatus'
+import { ARC_DOMAIN } from '../config'
+import { useCampaign } from '../hooks/useCampaigns'
+import { useSender } from '../hooks/useSender'
+import { chainByKey } from '../lib/bridge'
+import type { CampaignView } from '../lib/campaigns'
+import { arcClient } from '../lib/clients'
+import { bpsToPercent, formatAmount, parseAmount } from '../lib/format'
+import { fetchForwardFee } from '../lib/iris'
+import { buildWithdrawCall, destDomain, netAfterWithdrawFee, type PayoutDest, payoutOptions } from '../lib/payout'
+import type { Sender } from '../lib/sender'
+import { byteLength, MAX_DESCRIPTION, MAX_LINKS, MAX_TITLE, validateCampaign } from '../lib/validate'
+
+const CLOSE_TEXT = 'Closing is permanent. Funds that arrive later can still be withdrawn.'
+const PASSKEY_WARNING = 'Your passkey wallet may not exist on that chain. Send to an address you control there.'
+const CROSS_CHAIN_NOTE = 'Cross-chain payouts are new. Try a small amount first.'
+const RETRY_WARNING = 'The earlier transaction may still go through. Try again anyway?'
+const QUOTE_DEBOUNCE_MS = 400
+
+function useRefresh(campaign: Address) {
+  const queryClient = useQueryClient()
+  return (balances = false) => {
+    void queryClient.invalidateQueries({ queryKey: ['campaign', campaign.toLowerCase()] })
+    void queryClient.invalidateQueries({ queryKey: ['activity', campaign.toLowerCase()] })
+    if (balances) void queryClient.invalidateQueries({ queryKey: ['donor-funds'] })
+  }
+}
+
+function FieldError({ id, message }: { id: string; message?: string }) {
+  if (!message) return null
+  return (
+    <p id={id} className="field-error" role="alert">
+      {message}
+    </p>
+  )
+}
+
+function EditSection({ view, sender }: { view: CampaignView; sender: Sender }) {
+  const { address: campaign, summary, symbol } = view
+  const refresh = useRefresh(campaign)
+  const tx = useTx(() => refresh())
+  const [title, setTitle] = useState(summary.meta.title)
+  const [description, setDescription] = useState(summary.meta.description)
+  const [imageUrl, setImageUrl] = useState(summary.meta.imageUrl)
+  const [links, setLinks] = useState<string[]>(summary.meta.links.length > 0 ? [...summary.meta.links] : [''])
+  const [goal, setGoal] = useState(formatUnits(summary.goal, 6))
+
+  // backup is not part of edit(), so it is left empty here.
+  const result = validateCampaign({ title, description, imageUrl, links, goal, token: symbol, backup: '', sender: sender.address })
+  const errors = result.ok ? {} : result.errors
+  const closed = summary.closed
+  const canSubmit = result.ok && !closed && !tx.locked
+
+  function submit(e: FormEvent) {
+    e.preventDefault()
+    if (!canSubmit || !result.ok) return
+    const { goal: g, meta } = result
+    void tx.run(sender, () => ({ to: campaign, data: encodeFunctionData({ abi: campaignAbi, functionName: 'edit', args: [g, meta] }) }), 'Edit')
+  }
+
+  return (
+    <section className="panel manage-section" aria-labelledby="edit-heading">
+      <h2 id="edit-heading">Edit details</h2>
+      {closed && <p className="hint">This fundraiser is closed, so its details can no longer be changed.</p>}
+      <form className="create-form" onSubmit={submit} noValidate>
+        <fieldset className="manage-fields" disabled={closed || tx.locked}>
+          <div className="form-field">
+            <label htmlFor="edit-title">Title</label>
+            <input id="edit-title" value={title} onChange={(e) => setTitle(e.target.value)} aria-describedby="edit-title-error" />
+            <span className="counter">
+              {byteLength(title.trim())} of {MAX_TITLE} bytes
+            </span>
+            <FieldError id="edit-title-error" message={errors.title} />
+          </div>
+          <div className="form-field">
+            <label htmlFor="edit-description">Description</label>
+            <textarea id="edit-description" rows={6} value={description} onChange={(e) => setDescription(e.target.value)} />
+            <span className="counter">
+              {byteLength(description)} of {MAX_DESCRIPTION} bytes
+            </span>
+            <FieldError id="edit-description-error" message={errors.description} />
+          </div>
+          <div className="form-field">
+            <label htmlFor="edit-image">Image link (optional)</label>
+            <input id="edit-image" type="url" inputMode="url" placeholder="https://" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} />
+            <FieldError id="edit-image-error" message={errors.imageUrl} />
+          </div>
+          <div className="form-field">
+            <span className="manage-label">Links (optional)</span>
+            {links.map((link, i) => (
+              <div className="link-row" key={i}>
+                <div className="link-input">
+                  <input
+                    type="url"
+                    inputMode="url"
+                    placeholder="https://"
+                    aria-label={`Link ${i + 1}`}
+                    value={link}
+                    onChange={(e) => setLinks((rows) => rows.map((r, j) => (j === i ? e.target.value : r)))}
+                  />
+                  <FieldError id={`edit-link-${i}-error`} message={errors[`link-${i}`]} />
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  aria-label={`Remove link ${i + 1}`}
+                  onClick={() => setLinks((rows) => (rows.length === 1 ? [''] : rows.filter((_, j) => j !== i)))}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+            {links.length < MAX_LINKS && (
+              <button type="button" className="btn btn-outline" onClick={() => setLinks((rows) => [...rows, ''])}>
+                Add a link
+              </button>
+            )}
+            <FieldError id="edit-links-error" message={errors.links} />
+          </div>
+          <div className="form-field">
+            <label htmlFor="edit-goal">Goal</label>
+            <input id="edit-goal" inputMode="decimal" autoComplete="off" value={goal} onChange={(e) => setGoal(e.target.value)} />
+            <FieldError id="edit-goal-error" message={errors.goal} />
+          </div>
+        </fieldset>
+        <TxStatus tx={tx} noun="edit" successText="Your changes are saved." startOverWarning={RETRY_WARNING} />
+        <button type="submit" className="btn" disabled={!canSubmit}>
+          {tx.busy ? 'Saving...' : 'Save changes'}
+        </button>
+      </form>
+    </section>
+  )
+}
+
+function WithdrawSection({ view, sender }: { view: CampaignView; sender: Sender }) {
+  const { address: campaign, summary, symbol } = view
+  const refresh = useRefresh(campaign)
+  const [amountText, setAmountText] = useState('')
+  const tx = useTx(() => {
+    refresh(true)
+    setAmountText('')
+  })
+  const [dest, setDest] = useState<PayoutDest>('Arc')
+  const [fastChoice, setFastChoice] = useState(true)
+  // null until the person types, so the connected address is the default.
+  const [recipientText, setRecipientText] = useState<string | null>(null)
+
+  const options = useQuery({
+    queryKey: ['payout-options', campaign.toLowerCase()],
+    queryFn: () =>
+      payoutOptions(view, (d) => arcClient.readContract({ address: campaign, abi: campaignAbi, functionName: 'canPayoutTo', args: [d] })),
+    staleTime: Infinity,
+  })
+  // Arc always works, so it is the only choice while the list loads or if it fails.
+  const destinations = options.data ?? ['Arc']
+
+  const crossChain = dest !== 'Arc'
+  const chain = crossChain ? chainByKey(dest) : null
+  const fast = fastChoice && chain !== null && chain.fast
+  const available = summary.available
+  const parsed = amountText === '' ? null : parseAmount(amountText.trim())
+  const amount = parsed?.ok ? parsed.value : null
+  const overAvailable = amount !== null && amount > available
+  const net = amount === null ? null : netAfterWithdrawFee(amount, summary.withdrawFeeBps)
+
+  const recipientRaw = (recipientText ?? sender.address).trim()
+  let recipientError: string | undefined
+  if (!isAddress(recipientRaw, { strict: false })) recipientError = 'Enter a valid address (0x and 40 characters).'
+  else if (isAddressEqual(recipientRaw, zeroAddress)) recipientError = 'Enter a recipient address.'
+  else if (isAddressEqual(recipientRaw, campaign)) recipientError = 'Choose a different recipient.'
+  const recipient = recipientError ? null : (recipientRaw as Address)
+
+  const [quoteNet, setQuoteNet] = useState<bigint | null>(null)
+  useEffect(() => {
+    const timer = setTimeout(() => setQuoteNet(net), QUOTE_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
+  }, [net])
+  const fee = useQuery({
+    queryKey: ['payout-fee', dest, fast, quoteNet?.toString()],
+    queryFn: () => fetchForwardFee(ARC_DOMAIN, destDomain(dest), quoteNet!, fast),
+    enabled: crossChain && quoteNet !== null && quoteNet > 0n,
+    staleTime: 30_000,
+    retry: 1,
+  })
+  const quote = crossChain && net !== null && quoteNet === net ? fee.data : undefined
+  const arrives = net !== null && quote ? net - quote.maxFee : null
+  const tooSmall = arrives !== null && arrives <= 0n
+
+  const canSubmit =
+    available > 0n &&
+    amount !== null &&
+    !overAvailable &&
+    recipient !== null &&
+    !tx.locked &&
+    (!crossChain || (quote !== undefined && !tooSmall))
+
+  function submit(e: FormEvent) {
+    e.preventDefault()
+    if (!canSubmit || amount === null || net === null || recipient === null) return
+    void tx.run(
+      sender,
+      async () => {
+        // A fresh quote at send time, so the fee cap matches what Circle charges now.
+        const fresh = crossChain ? await fetchForwardFee(ARC_DOMAIN, destDomain(dest), net, fast) : undefined
+        if (fresh && fresh.maxFee >= net) throw new Error('This amount is too small to cover the transfer fee.')
+        return buildWithdrawCall({ campaign, amount, dest, recipient, fee: fresh, fast })
+      },
+      'Withdraw',
+    )
+  }
+
+  return (
+    <section className="panel manage-section" aria-labelledby="withdraw-heading">
+      <h2 id="withdraw-heading">Withdraw</h2>
+      <p>
+        Available: <strong>{formatAmount(available, symbol)}</strong>
+      </p>
+      {available === 0n && <p className="hint">There is nothing to withdraw yet.</p>}
+      <form className="create-form" onSubmit={submit} noValidate>
+        <fieldset className="manage-fields" disabled={tx.locked}>
+          <div className="form-field">
+            <label htmlFor="withdraw-amount">Amount</label>
+            <div className="link-row">
+              <input
+                id="withdraw-amount"
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder="0"
+                value={amountText}
+                onChange={(e) => setAmountText(e.target.value)}
+                aria-invalid={(parsed && !parsed.ok) || overAvailable ? true : undefined}
+                aria-describedby="withdraw-amount-error"
+              />
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={available === 0n}
+                onClick={() => setAmountText(formatUnits(available, 6))}
+              >
+                Max
+              </button>
+            </div>
+            <FieldError
+              id="withdraw-amount-error"
+              message={
+                parsed && !parsed.ok
+                  ? parsed.error
+                  : overAvailable
+                    ? `That is more than the ${formatAmount(available, symbol)} available.`
+                    : undefined
+              }
+            />
+          </div>
+
+          <div className="form-field">
+            <label htmlFor="withdraw-dest">Send to</label>
+            <select id="withdraw-dest" className="manage-select" value={dest} onChange={(e) => setDest(e.target.value as PayoutDest)}>
+              {destinations.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+            {symbol === 'EURC' && destinations.length === 1 && <p className="hint">EURC can only be paid out on Arc.</p>}
+            {crossChain && <p className="hint">{CROSS_CHAIN_NOTE}</p>}
+            {crossChain && sender.kind === 'passkey' && (
+              <p className="field-error" role="alert">
+                {PASSKEY_WARNING}
+              </p>
+            )}
+          </div>
+
+          {chain && (
+            <fieldset className="form-field">
+              <legend>Speed</legend>
+              {chain.fast && (
+                <label className="choice">
+                  <input type="radio" name="withdraw-speed" checked={fast} onChange={() => setFastChoice(true)} />
+                  <span>
+                    Fast <span className="hint">About a minute. Costs a little more.</span>
+                  </span>
+                </label>
+              )}
+              <label className="choice">
+                <input type="radio" name="withdraw-speed" checked={!fast} onChange={() => setFastChoice(false)} />
+                <span>
+                  Standard <span className="hint">Can take 15 minutes or more.</span>
+                </span>
+              </label>
+            </fieldset>
+          )}
+
+          <div className="form-field">
+            <label htmlFor="withdraw-recipient">Recipient</label>
+            <input
+              id="withdraw-recipient"
+              autoComplete="off"
+              spellCheck={false}
+              value={recipientText ?? sender.address}
+              onChange={(e) => setRecipientText(e.target.value)}
+              aria-invalid={recipientError ? true : undefined}
+              aria-describedby="withdraw-recipient-hint withdraw-recipient-error"
+            />
+            <p id="withdraw-recipient-hint" className="hint">
+              {crossChain ? `The address that gets the USDC on ${dest}.` : 'The address that gets the funds on Arc.'}
+            </p>
+            <FieldError id="withdraw-recipient-error" message={recipientError} />
+          </div>
+        </fieldset>
+
+        {amount !== null && net !== null && !overAvailable && (
+          <dl className="donate-breakdown" aria-label="Breakdown">
+            <div>
+              <dt>Fundit fee ({bpsToPercent(summary.withdrawFeeBps)})</dt>
+              <dd>{formatAmount(amount - net, symbol)}</dd>
+            </div>
+            {crossChain ? (
+              <>
+                <div>
+                  <dt>Transfer fee (at most)</dt>
+                  <dd>{quote ? formatAmount(quote.maxFee, symbol) : fee.isError ? 'Not available' : 'Loading...'}</dd>
+                </div>
+                <div className="donate-total">
+                  <dt>Arrives on {dest}</dt>
+                  <dd>{arrives !== null && !tooSmall ? `At least ${formatAmount(arrives, symbol)}` : '-'}</dd>
+                </div>
+              </>
+            ) : (
+              <div className="donate-total">
+                <dt>You receive</dt>
+                <dd>{formatAmount(net, symbol)}</dd>
+              </div>
+            )}
+          </dl>
+        )}
+        {tooSmall && <p className="field-error">This amount is too small to cover the transfer fee.</p>}
+        {crossChain && fee.isError && <p className="field-error">Could not get a fee quote from Circle. Try again in a moment.</p>}
+
+        <TxStatus
+          tx={tx}
+          noun="withdrawal"
+          successText="Your withdrawal went through."
+          startOverWarning="The earlier withdrawal may still go through. If it does and you withdraw again, you will take out funds twice. Start over anyway?"
+        />
+        {tx.phase.kind !== 'timeout' && (
+          <button type="submit" className="btn" disabled={!canSubmit}>
+            {tx.busy ? 'Withdrawing...' : 'Withdraw'}
+          </button>
+        )}
+      </form>
+    </section>
+  )
+}
+
+function CloseSection({ view, sender }: { view: CampaignView; sender: Sender }) {
+  const refresh = useRefresh(view.address)
+  const tx = useTx(() => refresh())
+
+  function close() {
+    if (tx.locked || !window.confirm(`${CLOSE_TEXT} Close this fundraiser?`)) return
+    void tx.run(sender, () => ({ to: view.address, data: encodeFunctionData({ abi: campaignAbi, functionName: 'close' }) }), 'Close')
+  }
+
+  return (
+    <section className="panel manage-section" aria-labelledby="close-heading">
+      <h2 id="close-heading">Close fundraiser</h2>
+      {view.summary.closed ? (
+        <p>This fundraiser is closed. It no longer takes donations.</p>
+      ) : (
+        <>
+          <p>Closing stops new donations.</p>
+          <p>
+            <strong>{CLOSE_TEXT}</strong>
+          </p>
+          <button type="button" className="btn btn-danger" disabled={tx.locked} onClick={close}>
+            Close fundraiser
+          </button>
+        </>
+      )}
+      <TxStatus tx={tx} noun="transaction" successText="The fundraiser is closed." startOverWarning={RETRY_WARNING} />
+    </section>
+  )
+}
+
+function BackupSection({ view, sender }: { view: CampaignView; sender: Sender }) {
+  const { address: campaign, summary } = view
+  const refresh = useRefresh(campaign)
+  const [text, setText] = useState('')
+  const tx = useTx(() => {
+    refresh()
+    setText('')
+  })
+
+  const hasBackup = summary.backup !== zeroAddress
+  const pending = summary.recoveryReadyAt !== 0n
+  const raw = text.trim()
+  let error: string | undefined
+  if (raw !== '') {
+    if (!isAddress(raw, { strict: false })) error = 'Enter a valid address (0x and 40 characters).'
+    else if (isAddressEqual(raw, sender.address)) error = 'Use a different address from the wallet you are connected with.'
+    else if (isAddressEqual(raw, zeroAddress)) error = 'Use Remove backup to remove it.'
+  }
+
+  const setBackup = (backup: Address, label: string) =>
+    tx.run(sender, () => ({ to: campaign, data: encodeFunctionData({ abi: campaignAbi, functionName: 'setBackup', args: [backup] }) }), label)
+
+  function submit(e: FormEvent) {
+    e.preventDefault()
+    if (raw === '' || error || tx.locked) return
+    void setBackup(raw as Address, 'Set backup')
+  }
+
+  return (
+    <section className="panel manage-section" aria-labelledby="backup-heading">
+      <h2 id="backup-heading">Backup address</h2>
+      <p className="hint">
+        If you lose this wallet, the backup address can ask to take over the fundraiser. It becomes the organiser after a
+        7-day wait, and you can cancel from this wallet during those 7 days.
+      </p>
+      <p>
+        Current backup: <span className="manage-address">{hasBackup ? summary.backup : 'None'}</span>
+      </p>
+
+      {pending && (
+        <div className="status-box">
+          <p>
+            <strong>Your backup started a recovery.</strong> It can take over on{' '}
+            {new Date(Number(summary.recoveryReadyAt) * 1000).toLocaleString()}. If you did not expect this, cancel it now.
+          </p>
+          <button
+            type="button"
+            className="btn"
+            disabled={tx.locked}
+            onClick={() =>
+              void tx.run(
+                sender,
+                () => ({ to: campaign, data: encodeFunctionData({ abi: campaignAbi, functionName: 'cancelRecovery' }) }),
+                'Cancel recovery',
+              )
+            }
+          >
+            Cancel recovery
+          </button>
+        </div>
+      )}
+
+      <form className="create-form" onSubmit={submit} noValidate>
+        <fieldset className="manage-fields" disabled={tx.locked}>
+          <div className="form-field">
+            <label htmlFor="backup-new">New backup address</label>
+            <input
+              id="backup-new"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="0x..."
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              aria-invalid={error ? true : undefined}
+              aria-describedby="backup-new-error"
+            />
+            <FieldError id="backup-new-error" message={error} />
+            {pending && <p className="hint">Changing or removing the backup also cancels the recovery.</p>}
+          </div>
+        </fieldset>
+        <div className="manage-actions">
+          <button type="submit" className="btn" disabled={raw === '' || error !== undefined || tx.locked}>
+            Save backup
+          </button>
+          {hasBackup && (
+            <button type="button" className="btn btn-outline" disabled={tx.locked} onClick={() => void setBackup(zeroAddress, 'Remove backup')}>
+              Remove backup
+            </button>
+          )}
+        </div>
+        <TxStatus tx={tx} noun="transaction" successText="Saved." startOverWarning={RETRY_WARNING} />
+      </form>
+    </section>
+  )
+}
+
+function ConnectNotice() {
+  const { open } = useAppKit()
+  return (
+    <section className="notice">
+      <h1>Manage fundraiser</h1>
+      <p>Connect the organiser's wallet to manage this fundraiser.</p>
+      <button type="button" className="btn" onClick={() => open()}>
+        Connect wallet
+      </button>
+    </section>
+  )
+}
+
+export function Manage() {
+  const { address: param = '' } = useParams()
+  const valid = isAddress(param)
+  const query = useCampaign(valid ? param : undefined)
+  const sender = useSender()
+
+  if (!valid || query.data === 'not-a-campaign') {
+    return (
+      <section className="notice">
+        <h1>Not a Fundit campaign</h1>
+        <p>This address was not created by the Fundit factory.</p>
+      </section>
+    )
+  }
+  if (query.isError) {
+    return (
+      <section className="notice">
+        <h1>Could not load this fundraiser</h1>
+        <p>The Arc network did not answer. Check your connection and try again.</p>
+        <button type="button" className="btn" onClick={() => query.refetch()}>
+          Try again
+        </button>
+      </section>
+    )
+  }
+  if (query.isPending || !query.data) {
+    return (
+      <section className="notice" aria-busy="true">
+        <p className="muted">Loading fundraiser...</p>
+      </section>
+    )
+  }
+  const view = query.data
+  if (!sender) return <ConnectNotice />
+  // Only the organiser can sign these calls. Anyone else sees the public page.
+  if (!isAddressEqual(sender.address, view.summary.creator)) return <Navigate to={`/c/${view.address}`} replace />
+
+  return (
+    <section className="manage">
+      <header className="page-head">
+        <h1>Manage fundraiser</h1>
+        <p className="muted">
+          <Link to={`/c/${view.address}`}>{view.summary.meta.title || 'Untitled fundraiser'}</Link>
+        </p>
+      </header>
+      <WithdrawSection view={view} sender={sender} />
+      <EditSection view={view} sender={sender} />
+      <BackupSection view={view} sender={sender} />
+      <CloseSection view={view} sender={sender} />
+    </section>
+  )
+}

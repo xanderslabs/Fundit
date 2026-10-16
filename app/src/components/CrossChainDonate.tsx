@@ -78,7 +78,7 @@ export function CrossChainDonate({ view, onBusyChange }: { view: CampaignView; o
       if (!wallet) return { fee: await circle(), source: 'circle' }
       try {
         const provider = (await wallet.getProvider()) as EIP1193Provider
-        const total = await estimateCrossChain({ provider, sourceKey, campaign, amount: formatUnits(quoteAmount!, 6), fast })
+        const total = await estimateCrossChain({ provider, sourceKey, campaign, amount: formatUnits(quoteAmount!, 6), fast, account: address })
         return { fee: total, source: 'wallet' }
       } catch {
         return { fee: await circle(), source: 'fallback' }
@@ -103,7 +103,7 @@ export function CrossChainDonate({ view, onBusyChange }: { view: CampaignView; o
     onBusyChange?.(true)
     try {
       const provider = (await wallet.getProvider()) as EIP1193Provider
-      await donateCrossChain({ provider, sourceKey, campaign, amount: amountArg, fast })
+      await donateCrossChain({ provider, sourceKey, campaign, amount: amountArg, fast, account: address })
       setAmountText('')
       setPhase({ kind: 'sent', chain: sourceKey })
     } catch (err) {

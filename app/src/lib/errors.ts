@@ -82,8 +82,9 @@ function kitText(e: unknown): string | null {
       if (m) return `You do not have enough ${m[1] === 'native token' ? nativeSymbol(m[2]!) : m[1]} on ${m[2]} to pay the network fee.`
     }
     if (isKitRpcError(x)) {
-      const m = / on (.+)$/.exec(message)
-      return m ? `The ${m[1]} network did not answer. Try again in a moment.` : 'The network did not answer. Try again in a moment.'
+      const traced = (x as { cause?: { trace?: { chain?: unknown } } }).cause?.trace?.chain
+      const name = typeof traced === 'string' && traced !== '' ? traced : / on (.+)$/.exec(message)?.[1]
+      return name ? `The ${name} network did not answer. Try again in a moment.` : 'The network did not answer. Try again in a moment.'
     }
   }
   return null

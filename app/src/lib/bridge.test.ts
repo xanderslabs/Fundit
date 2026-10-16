@@ -257,6 +257,36 @@ describe('donateCrossChain', () => {
     expect(accounts).toEqual([ACCOUNT_B])
   })
 
+  // Some wallets throw on eth_accounts while locked. That must not stop the donation from starting.
+  it('still bridges when eth_accounts throws', async () => {
+    provider = {
+      request: async ({ method }: { method: string }) => {
+        if (method === 'eth_accounts') throw new Error('locked')
+        return `0x${'aa'.repeat(32)}`
+      },
+    } as unknown as EIP1193Provider
+    kit.bridge = (_p, emit) => {
+      emit('burn', { name: 'burn', state: 'success', txHash: BURN })
+      return new Promise(() => {})
+    }
+    expect(await run()).toEqual({ burnTx: BURN, srcDomain: 6 })
+  })
+
+  // The provider can still report the old account after a switch. The account wagmi shows wins.
+  it('keys the adapter on the given account, not on eth_accounts', async () => {
+    kit.bridge = (_p, emit) => {
+      emit('burn', { name: 'burn', state: 'success', txHash: BURN })
+      return new Promise(() => {})
+    }
+    const before = adapterCalls.length
+    await run({ account: ACCOUNT_A })
+    // eth_accounts still says A, but the connected account is now B.
+    await run({ account: ACCOUNT_B })
+    expect(adapterCalls.length - before).toBe(2)
+    await run({ account: ACCOUNT_B })
+    expect(adapterCalls.length - before).toBe(2)
+  })
+
   // A frozen provider object must still work: a plain wrapper, not a Proxy with invariants to break.
   it('works with a frozen wallet provider', async () => {
     provider = Object.freeze(newProvider())

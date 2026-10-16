@@ -94,6 +94,17 @@ describe('explainError', () => {
     expect(explainError(new Error('Transfer failed', { cause: rpc }))).toBe('The Base network did not answer. Try again in a moment.')
   })
 
+  // The chain is in the error's trace. A message that does not end in "on <chain>" must still name it.
+  it('takes the chain name for a Bridge Kit RPC error from cause.trace.chain', () => {
+    const rpc = Object.assign(new Error('RPC endpoint error: request timed out'), {
+      name: 'RPC_ENDPOINT_ERROR',
+      code: 4001,
+      type: 'RPC',
+      cause: { trace: { chain: 'Arbitrum', rawError: new Error('timeout') } },
+    })
+    expect(explainError(rpc)).toBe('The Arbitrum network did not answer. Try again in a moment.')
+  })
+
   it('still reads a real rejection under a KitError as a cancel', () => {
     const kitError = Object.assign(new Error('Unknown blockchain error on Base'), {
       name: 'ONCHAIN_UNKNOWN_BLOCKCHAIN_ERROR',

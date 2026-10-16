@@ -16,11 +16,16 @@ const KEY = 'fundit.pendingBridges'
 type Conn = { isConnected: boolean; address?: string; connector?: { getProvider: () => Promise<unknown> } }
 const conn: { current: Conn } = { current: { isConnected: false } }
 vi.mock('wagmi', () => ({ useConnection: () => conn.current }))
-const estimate = vi.hoisted(() => ({ fn: (async () => 0n) as (p: { amount: string }) => Promise<bigint>, calls: [] as string[] }))
+const estimate = vi.hoisted(() => ({
+  fn: (async () => 0n) as (p: { amount: string }) => Promise<bigint>,
+  calls: [] as string[],
+  accounts: [] as (string | undefined)[],
+}))
 vi.mock('../lib/bridge', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/bridge')>()),
-  estimateCrossChain: (p: { amount: string }) => {
+  estimateCrossChain: (p: { amount: string; account?: string }) => {
     estimate.calls.push(p.amount)
+    estimate.accounts.push(p.account)
     return estimate.fn(p)
   },
 }))
@@ -83,6 +88,7 @@ afterEach(() => {
   conn.current = { isConnected: false }
   estimate.fn = async () => 0n
   estimate.calls.length = 0
+  estimate.accounts.length = 0
 })
 
 const connectWallet = () => {
@@ -90,6 +96,18 @@ const connectWallet = () => {
 }
 
 describe('CrossChainDonate', () => {
+  // The wallet's provider can answer eth_accounts with a stale account. wagmi's address is the one the person sees.
+  it('passes the connected address from wagmi to the bridge', async () => {
+    stubFetch(() => FEE_SAMPLE)
+    connectWallet()
+    wrap(<CrossChainDonate view={view('USDC')} />)
+    const user = userEvent.setup()
+    await user.selectOptions(screen.getByLabelText('From'), 'Base')
+    await user.type(screen.getByLabelText('Amount'), '25')
+    await waitFor(() => expect(estimate.accounts.length).toBeGreaterThan(0))
+    expect(estimate.accounts.at(-1)).toBe('0x1111111111111111111111111111111111111111')
+  })
+
   // CCTP has no Fast transfer from Polygon or Avalanche. Offering it would quote a fee and a time that are wrong.
   it('hides Fast for Polygon and shows it for Base', async () => {
     stubFetch(() => FEE_SAMPLE)

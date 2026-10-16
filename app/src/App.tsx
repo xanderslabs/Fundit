@@ -4,6 +4,7 @@ import { CampaignPage } from './pages/CampaignPage'
 import { Create } from './pages/Create'
 import { Explore } from './pages/Explore'
 import { Home } from './pages/Home'
+import { Manage } from './pages/Manage'
 
 // Placeholder until the page for this route is built in a later task.
 function Stub({ title }: { title: string }) {
@@ -29,7 +30,7 @@ export function App() {
         <Route path="explore" element={<Explore />} />
         <Route path="c/:address" element={<CampaignPage />} />
         <Route path="create" element={<Create />} />
-        <Route path="manage/:address" element={<Stub title="Manage fundraiser" />} />
+        <Route path="manage/:address" element={<Manage />} />
         <Route path="me" element={<Stub title="My page" />} />
         <Route path="terms" element={<Stub title="Terms" />} />
         <Route path="privacy" element={<Stub title="Privacy" />} />

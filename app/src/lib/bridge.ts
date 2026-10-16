@@ -100,7 +100,15 @@ export function chainByKey(key: CctpChainKey): CctpChain {
   return CCTP_CHAINS.find((c) => c.key === key)!
 }
 
-export type CrossChainParams = { provider: EIP1193Provider; sourceKey: CctpChainKey; campaign: Address; amount: string; fast: boolean }
+// account is the address the app shows as connected (wagmi). It keys the adapter cache; eth_accounts is the fallback.
+export type CrossChainParams = {
+  provider: EIP1193Provider
+  sourceKey: CctpChainKey
+  campaign: Address
+  amount: string
+  fast: boolean
+  account?: Address
+}
 
 const SEND_METHODS = new Set(['eth_sendTransaction', 'wallet_sendCalls'])
 
@@ -138,16 +146,22 @@ async function createKit(provider: EIP1193Provider) {
 // picks the chain per call, so one serves every source chain.
 const kits = new WeakMap<EIP1193Provider, Map<string, ReturnType<typeof createKit>>>()
 
-async function currentAccount(provider: EIP1193Provider): Promise<string> {
-  // eth_accounts never prompts. An empty answer gets its own entry; the adapter then asks for access.
-  const accounts = (await provider.request({ method: 'eth_accounts' })) as readonly string[] | undefined
-  return accounts?.[0]?.toLowerCase() ?? ''
+async function currentAccount(provider: EIP1193Provider, known?: Address): Promise<string> {
+  if (known) return known.toLowerCase()
+  // eth_accounts never prompts. An empty answer, or a wallet that throws, gets its own entry; the adapter
+  // then asks for access.
+  try {
+    const accounts = (await provider.request({ method: 'eth_accounts' })) as readonly string[] | undefined
+    return accounts?.[0]?.toLowerCase() ?? ''
+  } catch {
+    return ''
+  }
 }
 
 async function setup(p: CrossChainParams) {
   const chain = chainByKey(p.sourceKey)
   if (p.fast && !chain.fast) throw new Error(`Fast transfers are not available from ${chain.key}.`)
-  const account = await currentAccount(p.provider)
+  const account = await currentAccount(p.provider, p.account)
   let byAccount = kits.get(p.provider)
   if (!byAccount) {
     byAccount = new Map()

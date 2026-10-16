@@ -1,12 +1,14 @@
 import { Link, useParams } from 'react-router'
-import { type Address, isAddress } from 'viem'
+import { type Address, isAddress, isAddressEqual } from 'viem'
 import { arc } from 'viem/chains'
 import { ActivityList } from '../components/ActivityList'
+import { BackupBanner } from '../components/BackupBanner'
 import { CampaignImage } from '../components/CampaignImage'
 import { DonatePanel } from '../components/DonatePanel'
 import { Progress } from '../components/Progress'
 import { StatusBadge } from '../components/StatusBadge'
 import { useCampaign } from '../hooks/useCampaigns'
+import { useSender } from '../hooks/useSender'
 import type { CampaignView } from '../lib/campaigns'
 import { bpsToPercent, formatAmount } from '../lib/format'
 import { safeHttpsUrl } from '../lib/urls'
@@ -97,6 +99,8 @@ function CreatorLine({ creator, address }: { creator: Address; address: Address 
 
 function CampaignBody({ view }: { view: CampaignView }) {
   const { summary } = view
+  const sender = useSender()
+  const isCreator = sender !== null && isAddressEqual(sender.address, summary.creator)
   const created = new Date(Number(summary.createdAt) * 1000).toLocaleDateString(undefined, {
     year: 'numeric',
     month: 'long',
@@ -110,7 +114,13 @@ function CampaignBody({ view }: { view: CampaignView }) {
           <span className="muted">Started {created}</span>
         </div>
         <h1>{summary.meta.title || 'Untitled fundraiser'}</h1>
+        {isCreator && (
+          <Link to={`/manage/${view.address}`} className="btn btn-outline">
+            Manage fundraiser
+          </Link>
+        )}
       </header>
+      <BackupBanner view={view} />
       <div className="campaign-grid">
         <CampaignImage url={summary.meta.imageUrl} title={summary.meta.title} className="campaign-hero" />
         <aside className="campaign-side">

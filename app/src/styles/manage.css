@@ -1,0 +1,79 @@
+/* Manage fundraiser page */
+.manage {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.manage-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.manage-section > p,
+.manage-section h2 {
+  margin: 0;
+}
+
+.manage-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.manage-label {
+  font-weight: var(--weight-bold);
+}
+
+.manage-select {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+}
+
+.manage-address {
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, monospace;
+  font-size: 14px;
+}
+
+.manage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.btn-danger {
+  align-self: flex-start;
+  background: var(--error);
+}
+
+.tx-status:empty {
+  display: none;
+}
+
+.backup-banner {
+  border: 1px solid var(--accent);
+}
+
+.backup-banner h2,
+.backup-banner p {
+  margin: 0 0 12px;
+}
+
+.manage .link-row > input {
+  flex: 1;
+  min-width: 0;
+}
