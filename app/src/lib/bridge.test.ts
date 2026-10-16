@@ -45,7 +45,14 @@ vi.mock('@circle-fin/adapter-viem-v2', () => ({
 const walletSend = (method = 'eth_sendTransaction') =>
   adapterCalls.at(-1)!.provider.request({ method, params: [] } as never)
 
-const newProvider = () => ({ request: async () => `0x${'aa'.repeat(32)}` }) as unknown as EIP1193Provider
+const ACCOUNT_A = '0x1111111111111111111111111111111111111111'
+const ACCOUNT_B = '0x2222222222222222222222222222222222222222'
+// The account the fake wallet reports. A wallet keeps one provider object across account switches.
+const wallet = { account: ACCOUNT_A }
+const newProvider = () =>
+  ({
+    request: async ({ method }: { method: string }) => (method === 'eth_accounts' ? [wallet.account] : `0x${'aa'.repeat(32)}`),
+  }) as unknown as EIP1193Provider
 let provider = newProvider()
 
 afterEach(() => {
@@ -54,6 +61,7 @@ afterEach(() => {
   kit.bridge = () => new Promise(() => {})
   kit.params = undefined
   provider = newProvider()
+  wallet.account = ACCOUNT_A
 })
 
 describe('pending store', () => {
@@ -228,6 +236,45 @@ describe('donateCrossChain', () => {
     await run()
     await run({ sourceKey: 'Ethereum' })
     expect(adapterCalls.length - before).toBe(1)
+  })
+
+  // The adapter caches the account it first sees. After a switch it must not estimate or send as the old one.
+  it('builds a new adapter after the wallet switches account, and bridges with it', async () => {
+    kit.bridge = (_p, emit) => {
+      emit('burn', { name: 'burn', state: 'success', txHash: BURN })
+      return new Promise(() => {})
+    }
+    const before = adapterCalls.length
+    await run()
+    const first = (kit.params!.from as { adapter: unknown }).adapter
+    wallet.account = ACCOUNT_B
+    await run()
+    expect(adapterCalls.length - before).toBe(2)
+    const second = (kit.params!.from as { adapter: unknown }).adapter
+    expect(second).not.toBe(first)
+    // The new adapter's provider answers with the new account.
+    const accounts = await adapterCalls.at(-1)!.provider.request({ method: 'eth_accounts' } as never)
+    expect(accounts).toEqual([ACCOUNT_B])
+  })
+
+  // A frozen provider object must still work: a plain wrapper, not a Proxy with invariants to break.
+  it('works with a frozen wallet provider', async () => {
+    provider = Object.freeze(newProvider())
+    kit.bridge = (_p, emit) => walletSend().then(() => {
+      emit('burn', { name: 'burn', state: 'success', txHash: BURN })
+      return new Promise(() => {})
+    })
+    expect(await run()).toEqual({ burnTx: BURN, srcDomain: 6 })
+  })
+
+  // Batched sends can fail with no hash after the wallet already sent. The outcome is unknown, so keep the record.
+  it('keeps the submitted record when a step fails without a hash after a send', async () => {
+    kit.bridge = async () => {
+      await walletSend('wallet_sendCalls')
+      return { state: 'error', steps: [{ name: 'burn', state: 'error', errorCategory: 'polling_timeout', errorMessage: 'Timed out' }] }
+    }
+    await expect(run()).rejects.toThrow()
+    expect(pendingCrossChain()).toEqual([expect.objectContaining({ kind: 'submitted', campaign: CAMPAIGN })])
   })
 
   // A burn whose receipt wait timed out may still be mined. Track it rather than invite a second donation.

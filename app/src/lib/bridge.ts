@@ -104,20 +104,15 @@ export type CrossChainParams = { provider: EIP1193Provider; sourceKey: CctpChain
 
 const SEND_METHODS = new Set(['eth_sendTransaction', 'wallet_sendCalls'])
 
-// Passes every call to the wallet, and reports each successful send to whoever is listening.
+// Passes every call to the wallet, and reports each successful send to whoever is listening. The adapter
+// reads only request() (through viem's custom transport), so a plain object is enough.
 function watchSends(provider: EIP1193Provider, watcher: { onSend: (() => void) | null }): EIP1193Provider {
   const request = (async (args: { method: string }) => {
     const result = await provider.request(args as never)
     if (SEND_METHODS.has(args.method)) watcher.onSend?.()
     return result
   }) as EIP1193Provider['request']
-  return new Proxy(provider, {
-    get(target, key) {
-      if (key === 'request') return request
-      const value: unknown = Reflect.get(target, key, target)
-      return typeof value === 'function' ? value.bind(target) : value
-    },
-  })
+  return { request } as EIP1193Provider
 }
 
 // The SDK is large, so it loads only when someone donates from another chain.
@@ -138,18 +133,33 @@ async function createKit(provider: EIP1193Provider) {
   return { kit, adapter, watcher }
 }
 
-// One kit and adapter per wallet provider. The adapter picks the chain per call, so one serves every source chain.
-const kits = new WeakMap<EIP1193Provider, ReturnType<typeof createKit>>()
+// One kit and adapter per wallet provider and account. The adapter caches the first account it sees, and a
+// wallet keeps the same provider across account switches, so the account is part of the key. The adapter
+// picks the chain per call, so one serves every source chain.
+const kits = new WeakMap<EIP1193Provider, Map<string, ReturnType<typeof createKit>>>()
+
+async function currentAccount(provider: EIP1193Provider): Promise<string> {
+  // eth_accounts never prompts. An empty answer gets its own entry; the adapter then asks for access.
+  const accounts = (await provider.request({ method: 'eth_accounts' })) as readonly string[] | undefined
+  return accounts?.[0]?.toLowerCase() ?? ''
+}
 
 async function setup(p: CrossChainParams) {
   const chain = chainByKey(p.sourceKey)
   if (p.fast && !chain.fast) throw new Error(`Fast transfers are not available from ${chain.key}.`)
-  let entry = kits.get(p.provider)
+  const account = await currentAccount(p.provider)
+  let byAccount = kits.get(p.provider)
+  if (!byAccount) {
+    byAccount = new Map()
+    kits.set(p.provider, byAccount)
+  }
+  let entry = byAccount.get(account)
   if (!entry) {
-    entry = createKit(p.provider)
-    kits.set(p.provider, entry)
+    const created = createKit(p.provider)
+    byAccount.set(account, created)
     // A failed load must not stick for this wallet.
-    entry.catch(() => kits.delete(p.provider))
+    created.catch(() => byAccount.delete(account))
+    entry = created
   }
   const { kit, adapter, watcher } = await entry
   const params = {
@@ -219,9 +229,11 @@ export async function donateCrossChain(p: CrossChainParams): Promise<{ burnTx: H
       watcher.onSend = null
       kit.off('burn', onBurn)
     }
+    // After a send with no burn hash (a batched step error, for example) the outcome is unknown, so the
+    // submitted record stays until it expires. Only a clear rejection removes it.
     const fail = (err: unknown) => {
       finish()
-      if (submitted) clearSubmitted(submittedId)
+      if (submitted && isUserRejection(err)) clearSubmitted(submittedId)
       reject(err)
     }
     const onBurn = (payload: { values: Step }) => {

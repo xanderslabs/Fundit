@@ -82,4 +82,35 @@ describe('explainError', () => {
     // Wrapped one level down, as a failed bridge step carries it.
     expect(explainError(new Error('Transfer failed', { cause: token }))).toBe('You do not have enough USDC on Base.')
   })
+  // Circle's RPC_ENDPOINT_ERROR reuses code 4001, which EIP-1193 means a user rejection. It is a network problem.
+  it('does not read a Bridge Kit RPC error with code 4001 as a cancel', () => {
+    const rpc = Object.assign(new Error('RPC endpoint error on Base'), {
+      name: 'RPC_ENDPOINT_ERROR',
+      code: 4001,
+      type: 'RPC',
+      cause: { trace: { chain: 'Base', rawError: new Error('gas estimation failed') } },
+    })
+    expect(explainError(rpc)).toBe('The Base network did not answer. Try again in a moment.')
+    expect(explainError(new Error('Transfer failed', { cause: rpc }))).toBe('The Base network did not answer. Try again in a moment.')
+  })
+
+  it('still reads a real rejection under a KitError as a cancel', () => {
+    const kitError = Object.assign(new Error('Unknown blockchain error on Base'), {
+      name: 'ONCHAIN_UNKNOWN_BLOCKCHAIN_ERROR',
+      code: 5000,
+      type: 'ONCHAIN',
+      cause: { trace: { chain: 'Base', rawError: Object.assign(new Error('User denied'), { code: 4001 }) } },
+    })
+    expect(explainError(kitError)).toBe('You cancelled the request.')
+  })
+
+  // The SDK falls back to placeholder names. The donor needs the real token to know what to top up.
+  it('fills in real symbols when Bridge Kit uses placeholder token names', () => {
+    const token = Object.assign(new Error('Insufficient token balance on Polygon'), { name: 'BALANCE_INSUFFICIENT_TOKEN' })
+    expect(explainError(token)).toBe('You do not have enough USDC on Polygon.')
+    const gas = Object.assign(new Error('Insufficient native token on Polygon to cover gas fees'), { name: 'BALANCE_INSUFFICIENT_GAS' })
+    expect(explainError(gas)).toBe('You do not have enough POL on Polygon to pay the network fee.')
+    const avax = Object.assign(new Error('Insufficient native token on Avalanche to cover gas fees'), { name: 'BALANCE_INSUFFICIENT_GAS' })
+    expect(explainError(avax)).toBe('You do not have enough AVAX on Avalanche to pay the network fee.')
+  })
 })

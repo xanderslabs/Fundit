@@ -9,8 +9,8 @@ type FeeTier = { finalityThreshold: number; minimumFee: number; forwardFee: { lo
 
 export type ForwardFee = { maxFee: bigint; protocolFee: bigint; forwardFee: bigint }
 
-// Fee quote for a forwarded USDC transfer, in 6-decimal units. Used before a wallet is connected;
-// Bridge Kit's own estimate replaces it once one is.
+// Fee quote for a forwarded USDC transfer, in 6-decimal units. Used before a wallet is connected, and as
+// the fallback when Bridge Kit's estimate through the wallet's network fails.
 export async function fetchForwardFee(srcDomain: number, dstDomain: number, amount: bigint, fast: boolean): Promise<ForwardFee> {
   const res = await fetch(`${IRIS_URL}/v2/burn/USDC/fees/${srcDomain}/${dstDomain}?forward=true`)
   if (!res.ok) throw new Error(`Circle did not return a fee quote (HTTP ${res.status}).`)
