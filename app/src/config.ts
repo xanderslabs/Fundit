@@ -1,5 +1,6 @@
-import { getAddress, isAddress, zeroAddress, type Address, type Chain, type Hex } from 'viem'
+import type { Address, Chain, Hex } from 'viem'
 import { arbitrum, avalanche, base, mainnet, optimism, polygon } from 'viem/chains'
+import { loadConfig } from './deployConfig'
 
 // Arc mainnet
 export const ARC_CHAIN_ID = 5042
@@ -48,23 +49,12 @@ export const CCTP_CHAINS: readonly CctpChain[] = [
   { key: 'Polygon', chainId: 137, domain: 7, usdc: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', viemChain: polygon, rpcUrl: 'https://polygon.drpc.org', fast: false },
 ]
 
-function envAddress(name: string, value: string | undefined): Address {
-  if (!value) return zeroAddress
-  if (!isAddress(value)) throw new Error(`${name} is not a valid address: ${value}`)
-  return getAddress(value)
-}
+const deploy = loadConfig(env)
 
-function envBlock(name: string, value: string | undefined): bigint {
-  if (!value) return 0n
-  if (!/^\d+$/.test(value)) throw new Error(`${name} must be a block number: ${value}`)
-  return BigInt(value)
-}
-
-// Zero until the factory is deployed and the env vars are set.
-export const FACTORY_ADDRESS: Address = envAddress('VITE_FACTORY_ADDRESS', env.VITE_FACTORY_ADDRESS)
-export const FACTORY_DEPLOY_BLOCK: bigint = envBlock('VITE_FACTORY_DEPLOY_BLOCK', env.VITE_FACTORY_DEPLOY_BLOCK)
-
-export const REOWN_PROJECT_ID: string = env.VITE_REOWN_PROJECT_ID ?? ''
+// Zero in dev and test until the factory is deployed and the env vars are set.
+export const FACTORY_ADDRESS: Address = deploy.factoryAddress
+export const FACTORY_DEPLOY_BLOCK: bigint = deploy.factoryDeployBlock
+export const REOWN_PROJECT_ID: string = deploy.reownProjectId
 export const CIRCLE_CLIENT_KEY: string = env.VITE_CIRCLE_CLIENT_KEY ?? ''
 export const PASSKEYS_ENABLED: boolean = env.VITE_PASSKEYS === '1'
 
