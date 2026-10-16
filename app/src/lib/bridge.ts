@@ -16,8 +16,10 @@ export type PendingBridge = { kind: 'bridge'; campaign: Address; burnTx: Hex; sr
 export type PendingSubmitted = { kind: 'submitted'; id: string; campaign: Address; srcDomain: number; amount: string; createdAt: number }
 // hashKind 'userop' marks a passkey user operation hash, which only the passkey bundler can check.
 export type PendingArc = { kind: 'arc'; campaign: Address; hash: Hex; approve: boolean; hashKind?: 'userop'; createdAt: number }
+// A unified balance spend the donor started. transferId and hash are filled in when Circle reports them.
+export type PendingUnified = { kind: 'unified'; campaign: Address; amount: string; transferId?: string; hash?: Hex; createdAt: number }
 export type PendingCrossChain = PendingBridge | PendingSubmitted
-type Entry = PendingBridge | PendingSubmitted | PendingArc
+type Entry = PendingBridge | PendingSubmitted | PendingArc | PendingUnified
 
 const isTxHash = (v: unknown): v is Hex => typeof v === 'string' && isHex(v) && v.length === 66
 
@@ -29,6 +31,13 @@ function isEntry(e: unknown): e is Entry {
   if (x.kind === 'bridge') return isTxHash(x.burnTx) && knownDomain && typeof x.amount === 'string'
   if (x.kind === 'submitted') return typeof x.id === 'string' && knownDomain && typeof x.amount === 'string'
   if (x.kind === 'arc') return isTxHash(x.hash) && typeof x.approve === 'boolean' && (x.hashKind === undefined || x.hashKind === 'userop')
+  if (x.kind === 'unified') {
+    return (
+      typeof x.amount === 'string' &&
+      (x.transferId === undefined || (typeof x.transferId === 'string' && x.transferId !== '')) &&
+      (x.hash === undefined || isTxHash(x.hash))
+    )
+  }
   return false
 }
 
@@ -97,6 +106,23 @@ export function clearPendingArc(campaign: Address) {
   if (rest.length !== all.length) writeAll(rest)
 }
 
+export function pendingUnified(campaign: Address): PendingUnified | null {
+  return readAll().find((e): e is PendingUnified => e.kind === 'unified' && same(e.campaign, campaign)) ?? null
+}
+
+// One per campaign. Saving again keeps the first createdAt, so the entry expires on the usual schedule.
+export function savePendingUnified(p: { campaign: Address; amount: string; transferId?: string; hash?: Hex }) {
+  const all = readAll()
+  const prev = all.find((e): e is PendingUnified => e.kind === 'unified' && same(e.campaign, p.campaign))
+  writeAll([...all.filter((e) => e !== prev), { kind: 'unified', ...p, createdAt: prev?.createdAt ?? Date.now() }])
+}
+
+export function clearPendingUnified(campaign: Address) {
+  const all = readAll()
+  const rest = all.filter((e) => !(e.kind === 'unified' && same(e.campaign, campaign)))
+  if (rest.length !== all.length) writeAll(rest)
+}
+
 export function chainByKey(key: CctpChainKey): CctpChain {
   return CCTP_CHAINS.find((c) => c.key === key)!
 }
@@ -112,25 +138,27 @@ export type CrossChainParams = {
 }
 
 const SEND_METHODS = new Set(['eth_sendTransaction', 'wallet_sendCalls'])
+const SIGN_METHODS = new Set(['eth_signTypedData_v4', 'eth_signTypedData_v3', 'eth_signTypedData'])
 
-// Passes every call to the wallet, and reports each successful send to whoever is listening. The adapter
-// reads only request() (through viem's custom transport), so a plain object is enough.
-function watchSends(provider: EIP1193Provider, watcher: { onSend: (() => void) | null }): EIP1193Provider {
+// Passes every call to the wallet, and reports each successful send or typed-data signature to whoever is
+// listening. The adapter reads only request() (through viem's custom transport), so a plain object is enough.
+function watchSends(provider: EIP1193Provider, watcher: Watcher): EIP1193Provider {
   const request = (async (args: { method: string }) => {
     const result = await provider.request(args as never)
     if (SEND_METHODS.has(args.method)) watcher.onSend?.()
+    if (SIGN_METHODS.has(args.method)) watcher.onSign?.()
     return result
   }) as EIP1193Provider['request']
   return { request } as EIP1193Provider
 }
 
-type Watcher = { onSend: (() => void) | null }
+export type Watcher = { onSend: (() => void) | null; onSign: (() => void) | null }
 type ViemAdapter = Awaited<ReturnType<typeof import('@circle-fin/adapter-viem-v2')['createViemAdapterFromProvider']>>
 
 // The SDKs are large, so they load only when someone donates from another chain or a unified balance.
 async function createAdapter(provider: EIP1193Provider): Promise<{ adapter: ViemAdapter; watcher: Watcher }> {
   const { createViemAdapterFromProvider } = await import('@circle-fin/adapter-viem-v2')
-  const watcher: Watcher = { onSend: null }
+  const watcher: Watcher = { onSend: null, onSign: null }
   const adapter = await createViemAdapterFromProvider({
     provider: watchSends(provider, watcher),
     // Reads go through our own RPCs, which are the hosts the CSP allows, not the SDK's defaults.
@@ -175,9 +203,10 @@ async function cachedAdapter(provider: EIP1193Provider, known?: Address) {
   return entry
 }
 
-// The Circle viem adapter for this wallet and account, shared by Bridge Kit and the Unified Balance Kit.
-export async function adapterFor(provider: EIP1193Provider, account?: Address): Promise<ViemAdapter> {
-  return (await cachedAdapter(provider, account)).adapter
+// The Circle viem adapter for this wallet and account, shared by Bridge Kit and the Unified Balance Kit, with
+// the watcher that reports what the wallet has sent or signed through it.
+export async function adapterFor(provider: EIP1193Provider, account?: Address): Promise<{ adapter: ViemAdapter; watcher: Watcher }> {
+  return cachedAdapter(provider, account)
 }
 
 let bridgeKit: Promise<import('@circle-fin/bridge-kit').BridgeKit> | null = null

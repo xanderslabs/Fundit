@@ -1,6 +1,16 @@
 import { type EIP1193Provider, getAddress, type Hex } from 'viem'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { donateFromUnified, fetchGatewayTransfer, fetchUnifiedBalance, pickAllocations } from './unified'
+import {
+  donateFromUnified,
+  fetchGatewayTransfer,
+  fetchUnifiedBalance,
+  isSafeToRetry,
+  maxSendable,
+  pickAllocations,
+  planSpend,
+  staticReserve,
+  UnifiedSpendError,
+} from './unified'
 
 const ME = getAddress('0x1111111111111111111111111111111111111111')
 const CAMPAIGN = getAddress('0x00000000000000000000000000000000000000a1')
@@ -12,6 +22,13 @@ const kit = vi.hoisted(() => ({
   balanceParams: undefined as unknown,
   spendParams: undefined as Record<string, unknown> | undefined,
   spendResult: undefined as unknown,
+  // What spend does: by default it returns spendResult; a test can make it sign first and then throw.
+  spend: null as null | ((params: Record<string, unknown>) => Promise<unknown>),
+  // Circle's fee per chain for any allocation, or a function that throws to simulate an estimate failure.
+  feePerChain: '0.05',
+  estimate: null as null | (() => never),
+  estimates: 0,
+  walletProvider: null as null | { request: (a: { method: string }) => Promise<unknown> },
 }))
 
 vi.mock('@circle-fin/unified-balance-kit', () => ({
@@ -25,18 +42,40 @@ vi.mock('@circle-fin/unified-balance-kit', () => ({
   },
   spend: async (_ctx: unknown, params: Record<string, unknown>) => {
     kit.spendParams = params
+    if (kit.spend) return kit.spend(params)
     return kit.spendResult
+  },
+  estimateSpend: async (_ctx: unknown, params: { from: { allocations: { chain: string }[] } }) => {
+    kit.estimates++
+    if (kit.estimate) kit.estimate()
+    const allocations = params.from.allocations.map((a) => ({ chain: a.chain, amount: kit.feePerChain }))
+    return { fees: [{ type: 'gasFee', token: 'USDC', amount: '0', allocations }] }
   },
 }))
 vi.mock('@circle-fin/adapter-viem-v2', () => ({
-  createViemAdapterFromProvider: async () => ({ fake: 'adapter' }),
+  createViemAdapterFromProvider: async (p: { provider: { request: (a: { method: string }) => Promise<unknown> } }) => {
+    kit.walletProvider = p.provider
+    return { fake: 'adapter' }
+  },
 }))
+
+// The wallet returning the burn intent signature, through the provider the adapter was given.
+const walletSigns = () => kit.walletProvider!.request({ method: 'eth_signTypedData_v4' })
 
 const provider = { request: async () => [ME] } as unknown as EIP1193Provider
 
 afterEach(() => {
   vi.restoreAllMocks()
+  kit.spend = null
+  kit.estimate = null
+  kit.estimates = 0
+  kit.feePerChain = '0.05'
 })
+
+const ARB_BASE = [
+  { chain: 'Base', amount: 10_000000n },
+  { chain: 'Arbitrum', amount: 30_000000n },
+]
 
 describe('pickAllocations', () => {
   // The donor's balance sits on several chains. Taking the largest first keeps the number of burn intents,
@@ -59,6 +98,80 @@ describe('pickAllocations', () => {
       { chain: 'Arbitrum', amount: 30_000000n },
     ]
     expect(() => pickAllocations(byChain, 41_000000n)).toThrow('Not enough unified balance')
+  })
+})
+
+describe('fee reserves', () => {
+  // Gateway checks amount plus fee against each chain's balance. Taking a chain's whole balance always fails.
+  it('leaves room for the fee on each chain it draws from', () => {
+    const reserves = new Map([
+      ['Arbitrum', 50_000n],
+      ['Base', 50_000n],
+    ])
+    expect(pickAllocations(ARB_BASE, 35_000000n, reserves)).toEqual([
+      { chain: 'Arbitrum', amount: 29_950000n },
+      { chain: 'Base', amount: 5_050000n },
+    ])
+  })
+
+  it('caps the sendable amount at each balance minus its fee', () => {
+    const reserves = new Map([
+      ['Arbitrum', 50_000n],
+      ['Base', 50_000n],
+    ])
+    expect(maxSendable(ARB_BASE, reserves)).toBe(39_900000n)
+    expect(() => pickAllocations(ARB_BASE, 39_900001n, reserves)).toThrow('Not enough unified balance')
+  })
+
+  // The first allocation takes all 30 from Arbitrum. Circle's estimate shows the 0.05 fee, so the plan must
+  // move 0.05 of the amount to Base before anything is signed.
+  it('plans a split from Circle estimates that never takes the full 30 from Arbitrum', async () => {
+    const { allocations } = await planSpend({ provider, campaign: CAMPAIGN, byChain: ARB_BASE, amount: 35_000000n })
+    expect(allocations).toEqual([
+      { chain: 'Arbitrum', amount: 29_950000n },
+      { chain: 'Base', amount: 5_050000n },
+    ])
+    expect(kit.estimates).toBe(2)
+  })
+
+  it('falls back to the static fee table when Circle cannot be asked', async () => {
+    kit.estimate = () => {
+      throw new Error('estimate down')
+    }
+    const { allocations } = await planSpend({ provider, campaign: CAMPAIGN, byChain: ARB_BASE, amount: 35_000000n })
+    const arb = allocations.find((a) => a.chain === 'Arbitrum')!
+    expect(arb.amount).toBe(30_000000n - staticReserve('Arbitrum', 30_000000n))
+    expect(allocations.reduce((s, a) => s + a.amount, 0n)).toBe(35_000000n)
+  })
+
+  it('refuses before signing when the fees leave too little', async () => {
+    await expect(planSpend({ provider, campaign: CAMPAIGN, byChain: ARB_BASE, amount: 40_000000n })).rejects.toThrow(
+      'Not enough unified balance',
+    )
+  })
+})
+
+describe('isSafeToRetry', () => {
+  const signed = (cause: unknown) => new UnifiedSpendError(true, cause)
+  const kitError = (name: string, message = 'x', cause?: unknown) => Object.assign(new Error(message), { name, cause })
+
+  it('allows a retry for anything before the signature', () => {
+    expect(isSafeToRetry(new UnifiedSpendError(false, kitError('NETWORK_GATEWAY_API_ERROR')))).toBe(true)
+  })
+
+  it('allows a retry when Gateway refused for balance, or the forwarder failed or expired', () => {
+    expect(isSafeToRetry(signed(kitError('BALANCE_INSUFFICIENT_TOKEN')))).toBe(true)
+    expect(isSafeToRetry(signed(kitError('ONCHAIN_TRANSACTION_REVERTED', 'Forwarder transfer failed: reason')))).toBe(true)
+    expect(
+      isSafeToRetry(signed(kitError('ONCHAIN_TRANSACTION_REVERTED', 'Transfer attestation expired before forwarding completed.'))),
+    ).toBe(true)
+  })
+
+  // After the signature Circle may have accepted the transfer. These errors say nothing about whether it did.
+  it('keeps everything else after the signature blocked', () => {
+    expect(isSafeToRetry(signed(kitError('NETWORK_GATEWAY_API_ERROR')))).toBe(false)
+    expect(isSafeToRetry(signed(kitError('INPUT_VALIDATION_FAILED', 'Gateway API error: something')))).toBe(false)
+    expect(isSafeToRetry(signed(kitError('ONCHAIN_TRANSACTION_REVERTED', 'Forwarder completed but did not return a transaction hash.')))).toBe(false)
   })
 })
 
@@ -85,7 +198,8 @@ describe('fetchUnifiedBalance', () => {
   })
 
   // Chains outside this list have no RPC the CSP allows, so the kit could not check the signer there.
-  it('asks only for USDC on Arc and the six CCTP chains, with Circle telemetry off', async () => {
+  // The telemetry flags are defensive: kit 1.8.0's functional API ignores them and sends nothing.
+  it('asks only for USDC on Arc and the six CCTP chains, and passes the telemetry flags defensively', async () => {
     kit.balances = { token: 'USDC', totalConfirmedBalance: '0.000000', breakdown: [] }
     await fetchUnifiedBalance(ME)
     expect(kit.balanceParams).toEqual({
@@ -129,6 +243,31 @@ describe('donateFromUnified', () => {
       },
       to: { chain: 'Arc', recipientAddress: CAMPAIGN, useForwarder: true },
     })
+  })
+
+  // The signature is the point after which Circle may hold the transfer, so the error must say so.
+  it('marks an error after the wallet signed as signed', async () => {
+    kit.spend = async () => {
+      await walletSigns()
+      throw Object.assign(new Error('Gateway down'), { name: 'NETWORK_GATEWAY_API_ERROR' })
+    }
+    const err = await donateFromUnified({ provider, campaign: CAMPAIGN, amount: '1', allocations: [{ chain: 'Base', amount: '1' }] }).catch(
+      (e: unknown) => e,
+    )
+    expect(err).toBeInstanceOf(UnifiedSpendError)
+    expect((err as UnifiedSpendError).signed).toBe(true)
+    expect(isSafeToRetry(err)).toBe(false)
+  })
+
+  it('marks an error before any signature as unsigned', async () => {
+    kit.spend = async () => {
+      throw Object.assign(new Error('estimate failed'), { name: 'NETWORK_GATEWAY_API_ERROR' })
+    }
+    const err = await donateFromUnified({ provider, campaign: CAMPAIGN, amount: '1', allocations: [{ chain: 'Base', amount: '1' }] }).catch(
+      (e: unknown) => e,
+    )
+    expect((err as UnifiedSpendError).signed).toBe(false)
+    expect(isSafeToRetry(err)).toBe(true)
   })
 
   it('fails loudly when Circle returns no Arc transaction hash', async () => {

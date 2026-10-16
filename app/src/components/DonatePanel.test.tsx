@@ -32,6 +32,11 @@ vi.mock('../lib/sender', async (importOriginal) => ({
   waitForResult: () => recheck.next(),
 }))
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open }) }))
+// No test here may reach Circle. The unified balance flow itself is covered in UnifiedDonate.test.tsx.
+vi.mock('../lib/unified', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/unified')>()),
+  fetchUnifiedBalance: async () => ({ total: 0n, byChain: [] }),
+}))
 // The unified balance option signs with the connected external wallet, so it reads wagmi directly.
 vi.mock('wagmi', () => ({
   useConnection: () =>
@@ -423,6 +428,19 @@ describe('DonatePanel', () => {
     it('is hidden when no wallet is connected', () => {
       renderPanel(view('USDC'))
       expect(option()).toBeNull()
+    })
+
+    // After a reload the unconfirmed spend must be in view, or the donor could give again from Arc unaware.
+    it('opens the unified option after a reload when a spend there is unconfirmed', () => {
+      localStorage.setItem(
+        'fundit.pendingBridges',
+        JSON.stringify([{ kind: 'unified', campaign: CAMPAIGN, amount: '5', transferId: 't-1', createdAt: Date.now() }]),
+      )
+      state.wallet = true
+      fakeSender()
+      renderPanel(view('USDC'))
+      expect((option() as HTMLInputElement).checked).toBe(true)
+      expect(screen.getByText(/not confirmed yet/)).toBeTruthy()
     })
   })
 

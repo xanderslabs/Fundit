@@ -11,7 +11,7 @@ import { useFactoryFees } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
 import { explainError } from '../lib/errors'
 import { bpsToPercent } from '../lib/format'
-import type { TxResult } from '../lib/sender'
+import type { Sender, TxResult } from '../lib/sender'
 import { byteLength, MAX_DESCRIPTION, MAX_LINKS, MAX_TITLE, validateCampaign } from '../lib/validate'
 
 const EXPLORER_URL = arc.blockExplorers.default.url
@@ -81,6 +81,8 @@ export function Create() {
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' })
   // Set synchronously, so a second click before React re-renders cannot start a second send or check.
   const inFlight = useRef(false)
+  // The sender of the last send, so a re-check of its timeout goes the same way.
+  const lastSender = useRef<Sender | null>(null)
 
   const result = validateCampaign({ title, description, imageUrl, links, goal, token, backup, sender: sender?.address })
   const errors = result.ok ? {} : result.errors
@@ -89,7 +91,8 @@ export function Create() {
   const touch = (key: string) => setTouched((t) => (t[key] ? t : { ...t, [key]: true }))
 
   const busy = phase.kind === 'sending' || phase.kind === 'checking'
-  const canSubmit = result.ok && sender !== null && fees.data !== undefined && !busy
+  // An unconfirmed create may still be mined. Until a check settles it or the person starts over, no second one.
+  const canSubmit = result.ok && sender !== null && fees.data !== undefined && !busy && phase.kind !== 'timeout'
 
   function handle(res: TxResult) {
     switch (res.status) {
@@ -123,6 +126,7 @@ export function Create() {
     if (inFlight.current || !canSubmit || !result.ok || !sender) return
     inFlight.current = true
     setPhase({ kind: 'sending' })
+    lastSender.current = sender
     try {
       const data = encodeFunctionData({
         abi: factoryAbi,
@@ -143,13 +147,20 @@ export function Create() {
     inFlight.current = true
     setPhase({ kind: 'checking', hash })
     try {
-      handle(await recheckResult(sender, hash, userop))
+      handle(await recheckResult(lastSender.current ?? sender, hash, userop))
     } catch (err) {
       // The check itself failed, so the transaction is still unknown. Never leave the page on "Checking...".
       setPhase({ kind: 'timeout', hash, userop, note: `We could not check it. ${explainError(err)}` })
     } finally {
       inFlight.current = false
     }
+  }
+
+  function startOver() {
+    const ok = window.confirm(
+      'The earlier transaction may still go through. If it does and you create again, you will have two fundraisers. Start over anyway?',
+    )
+    if (ok) setPhase({ kind: 'idle' })
   }
 
   function setLink(i: number, value: string) {
@@ -355,9 +366,14 @@ export function Create() {
               </p>
               <p>{phase.userop ? PASSKEY_PROCESSING : <ExplorerLink hash={phase.hash} />}</p>
               {phase.note && <p className="field-error">{phase.note}</p>}
-              <button type="button" className="btn btn-outline" onClick={() => checkAgain(phase.hash, phase.userop === true)}>
-                Check again
-              </button>
+              <div className="donate-actions">
+                <button type="button" className="btn btn-outline" onClick={() => checkAgain(phase.hash, phase.userop === true)}>
+                  Check again
+                </button>
+                <button type="button" className="btn btn-outline" onClick={startOver}>
+                  Start over
+                </button>
+              </div>
             </div>
           )}
           {phase.kind === 'error' && (

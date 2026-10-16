@@ -6,7 +6,7 @@ import { arc } from 'viem/chains'
 import { useConnection } from 'wagmi'
 import { MAX_MESSAGE_BYTES } from '../config'
 import { useSender } from '../hooks/useSender'
-import { clearPendingArc, pendingArc, savePendingArc } from '../lib/bridge'
+import { clearPendingArc, pendingArc, pendingUnified, savePendingArc } from '../lib/bridge'
 import type { CampaignView } from '../lib/campaigns'
 import { arcClient } from '../lib/clients'
 import { buildDonateCalls, donationBreakdown, fetchDonorFunds } from '../lib/donate'
@@ -86,7 +86,8 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   const [amountText, setAmountText] = useState('')
   const [tipPercent, setTipPercent] = useState<(typeof TIP_PERCENTS)[number]>(0)
   const [message, setMessage] = useState('')
-  const [source, setSource] = useState<PaySourceId>('arc')
+  // A unified balance spend saved before a reload opens that option again, so its block shows.
+  const [source, setSource] = useState<PaySourceId>(() => (pendingUnified(campaign) ? 'unified' : 'arc'))
   // An unconfirmed donation saved before a reload still blocks a new one until it is settled.
   const [phase, setPhase] = useState<Phase>(() => {
     const saved = pendingArc(campaign)

@@ -200,5 +200,51 @@ describe('Create', () => {
       expect(screen.getByText(/not confirmed yet/)).toBeTruthy()
       expect(screen.getByRole('button', { name: 'Check again' })).toBeTruthy()
     })
+
+    // A second click while the first create may still be mined would make two fundraisers.
+    it('blocks a new create during a timeout until a confirmed Start over', async () => {
+      const send = fakeSender({ status: 'timeout', hash: HASH, completed: 0 })
+      renderCreate()
+      const user = await fillValid()
+      await user.click(submitButton())
+      await screen.findByText(/not confirmed yet/)
+      expect((submitButton() as HTMLButtonElement).disabled).toBe(true)
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+      await user.click(screen.getByRole('button', { name: 'Start over' }))
+      expect((submitButton() as HTMLButtonElement).disabled).toBe(true)
+      confirm.mockReturnValue(true)
+      await user.click(screen.getByRole('button', { name: 'Start over' }))
+      expect((submitButton() as HTMLButtonElement).disabled).toBe(false)
+      expect(send).toHaveBeenCalledTimes(1)
+      confirm.mockRestore()
+    })
+
+    // The passkey session can end between the send and the check. The bundler of the sender that sent still
+    // knows the user operation.
+    it('rechecks through the sender that sent, even after the current sender changes', async () => {
+      const recheckSpy = passkeySender({ status: 'timeout', hash: HASH, completed: 0, hashKind: 'userop' }, async () => ({
+        status: 'success',
+        hash: HASH,
+        receipt: createdReceipt(),
+      }))
+      const { rerender } = renderCreate()
+      const user = await fillValid()
+      await user.click(submitButton())
+      await screen.findByText(PROCESSING)
+      fakeSender({ status: 'rejected', completed: 0 })
+      rerender(
+        <QueryClientProvider client={new QueryClient()}>
+          <MemoryRouter initialEntries={['/create']}>
+            <Routes>
+              <Route path="/create" element={<Create />} />
+              <Route path="/c/:address" element={<CampaignStub />} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      )
+      await user.click(screen.getByRole('button', { name: 'Check again' }))
+      expect(await screen.findByText(`Campaign ${NEW_CAMPAIGN}`)).toBeTruthy()
+      expect(recheckSpy).toHaveBeenCalledWith(HASH)
+    })
   })
 })

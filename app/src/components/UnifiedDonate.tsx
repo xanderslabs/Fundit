@@ -4,21 +4,28 @@ import { type EIP1193Provider, formatUnits, type Hex } from 'viem'
 import { arc } from 'viem/chains'
 import { useConnection } from 'wagmi'
 import { CHAIN_LABELS, TX_TIMEOUT_MS } from '../config'
+import { clearPendingUnified, pendingUnified, savePendingUnified } from '../lib/bridge'
 import type { CampaignView } from '../lib/campaigns'
 import { explainError } from '../lib/errors'
 import { bpsToPercent, formatAmount, parseAmount } from '../lib/format'
 import { arcReceipts, waitForResult } from '../lib/sender'
 import {
   donateFromUnified,
+  estimateReserves,
   explainUnifiedError,
   fetchGatewayTransfer,
   fetchUnifiedBalance,
+  isSafeToRetry,
+  maxSendable,
   pendingTransferId,
-  pickAllocations,
+  planSpend,
+  staticReserves,
 } from '../lib/unified'
 
 const EXPLORER_URL = arc.blockExplorers.default.url
 const GATEWAY_DOCS = 'https://developers.circle.com/gateway'
+const NO_REFERENCE_NOTE =
+  "We have no reference from Circle to check this transfer. Look at the campaign's raised amount and your unified balance before you donate again."
 
 type Phase =
   | { kind: 'idle' }
@@ -26,8 +33,9 @@ type Phase =
   | { kind: 'checking' }
   | { kind: 'success'; hash: Hex; explorerUrl?: string }
   // Not known yet. hash is the Arc mint, when Circle reported one; transferId is Circle's transfer, when the
-  // kit stopped waiting before the mint. Either way the money may still arrive, so this phase blocks.
-  | { kind: 'timeout'; hash?: Hex; transferId?: string; note?: string }
+  // kit gave one. With neither there is nothing to check. Either way the money may still arrive, so this
+  // phase blocks until a check settles it or the donor confirms Start over.
+  | { kind: 'timeout'; amount: string; hash?: Hex; transferId?: string; note?: string }
   | { kind: 'error'; message: string }
 
 function chainName(chain: string): string {
@@ -48,7 +56,11 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
   const { isConnected, address, connector } = useConnection()
   const queryClient = useQueryClient()
   const [amountText, setAmountText] = useState('')
-  const [phase, setPhase] = useState<Phase>({ kind: 'idle' })
+  // A spend started before a reload still blocks a new one until it is checked or the donor starts over.
+  const [phase, setPhase] = useState<Phase>(() => {
+    const saved = pendingUnified(campaign)
+    return saved ? { kind: 'timeout', amount: saved.amount, hash: saved.hash, transferId: saved.transferId } : { kind: 'idle' }
+  })
   // Set synchronously, so a second click before React re-renders cannot start a second spend or check.
   const inFlight = useRef(false)
   const wallet = isConnected && connector && address ? { connector, address } : null
@@ -60,13 +72,31 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
     staleTime: 30_000,
   })
 
+  // Circle's fee per chain, so the form knows the most it can send. Until the estimate answers, and for any
+  // chain it cannot estimate, the static fee table stands in.
+  const byChain = balance.data?.byChain
+  const reserveQuery = useQuery({
+    queryKey: ['unified-reserve', address?.toLowerCase(), byChain?.map((c) => `${c.chain}:${c.amount}`).join(',')],
+    queryFn: async () =>
+      estimateReserves({
+        provider: (await wallet!.connector.getProvider()) as EIP1193Provider,
+        campaign,
+        account: wallet!.address,
+        byChain: byChain!,
+      }),
+    enabled: wallet !== null && byChain !== undefined && byChain.length > 0 && !summary.closed,
+    staleTime: 60_000,
+  })
+  const reserves = reserveQuery.data ?? (byChain ? staticReserves(byChain) : undefined)
+  const sendable = byChain && reserves ? maxSendable(byChain, reserves) : undefined
+
   const parsed = amountText === '' ? null : parseAmount(amountText.trim())
   const amount = parsed?.ok ? parsed.value : null
   const total = balance.data?.total
-  const overBalance = amount !== null && total !== undefined && amount > total
+  const overBalance = amount !== null && sendable !== undefined && amount > sendable
   const busy = phase.kind === 'sending' || phase.kind === 'checking'
   const locked = busy || phase.kind === 'timeout'
-  const canSubmit = !summary.closed && wallet !== null && amount !== null && total !== undefined && !overBalance && !locked
+  const canSubmit = !summary.closed && wallet !== null && amount !== null && sendable !== undefined && !overBalance && !locked
 
   // The pay-with choice stays put while a spend may still be on its way.
   useEffect(() => {
@@ -81,14 +111,18 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
   }
 
   // Circle reports the Arc mint. Success is shown only once the Arc RPC has the receipt.
-  async function settle(hash: Hex, explorerUrl?: string) {
+  async function settle(hash: Hex, amountArg: string, explorerUrl?: string) {
     const res = await waitForResult(arcReceipts, hash, TX_TIMEOUT_MS)
+    if (res.status === 'timeout') {
+      savePendingUnified({ campaign, amount: amountArg, hash })
+      setPhase({ kind: 'timeout', amount: amountArg, hash })
+      return
+    }
+    clearPendingUnified(campaign)
     if (res.status === 'success') {
       refresh()
       setAmountText('')
       setPhase({ kind: 'success', hash, explorerUrl })
-    } else if (res.status === 'timeout') {
-      setPhase({ kind: 'timeout', hash })
     } else if (res.status === 'reverted') {
       setPhase({ kind: 'error', message: res.error })
     } else {
@@ -97,24 +131,46 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
   }
 
   async function donate() {
-    if (inFlight.current || !canSubmit || !wallet || amount === null || !balance.data) return
+    if (inFlight.current || !canSubmit || !wallet || amount === null || !byChain || !reserves) return
     inFlight.current = true
     setPhase({ kind: 'sending' })
+    const amountArg = formatUnits(amount, 6)
     try {
-      const picked = pickAllocations(balance.data.byChain, amount)
       const provider = (await wallet.connector.getProvider()) as EIP1193Provider
-      const { txHash, explorerUrl } = await donateFromUnified({
-        provider,
-        campaign,
-        amount: formatUnits(amount, 6),
-        allocations: picked.map((a) => ({ chain: a.chain, amount: formatUnits(a.amount, 6) })),
-        account: wallet.address,
-      })
-      await settle(txHash, explorerUrl)
+      // Planning only reads. Any failure here is before the signature, so the form opens again.
+      let allocations
+      try {
+        ;({ allocations } = await planSpend({ provider, campaign, account: wallet.address, byChain, amount, reserves }))
+      } catch (err) {
+        setPhase({ kind: 'error', message: explainUnifiedError(err) ?? explainError(err) })
+        return
+      }
+      // Saved before the wallet is asked, so a reload during the spend still blocks a second one.
+      savePendingUnified({ campaign, amount: amountArg })
+      try {
+        const { txHash, explorerUrl } = await donateFromUnified({
+          provider,
+          campaign,
+          amount: amountArg,
+          allocations: allocations.map((a) => ({ chain: a.chain, amount: formatUnits(a.amount, 6) })),
+          account: wallet.address,
+        })
+        savePendingUnified({ campaign, amount: amountArg, hash: txHash })
+        await settle(txHash, amountArg, explorerUrl)
+      } catch (err) {
+        if (isSafeToRetry(err)) {
+          clearPendingUnified(campaign)
+          setPhase({ kind: 'error', message: explainUnifiedError(err) ?? explainError(err) })
+        } else {
+          // Circle may have accepted the transfer. Stay blocked until a check or a confirmed Start over.
+          const transferId = pendingTransferId(err) ?? undefined
+          savePendingUnified({ campaign, amount: amountArg, transferId })
+          setPhase({ kind: 'timeout', amount: amountArg, transferId })
+        }
+      }
     } catch (err) {
-      const transferId = pendingTransferId(err)
-      if (transferId) setPhase({ kind: 'timeout', transferId })
-      else setPhase({ kind: 'error', message: explainUnifiedError(err) ?? explainError(err) })
+      clearPendingUnified(campaign)
+      setPhase({ kind: 'error', message: explainError(err) })
     } finally {
       inFlight.current = false
     }
@@ -126,19 +182,25 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
   }
 
   // Checks the same transfer again. It never signs or sends anything new.
-  async function checkAgain(p: { hash?: Hex; transferId?: string }) {
+  async function checkAgain(p: { amount: string; hash?: Hex; transferId?: string }) {
     if (inFlight.current) return
     inFlight.current = true
     setPhase({ kind: 'checking' })
     try {
       if (p.hash) {
-        await settle(p.hash)
+        await settle(p.hash, p.amount)
         return
       }
       const transfer = await fetchGatewayTransfer(p.transferId!)
-      if (transfer.status === 'done') await settle(transfer.txHash)
-      else if (transfer.status === 'pending') setPhase({ kind: 'timeout', ...p })
-      else setPhase({ kind: 'error', message: 'Circle could not finish this transfer. Check your unified balance before you try again.' })
+      if (transfer.status === 'done') {
+        savePendingUnified({ campaign, amount: p.amount, transferId: p.transferId, hash: transfer.txHash })
+        await settle(transfer.txHash, p.amount)
+      } else if (transfer.status === 'pending') {
+        setPhase({ kind: 'timeout', ...p })
+      } else {
+        clearPendingUnified(campaign)
+        setPhase({ kind: 'error', message: 'Circle could not finish this transfer. Check your unified balance before you try again.' })
+      }
     } catch (err) {
       setPhase({ kind: 'timeout', ...p, note: `We could not check it. ${explainError(err)}` })
     } finally {
@@ -151,6 +213,7 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
       'The earlier transfer may still go through. If it does and you donate again, you will give twice. Start a new donation anyway?',
     )
     if (!ok) return
+    clearPendingUnified(campaign)
     setAmountText('')
     setPhase({ kind: 'idle' })
   }
@@ -205,7 +268,13 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
           )}
           {overBalance && (
             <p className="field-error" role="alert">
-              This is more than your unified balance.
+              This is more than can be sent from your unified balance after Circle's fees.
+            </p>
+          )}
+          {sendable !== undefined && total !== undefined && total > 0n && (
+            <p className="hint">
+              Up to {formatAmount(sendable, 'USDC')} can be sent after fees
+              {reserveQuery.isPending ? " (checking Circle's fees...)" : '.'}
             </p>
           )}
         </div>
@@ -246,15 +315,18 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
                 <ExplorerLink hash={phase.hash} />
               </p>
             )}
+            {!phase.hash && !phase.transferId && <p>{NO_REFERENCE_NOTE}</p>}
             {phase.note && <p className="field-error">{phase.note}</p>}
             <div className="donate-actions">
-              <button
-                type="button"
-                className="btn btn-outline"
-                onClick={() => checkAgain({ hash: phase.hash, transferId: phase.transferId })}
-              >
-                Check again
-              </button>
+              {(phase.hash || phase.transferId) && (
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => checkAgain({ amount: phase.amount, hash: phase.hash, transferId: phase.transferId })}
+                >
+                  Check again
+                </button>
+              )}
               <button type="button" className="btn btn-outline" onClick={startOver}>
                 Start over
               </button>
