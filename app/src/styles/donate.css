@@ -22,6 +22,7 @@
 }
 
 .donate-form input:not([type='radio']),
+.donate-form select,
 .donate-form textarea {
   flex: 1;
   min-width: 0;
@@ -41,6 +42,7 @@
 }
 
 .donate-form input:focus,
+.donate-form select:focus,
 .donate-form textarea:focus {
   outline: 2px solid var(--primary);
   outline-offset: 1px;
@@ -135,4 +137,19 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+/* Pay with sits above both the Arc form and the cross-chain form. */
+.donate-source {
+  margin: 0 0 20px;
+  padding: 0;
+  border: 0;
+}
+
+/* Cross-chain donations still on their way to this campaign. */
+.bridge-tracker {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
 }

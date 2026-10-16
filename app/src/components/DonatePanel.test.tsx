@@ -86,6 +86,7 @@ afterEach(() => {
   state.balance = 0n
   state.allowance = 0n
   reads.length = 0
+  localStorage.clear()
   open.mockClear()
   recheck.next = async () => {
     throw new Error('no re-check planned')
@@ -305,6 +306,57 @@ describe('DonatePanel', () => {
     await user.click(screen.getByRole('button', { name: 'Start over' }))
     expect(donateButton()).toBeTruthy()
     expect((screen.getByLabelText('Amount') as HTMLInputElement).value).toBe('')
+  })
+
+  // A reload must not reopen the door to a second donation while the first may still be mined.
+  it('restores the not-confirmed block after a reload', async () => {
+    fakeSender({ status: 'timeout', hash: HASH, completed: 1 })
+    state.balance = 1000_000000n
+    renderPanel(view('USDC'))
+    await fillAndDonate()
+    expect(await screen.findByText(/donation is not confirmed yet/)).toBeTruthy()
+
+    cleanup()
+    renderPanel(view('USDC'))
+    expect(screen.getByText(/donation is not confirmed yet/)).toBeTruthy()
+    expectBlocked()
+  })
+
+  it('does not restore the block on another campaign', () => {
+    localStorage.setItem(
+      'fundit.pendingBridges',
+      JSON.stringify([{ kind: 'arc', campaign: '0x00000000000000000000000000000000000000b2', hash: HASH, approve: false, createdAt: 1 }]),
+    )
+    fakeSender()
+    renderPanel(view('USDC'))
+    expect(screen.queryByText(/not confirmed yet/)).toBeNull()
+  })
+
+  it('forgets the saved block once Check again settles it', async () => {
+    fakeSender({ status: 'timeout', hash: HASH, completed: 1 })
+    state.balance = 1000_000000n
+    renderPanel(view('USDC'))
+    const user = await fillAndDonate()
+    recheck.next = async () => success
+    await user.click(await screen.findByRole('button', { name: 'Check again' }))
+    expect(await screen.findByText(/Thank you/)).toBeTruthy()
+
+    cleanup()
+    renderPanel(view('USDC'))
+    expect(screen.queryByText(/not confirmed yet/)).toBeNull()
+  })
+
+  it('forgets the saved block after a confirmed Start over', async () => {
+    fakeSender({ status: 'timeout', hash: HASH, completed: 1 })
+    state.balance = 1000_000000n
+    renderPanel(view('USDC'))
+    const user = await fillAndDonate()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await user.click(await screen.findByRole('button', { name: 'Start over' }))
+
+    cleanup()
+    renderPanel(view('USDC'))
+    expect(screen.queryByText(/not confirmed yet/)).toBeNull()
   })
 
   it('sends only once on a double submit', async () => {
