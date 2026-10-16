@@ -81,7 +81,7 @@ afterEach(() => {
 describe('Create', () => {
   // The contract would revert anyway, but a person should never pay gas to learn the form was wrong.
   it('keeps submit disabled while the form is invalid', async () => {
-    fakeSender({ status: 'rejected' })
+    fakeSender({ status: 'rejected', completed: 0 })
     renderCreate()
     expect((submitButton() as HTMLButtonElement).disabled).toBe(true)
     const user = await fillValid()
@@ -92,7 +92,7 @@ describe('Create', () => {
   })
 
   it('shows the factory fees before submit', () => {
-    fakeSender({ status: 'rejected' })
+    fakeSender({ status: 'rejected', completed: 0 })
     renderCreate()
     expect(screen.getByText(/2\.5% of each withdrawal/)).toBeTruthy()
   })
@@ -116,7 +116,7 @@ describe('Create', () => {
 
   // A dropped or slow transaction must never look like success.
   it('shows not confirmed yet with an explorer link on timeout', async () => {
-    fakeSender({ status: 'timeout', hash: HASH })
+    fakeSender({ status: 'timeout', hash: HASH, completed: 0 })
     renderCreate()
     const user = await fillValid()
     await user.click(submitButton())

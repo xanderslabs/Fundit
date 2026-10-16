@@ -36,6 +36,16 @@ describe('explainError', () => {
     expect(explainError(revertWith(find('CampaignClosed')))).toBe('This campaign is closed.')
   })
 
+  // MetaMask-style wallets put the revert hex one or two levels down instead of at error.data.
+  it('finds revert data nested at data.data and data.originalError.data', () => {
+    const closed = campaignAbi.find((x) => x.type === 'error' && x.name === 'CampaignClosed') as AbiError
+    const hex = encodeErrorResult({ abi: [closed], errorName: 'CampaignClosed' } as never)
+    const nested = { code: -32603, message: 'Internal JSON-RPC error.', data: { code: 3, data: hex } }
+    expect(explainError(nested)).toBe('This campaign is closed.')
+    const original = { code: -32603, message: 'Internal JSON-RPC error.', data: { originalError: { code: 3, data: hex } } }
+    expect(explainError(original)).toBe('This campaign is closed.')
+  })
+
   it('maps a wallet rejection to a cancel message', () => {
     const rejected = new BaseError('Request failed', { cause: new UserRejectedRequestError(new Error('User denied')) })
     expect(explainError(rejected)).toBe('You cancelled the request.')

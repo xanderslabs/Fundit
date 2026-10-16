@@ -62,10 +62,12 @@ function revertName(e: unknown): string | null {
   for (const x of chain(e)) {
     const named = (x as { data?: { errorName?: unknown } }).data?.errorName
     if (typeof named === 'string') return named
-    const data = (x as { data?: unknown }).data
-    if (typeof data === 'string' && /^0x[0-9a-fA-F]{8}/.test(data)) {
+    // Injected wallets nest the revert hex at data, data.data or data.originalError.data.
+    const data = (x as { data?: { data?: unknown; originalError?: { data?: unknown } } }).data
+    for (const candidate of [data, data?.data, data?.originalError?.data]) {
+      if (typeof candidate !== 'string' || !/^0x[0-9a-fA-F]{8}/.test(candidate)) continue
       try {
-        return decodeErrorResult({ abi: ABI, data: data as Hex }).errorName
+        return decodeErrorResult({ abi: ABI, data: candidate as Hex }).errorName
       } catch {
         // Not one of ours. Keep looking further down the chain.
       }

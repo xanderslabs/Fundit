@@ -8,10 +8,9 @@ import { CampaignImage } from '../components/CampaignImage'
 import { FACTORY_ADDRESS, TX_TIMEOUT_MS, type TokenSymbol } from '../config'
 import { useFactoryFees } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
-import { arcClient } from '../lib/clients'
 import { explainError } from '../lib/errors'
 import { bpsToPercent } from '../lib/format'
-import { type TxResult, waitForResult } from '../lib/sender'
+import { arcReceipts, type TxResult, waitForResult } from '../lib/sender'
 import { byteLength, MAX_DESCRIPTION, MAX_LINKS, MAX_TITLE, validateCampaign } from '../lib/validate'
 
 const EXPLORER_URL = arc.blockExplorers.default.url
@@ -133,7 +132,7 @@ export function Create() {
   // Checks the same transaction again. It never sends a new one, which could create the fundraiser twice.
   async function checkAgain(hash: Hex) {
     setPhase({ kind: 'checking', hash })
-    handle(await waitForResult(arcClient, hash, TX_TIMEOUT_MS))
+    handle(await waitForResult(arcReceipts, hash, TX_TIMEOUT_MS))
   }
 
   function setLink(i: number, value: string) {
