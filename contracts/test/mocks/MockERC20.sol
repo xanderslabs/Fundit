@@ -26,6 +26,21 @@ contract MockERC20 is ERC20 {
         blocked[account] = isBlocked;
     }
 
+    /// @notice Second token address allowed to move this token's balances, like a native
+    /// asset exposed through more than one contract.
+    address public aliasToken;
+
+    /// @dev Zero clears the alias.
+    // forge-lint: disable-next-item(missing-zero-check)
+    function setAlias(address alias_) external {
+        aliasToken = alias_;
+    }
+
+    function aliasTransfer(address from, address to, uint256 amount) external {
+        require(msg.sender == aliasToken, "not alias");
+        _transfer(from, to, amount);
+    }
+
     function _update(address from, address to, uint256 value) internal override {
         if (blocked[from]) revert Blocked(from);
         if (blocked[to]) revert Blocked(to);

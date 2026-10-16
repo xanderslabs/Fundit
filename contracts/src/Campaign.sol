@@ -112,7 +112,8 @@ contract Campaign is ReentrancyGuardTransient {
     }
 
     /// @notice Books any unaccounted tokens as a gross donation, charging the donation fee.
-    /// @dev Anyone can call it. It never reverts, so it is safe to call before every payout.
+    /// @dev Anyone can call it. It reverts only on reentrancy. The internal _settle() never
+    /// reverts, which is why it is safe to call before every payout.
     function settle() external nonReentrant returns (uint256 gross) {
         return _settle();
     }
@@ -191,12 +192,16 @@ contract Campaign is ReentrancyGuardTransient {
     }
 
     /// @notice Sends the whole balance of a token that is not the campaign token to `to`, with no fee.
+    /// @dev Also reverts if the transfer lowers the campaign token balance, in case another
+    /// address can move the same underlying asset.
     function sweep(IERC20 other, address to) external nonReentrant onlyCreator {
         if (other == token) revert CannotSweepCampaignToken();
         if (to == address(0)) revert ZeroAddress();
+        uint256 before = token.balanceOf(address(this));
         uint256 amount = other.balanceOf(address(this));
         emit Swept(address(other), to, amount);
         other.safeTransfer(to, amount);
+        if (token.balanceOf(address(this)) < before) revert CannotSweepCampaignToken();
     }
 
     /// @notice Replaces the goal and all metadata. Creator only, while the campaign is open.

@@ -7,6 +7,7 @@ import {Campaign} from "../src/Campaign.sol";
 import {MetadataLib} from "../src/MetadataLib.sol";
 import {Metadata, Summary} from "../src/Types.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
+import {MockAliasToken} from "./mocks/MockAliasToken.sol";
 
 // Test-only false positives: expected-event emits and ignored return values in revert checks.
 // forge-lint: disable-start(reentrancy-events, unused-return)
@@ -124,6 +125,27 @@ contract CampaignAdminTest is Base {
         campaign.sweep(IERC20(address(eurc)), address(0));
         vm.stopPrank();
         assertEq(usdc.balanceOf(address(campaign)), 100e6);
+    }
+
+    // A second address that moves the campaign token's balance (a native asset with more
+    // than one interface) passes the address check, so the balance check must stop it, or
+    // the creator could drain the treasury's fees.
+    function test_Sweep_RevertsForCampaignTokenAlias() public {
+        _donate(100e6, 1e6);
+        MockAliasToken alias_ = new MockAliasToken(usdc);
+        usdc.setAlias(address(alias_));
+        uint256 fees = campaign.feesAccrued();
+        uint256 balance = campaign.creatorBalance();
+
+        vm.prank(alice);
+        vm.expectRevert(Campaign.CannotSweepCampaignToken.selector);
+        campaign.sweep(IERC20(address(alias_)), alice);
+
+        assertEq(usdc.balanceOf(address(campaign)), 101e6);
+        assertEq(usdc.balanceOf(alice), 0);
+        assertEq(campaign.feesAccrued(), fees);
+        assertEq(campaign.creatorBalance(), balance);
+        _assertBooked();
     }
 
     function test_Sweep_OnlyCreator() public {
