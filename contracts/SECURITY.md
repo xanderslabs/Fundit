@@ -33,6 +33,7 @@ when the new owner calls `acceptOwnership`. The owner can:
 - Pause donations, withdrawals, settlement or fee claims on an existing campaign.
 - Change the fees, token, creator or goal of an existing campaign.
 - Add a token, change the messenger, or upgrade any contract.
+- Add or remove an EURC payout domain.
 
 ## Campaign rules
 
@@ -56,6 +57,27 @@ when the new owner calls `acceptOwnership`. The owner can:
 - **CCTP payouts.** `withdraw` approves exactly the net amount to the messenger with
   `forceApprove`, and passes a zero `destinationCaller`. It rejects a zero recipient and a
   `maxFee` that is not below the net amount.
+
+## EURC payout domains
+
+- **Why the list exists.** A CCTP V2 burn checks that the source chain supports the token and
+  that a remote `TokenMessenger` exists for the destination domain. It does not check that the
+  destination mints EURC. An EURC burn to a domain without EURC support may never mint, and the
+  creator's funds would be stranded. USDC is supported on every CCTP domain, so USDC campaigns
+  have no list and may pay out to any domain.
+- **Set once at deploy.** The factory constructor takes `eurcPayoutDomains_` and stores each
+  entry in `isEurcPayoutDomain`, emitting `EurcPayoutDomainSet(domain)` for each one. The
+  constructor reverts with `InvalidDomain` if an entry is the Arc domain (26). There is no
+  setter, so the owner gains no power over payouts.
+- **What `withdraw` checks.** For an EURC campaign, a CCTP payout to a domain not in the list
+  reverts with `UnsupportedPayoutDomain`. The check runs before the settle step and before any
+  state change. Arc payouts are plain transfers and are always allowed. `canPayoutTo(destDomain)`
+  returns the same answer, for the payout chain picker.
+- **If Circle adds an EURC route.** Campaigns from this factory can never use it. The creator can
+  still withdraw on Arc and bridge the funds themselves. Offering the new route directly needs a
+  new factory deployment, and only campaigns created by that factory get it.
+- **If Circle drops an EURC route.** The list cannot shrink either, so a listed domain would keep
+  passing the check. The frontend should not offer a domain that Circle no longer supports.
 
 ## Arc-specific notes
 

@@ -24,7 +24,14 @@ contract CampaignReentrancyTest is Base {
         super.setUp();
         reentrant = new MockReentrant();
         factory = new CampaignFactory(
-            owner, treasury, IERC20(address(usdc)), IERC20(address(eurc)), reentrant, DONATION_FEE_BPS, WITHDRAW_FEE_BPS
+            owner,
+            treasury,
+            IERC20(address(usdc)),
+            IERC20(address(eurc)),
+            reentrant,
+            DONATION_FEE_BPS,
+            WITHDRAW_FEE_BPS,
+            _eurcDomains()
         );
         campaign = Campaign(_create(IERC20(address(usdc)), 1_000e6));
         aliceB32 = bytes32(uint256(uint160(alice)));

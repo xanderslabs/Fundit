@@ -10,6 +10,7 @@ import {Campaign} from "../src/Campaign.sol";
 contract CampaignWithdrawTest is Base {
     uint32 internal constant ARC = 26;
     uint32 internal constant BASE_DOMAIN = 6;
+    uint32 internal constant ARBITRUM_DOMAIN = 3;
 
     Campaign internal campaign;
     bytes32 internal aliceB32;
@@ -185,6 +186,77 @@ contract CampaignWithdrawTest is Base {
         assertEq(messenger.lastAmount(), 50e6 - 0.5e6);
         assertEq(eurc.balanceOf(address(messenger)), 50e6 - 0.5e6);
         assertEq(usdc.balanceOf(address(messenger)), 0);
+    }
+
+    // A CCTP burn to a domain that does not mint EURC could strand the creator's funds, so the
+    // campaign refuses it before touching the books, even with an unsettled inflow pending.
+    function test_Withdraw_Eurc_RevertsUnsupportedDomain() public {
+        Campaign ec = Campaign(_create(IERC20(address(eurc)), 1_000e6));
+        eurc.mint(address(ec), 100e6);
+        uint256 balanceBefore = ec.creatorBalance();
+        uint256 feesBefore = ec.feesAccrued();
+        uint256 grossBefore = ec.grossDonated();
+
+        vm.prank(alice);
+        vm.expectRevert(Campaign.UnsupportedPayoutDomain.selector);
+        ec.withdraw(50e6, ARBITRUM_DOMAIN, bytes32(uint256(0xBEEF)), 1e6, 1000, "");
+
+        assertEq(ec.creatorBalance(), balanceBefore);
+        assertEq(ec.feesAccrued(), feesBefore);
+        assertEq(ec.grossDonated(), grossBefore);
+        assertEq(ec.withdrawn(), 0);
+        assertEq(ec.unaccounted(), 100e6);
+        assertEq(eurc.balanceOf(address(ec)), 100e6);
+        assertEq(messenger.calls(), 0);
+    }
+
+    // A listed domain burns EURC through CCTP as usual.
+    function test_Withdraw_Eurc_AllowedDomain() public {
+        Campaign ec = Campaign(_create(IERC20(address(eurc)), 1_000e6));
+        eurc.mint(address(ec), 100e6);
+        vm.prank(alice);
+        ec.withdraw(50e6, BASE_DOMAIN, bytes32(uint256(0xBEEF)), 1e6, 1000, "");
+
+        assertEq(messenger.calls(), 1);
+        assertEq(messenger.lastDomain(), BASE_DOMAIN);
+        assertEq(messenger.lastBurnToken(), address(eurc));
+    }
+
+    // Arc is never in the list, yet an EURC creator must always be able to take funds on Arc.
+    function test_Withdraw_Eurc_ArcAlwaysAllowed() public {
+        Campaign ec = Campaign(_create(IERC20(address(eurc)), 1_000e6));
+        eurc.mint(address(ec), 100e6);
+        vm.prank(alice);
+        ec.withdraw(50e6, ARC, aliceB32, 0, 0, "");
+
+        assertEq(eurc.balanceOf(alice), 50e6 - 0.5e6);
+        assertEq(messenger.calls(), 0);
+    }
+
+    // USDC mints on every CCTP domain, so the EURC list must never limit a USDC campaign.
+    function test_Withdraw_Usdc_AnyDomain() public {
+        _donate(100e6);
+        vm.prank(alice);
+        campaign.withdraw(50e6, ARBITRUM_DOMAIN, bytes32(uint256(0xBEEF)), 1e6, 1000, "");
+
+        assertEq(messenger.calls(), 1);
+        assertEq(messenger.lastDomain(), ARBITRUM_DOMAIN);
+        assertEq(messenger.lastBurnToken(), address(usdc));
+        _assertBooked();
+    }
+
+    // The payout chain picker relies on canPayoutTo agreeing with what withdraw accepts.
+    function test_CanPayoutTo() public {
+        Campaign ec = Campaign(_create(IERC20(address(eurc)), 1_000e6));
+        assertTrue(ec.canPayoutTo(ARC));
+        assertTrue(ec.canPayoutTo(BASE_DOMAIN));
+        assertTrue(ec.canPayoutTo(0));
+        assertTrue(ec.canPayoutTo(1));
+        assertFalse(ec.canPayoutTo(ARBITRUM_DOMAIN));
+
+        assertTrue(campaign.canPayoutTo(ARC));
+        assertTrue(campaign.canPayoutTo(BASE_DOMAIN));
+        assertTrue(campaign.canPayoutTo(ARBITRUM_DOMAIN));
     }
 
     // A zero CCTP recipient would burn funds with no one able to mint them.

@@ -21,6 +21,7 @@ contract CampaignFactory is Ownable2Step, ICampaignFactory {
     error ZeroAddress();
     error NotCampaign();
     error RenounceDisabled();
+    error InvalidDomain();
 
     event CampaignCreated(
         address indexed campaign,
@@ -34,8 +35,11 @@ contract CampaignFactory is Ownable2Step, ICampaignFactory {
     event TreasuryUpdated(address indexed treasury);
     event FeaturedUpdated(address indexed campaign);
     event CreationPausedSet(bool paused);
+    event EurcPayoutDomainSet(uint32 domain);
 
     uint16 public constant MAX_FEE_BPS = 500;
+    /// @notice CCTP domain of Arc. EURC payouts there are plain transfers and need no list entry.
+    uint32 public constant ARC_DOMAIN = 26;
 
     address public immutable implementation;
     IERC20 public immutable usdc;
@@ -49,6 +53,8 @@ contract CampaignFactory is Ownable2Step, ICampaignFactory {
     address public featuredCampaign;
     mapping(address => bool) public isCampaign;
     mapping(address => uint256) public creatorNonce;
+    /// @notice CCTP domains where EURC campaigns may pay out. Fixed at deploy, with no setter.
+    mapping(uint32 => bool) public isEurcPayoutDomain;
 
     address[] private campaigns;
     mapping(address => address[]) private byCreator;
@@ -60,13 +66,25 @@ contract CampaignFactory is Ownable2Step, ICampaignFactory {
         IERC20 eurc_,
         ITokenMessengerV2 messenger_,
         uint16 donationFeeBps_,
-        uint16 withdrawFeeBps_
+        uint16 withdrawFeeBps_,
+        uint32[] memory eurcPayoutDomains_
     ) Ownable(owner_) {
         if (
             treasury_ == address(0) || address(usdc_) == address(0) || address(eurc_) == address(0)
                 || address(messenger_) == address(0)
         ) revert ZeroAddress();
         if (donationFeeBps_ > MAX_FEE_BPS || withdrawFeeBps_ > MAX_FEE_BPS) revert FeeTooHigh();
+
+        // The list is set here once and has no setter. Arc needs no entry: its payouts are plain transfers.
+        for (uint256 i = 0; i < eurcPayoutDomains_.length; ++i) {
+            uint32 domain = eurcPayoutDomains_[i];
+            // A bad entry must fail the whole deploy, so the revert belongs in the loop.
+            // forge-lint: disable-next-line(require-revert-in-loop)
+            if (domain == ARC_DOMAIN) revert InvalidDomain();
+            // forge-lint: disable-next-line(costly-loop)
+            isEurcPayoutDomain[domain] = true;
+            emit EurcPayoutDomainSet(domain);
+        }
 
         implementation = address(new Campaign());
         usdc = usdc_;

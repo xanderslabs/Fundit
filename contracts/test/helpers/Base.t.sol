@@ -33,8 +33,23 @@ abstract contract Base is Test {
         eurc = new MockERC20("Euro Coin", "EURC", 6);
         messenger = new MockTokenMessengerV2();
         factory = new CampaignFactory(
-            owner, treasury, IERC20(address(usdc)), IERC20(address(eurc)), messenger, DONATION_FEE_BPS, WITHDRAW_FEE_BPS
+            owner,
+            treasury,
+            IERC20(address(usdc)),
+            IERC20(address(eurc)),
+            messenger,
+            DONATION_FEE_BPS,
+            WITHDRAW_FEE_BPS,
+            _eurcDomains()
         );
+    }
+
+    /// @dev EURC payout domains for tests: Ethereum (0), Avalanche (1) and Base (6).
+    function _eurcDomains() internal pure returns (uint32[] memory d) {
+        d = new uint32[](3);
+        d[0] = 0;
+        d[1] = 1;
+        d[2] = 6;
     }
 
     function _meta() internal pure returns (Metadata memory meta) {

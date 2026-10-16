@@ -227,17 +227,44 @@ contract CampaignFactoryTest is Base {
     // could never be corrected.
     function test_Constructor_RevertsBadConfig() public {
         vm.expectRevert(CampaignFactory.ZeroAddress.selector);
-        new CampaignFactory(owner, address(0), usdcToken, eurcToken, messenger, 0, 0);
+        new CampaignFactory(owner, address(0), usdcToken, eurcToken, messenger, 0, 0, _eurcDomains());
         vm.expectRevert(CampaignFactory.ZeroAddress.selector);
-        new CampaignFactory(owner, treasury, IERC20(address(0)), eurcToken, messenger, 0, 0);
+        new CampaignFactory(owner, treasury, IERC20(address(0)), eurcToken, messenger, 0, 0, _eurcDomains());
         vm.expectRevert(CampaignFactory.ZeroAddress.selector);
-        new CampaignFactory(owner, treasury, usdcToken, IERC20(address(0)), messenger, 0, 0);
+        new CampaignFactory(owner, treasury, usdcToken, IERC20(address(0)), messenger, 0, 0, _eurcDomains());
         vm.expectRevert(CampaignFactory.ZeroAddress.selector);
-        new CampaignFactory(owner, treasury, usdcToken, eurcToken, ITokenMessengerV2(address(0)), 0, 0);
+        new CampaignFactory(owner, treasury, usdcToken, eurcToken, ITokenMessengerV2(address(0)), 0, 0, _eurcDomains());
         vm.expectRevert(CampaignFactory.FeeTooHigh.selector);
-        new CampaignFactory(owner, treasury, usdcToken, eurcToken, messenger, 501, 0);
+        new CampaignFactory(owner, treasury, usdcToken, eurcToken, messenger, 501, 0, _eurcDomains());
         vm.expectRevert(CampaignFactory.FeeTooHigh.selector);
-        new CampaignFactory(owner, treasury, usdcToken, eurcToken, messenger, 0, 501);
+        new CampaignFactory(owner, treasury, usdcToken, eurcToken, messenger, 0, 501, _eurcDomains());
+    }
+
+    // Arc payouts are plain transfers and always allowed. An Arc entry in the EURC list would
+    // suggest Arc goes through CCTP, so the deploy fails instead.
+    function test_Constructor_RevertsArcInEurcList() public {
+        uint32[] memory d = new uint32[](2);
+        d[0] = 6;
+        d[1] = 26;
+        vm.expectRevert(CampaignFactory.InvalidDomain.selector);
+        new CampaignFactory(owner, treasury, usdcToken, eurcToken, messenger, 0, 0, d);
+    }
+
+    // The EURC list is fixed at deploy. Each listed domain is stored and announced, and no
+    // other domain is allowed.
+    function test_Constructor_StoresEurcDomains() public {
+        uint32[] memory d = _eurcDomains();
+        for (uint256 i = 0; i < d.length; ++i) {
+            vm.expectEmit(true, true, true, true);
+            emit CampaignFactory.EurcPayoutDomainSet(d[i]);
+        }
+        CampaignFactory f = new CampaignFactory(owner, treasury, usdcToken, eurcToken, messenger, 0, 0, d);
+
+        assertTrue(f.isEurcPayoutDomain(0));
+        assertTrue(f.isEurcPayoutDomain(1));
+        assertTrue(f.isEurcPayoutDomain(6));
+        assertFalse(f.isEurcPayoutDomain(3));
+        assertFalse(f.isEurcPayoutDomain(26));
     }
 
     // Only the pending owner can complete a transfer, so a typo'd or hostile address

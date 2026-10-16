@@ -24,6 +24,7 @@ contract Campaign is ReentrancyGuardTransient {
     error CannotSweepCampaignToken();
     error ZeroAddress();
     error InvalidGoal();
+    error UnsupportedPayoutDomain();
 
     event Donated(address indexed donor, uint256 amount, uint256 fee, uint256 tip, string message);
     event ExternalDonationSettled(uint256 gross, uint256 fee);
@@ -131,6 +132,7 @@ contract Campaign is ReentrancyGuardTransient {
 
     /// @notice Pays `amount` of the creator balance, less the withdrawal fee, to `recipient`.
     /// @param destDomain ARC_DOMAIN for a plain transfer on Arc, any other CCTP domain to burn and mint there.
+    /// An EURC campaign reverts with UnsupportedPayoutDomain for a domain that canPayoutTo rejects.
     /// @param recipient Left-padded address on Arc, or the CCTP `mintRecipient` on other chains.
     /// @param maxFee CCTP fast-transfer fee cap. Ignored on Arc.
     /// @param minFinalityThreshold CCTP finality threshold. Ignored on Arc.
@@ -143,6 +145,7 @@ contract Campaign is ReentrancyGuardTransient {
         uint32 minFinalityThreshold,
         bytes calldata hookData
     ) external nonReentrant onlyCreator {
+        if (!canPayoutTo(destDomain)) revert UnsupportedPayoutDomain();
         _settle();
         if (amount == 0) revert ZeroAmount();
         if (amount > creatorBalance) revert InsufficientBalance();
@@ -227,6 +230,14 @@ contract Campaign is ReentrancyGuardTransient {
         uint256 balance = token.balanceOf(address(this));
         uint256 booked = creatorBalance + feesAccrued;
         return balance > booked ? balance - booked : 0;
+    }
+
+    /// @notice Whether withdraw accepts `destDomain`. Arc is always allowed, a USDC campaign may
+    /// pay out to any CCTP domain, and an EURC campaign only to the factory's fixed EURC list.
+    function canPayoutTo(uint32 destDomain) public view returns (bool) {
+        if (destDomain == ARC_DOMAIN) return true;
+        if (token != factory.eurc()) return true;
+        return factory.isEurcPayoutDomain(destDomain);
     }
 
     /// @notice Gross amount raised. Withdrawals never reduce it.
