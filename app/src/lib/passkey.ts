@@ -3,7 +3,7 @@ import { type Address, type Hex, isAddress, type TransactionReceipt, type Transp
 import { arc } from 'viem/chains'
 import { CIRCLE_CLIENT_KEY, MODULAR_WALLETS_URL, PASSKEYS_ENABLED, TX_TIMEOUT_MS } from '../config'
 import { isUserRejection } from './errors'
-import { type Call, REVERTED, type Sender, type TxResult, withTimeout } from './sender'
+import { type Call, REVERTED, type Sender, type TxResult, withGasMargin, withTimeout } from './sender'
 
 // Circle Modular Wallets. The SDK is large and only passkey users need it, so it loads with import() on
 // first use. The WebAuthn rpId comes from Circle and is bound to the client key's domain (fundit.xyz, or
@@ -92,8 +92,10 @@ export type UserOperationResult = { success: boolean; receipt: TransactionReceip
 export type ReceiptBundler = {
   waitForUserOperationReceipt(args: { hash: Hex; timeout?: number }): Promise<UserOperationResult>
 }
+export type UserOperationGas = { callGasLimit: bigint; preVerificationGas: bigint; verificationGasLimit: bigint }
 export type PasskeyBundler<A> = ReceiptBundler & {
-  sendUserOperation(args: { account: A; calls: Call[] }): Promise<Hex>
+  estimateUserOperationGas(args: { account: A; calls: Call[] }): Promise<UserOperationGas>
+  sendUserOperation(args: { account: A; calls: Call[] } & UserOperationGas): Promise<Hex>
 }
 
 // Waits for a user operation, never longer than TX_TIMEOUT_MS, and maps it to a TxResult. Once mined, the
@@ -121,9 +123,19 @@ export function passkeySender<A extends { address: Address }>(account: A, bundle
     address: account.address,
     async send(calls) {
       if (calls.length === 0) throw new Error('No calls to send')
+      const ops = calls.map((c) => ({ to: c.to, data: c.data }))
       let hash: Hex
       try {
-        hash = await bundler.sendUserOperation({ account, calls: calls.map((c) => ({ to: c.to, data: c.data })) })
+        // The call gas gets the same margin as wallet transactions (see withGasMargin). Passing all three limits
+        // stops viem from estimating a second time.
+        const gas = await bundler.estimateUserOperationGas({ account, calls: ops })
+        hash = await bundler.sendUserOperation({
+          account,
+          calls: ops,
+          callGasLimit: withGasMargin(gas.callGasLimit),
+          preVerificationGas: gas.preVerificationGas,
+          verificationGasLimit: gas.verificationGasLimit,
+        })
       } catch (err) {
         if (isUserRejection(err)) return { status: 'rejected', completed: 0 }
         throw err

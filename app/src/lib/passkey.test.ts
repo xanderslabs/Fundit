@@ -24,7 +24,7 @@ vi.mock('../config', async (importOriginal) => ({
 
 // A fake of the lazily loaded SDK module. toWebAuthnCredential is the passkey prompt.
 const kit = vi.hoisted(() => {
-  const bundler = { waitForUserOperationReceipt: vi.fn(), sendUserOperation: vi.fn() }
+  const bundler = { waitForUserOperationReceipt: vi.fn(), estimateUserOperationGas: vi.fn(), sendUserOperation: vi.fn() }
   return {
     bundler,
     sdk: {
@@ -56,9 +56,12 @@ function receipt(success: boolean) {
   return { success, receipt: { transactionHash: TX_HASH, status: 'success' } as TransactionReceipt }
 }
 
+const GAS = { callGasLimit: 100_003n, preVerificationGas: 50_000n, verificationGasLimit: 70_000n }
+
 function bundler(over: Partial<PasskeyBundler<typeof ACCOUNT>> = {}) {
   const b = {
-    sendUserOperation: vi.fn(async (_args: { account: typeof ACCOUNT; calls: Call[] }) => OP_HASH),
+    estimateUserOperationGas: vi.fn(async (_args: { account: typeof ACCOUNT; calls: Call[] }) => GAS),
+    sendUserOperation: vi.fn(async (_args: { account: typeof ACCOUNT; calls: Call[] } & typeof GAS) => OP_HASH),
     waitForUserOperationReceipt: vi.fn(async (_args: { hash: Hex; timeout?: number }) => receipt(true)),
   }
   return Object.assign(b, over) as typeof b
@@ -82,6 +85,27 @@ describe('passkeySender', () => {
     // The $0 rule: no gas sponsorship. The account pays its own gas in USDC on Arc.
     expect('paymaster' in args).toBe(false)
     expect(res).toMatchObject({ status: 'success', hash: TX_HASH })
+  })
+
+  // Campaign._activity() skips two storage writes when its last activity is in the estimate's block, so the
+  // estimate can be about 3,200 gas short. The call gas gets 25% on top; the other limits stay as estimated.
+  it('sends the estimated call gas plus 25%, rounded down', async () => {
+    const b = bundler()
+    await passkeySender(ACCOUNT, b).send([A, B])
+    expect(b.estimateUserOperationGas).toHaveBeenCalledWith({ account: ACCOUNT, calls: [A, B] })
+    expect(b.sendUserOperation).toHaveBeenCalledWith({
+      account: ACCOUNT,
+      calls: [A, B],
+      callGasLimit: 125_003n,
+      preVerificationGas: 50_000n,
+      verificationGasLimit: 70_000n,
+    })
+  })
+
+  it('sends nothing when the gas estimate reverts', async () => {
+    const b = bundler({ estimateUserOperationGas: vi.fn(async () => Promise.reject(new Error('execution reverted'))) })
+    await expect(passkeySender(ACCOUNT, b).send([A])).rejects.toThrow('execution reverted')
+    expect(b.sendUserOperation).not.toHaveBeenCalled()
   })
 
   it('is a passkey sender at the account address', () => {

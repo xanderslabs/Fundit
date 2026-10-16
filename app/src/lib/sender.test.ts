@@ -22,6 +22,7 @@ vi.mock('@wagmi/core', () => core)
 
 // The Arc public client. Its waitForTransactionReceipt is viem's, which resolves a reverted receipt.
 const arc = vi.hoisted(() => ({
+  estimateGas: vi.fn(),
   waitForTransactionReceipt: vi.fn(),
   getTransaction: vi.fn(),
   call: vi.fn(),
@@ -54,6 +55,7 @@ function revertError(name: string) {
 beforeEach(() => {
   vi.resetAllMocks()
   core.getChainId.mockReturnValue(ARC_CHAIN_ID)
+  arc.estimateGas.mockResolvedValue(100_003n)
   arc.waitForTransactionReceipt.mockImplementation(async ({ hash }: { hash: Hex }) => receipt(hash, 'success'))
   arc.getTransaction.mockResolvedValue({ from: ME, to: A, input: '0x01' })
 })
@@ -90,6 +92,29 @@ describe('wagmiSender', () => {
   })
 
   // An empty list is a bug in the caller, not something the person declined.
+  // Campaign._activity() skips two storage writes when its last activity is in the estimate's block, so the
+  // estimate can be about 3,200 gas short and the transaction would run out of gas. Each call gets 25% on top.
+  it('estimates each call on Arc and sends it with 25% more gas, rounded down', async () => {
+    core.sendTransaction.mockResolvedValueOnce(H1).mockResolvedValueOnce(H2)
+    arc.estimateGas.mockResolvedValueOnce(100_003n).mockResolvedValueOnce(80_000n)
+    await wagmiSender(config, ME).send([
+      { to: A, data: '0x01' },
+      { to: B, data: '0x02' },
+    ])
+    expect(arc.estimateGas.mock.calls.map((c) => c[0])).toEqual([
+      { account: ME, to: A, data: '0x01' },
+      { account: ME, to: B, data: '0x02' },
+    ])
+    expect(core.sendTransaction.mock.calls.map((c) => c[1].gas)).toEqual([125_003n, 100_000n])
+  })
+
+  // Today's behaviour for a call that would revert: the error reaches explainError and nothing is sent.
+  it('sends nothing and throws when the gas estimate reverts', async () => {
+    arc.estimateGas.mockRejectedValue(revertError('CampaignClosed'))
+    await expect(wagmiSender(config, ME).send([{ to: A, data: '0x01' }])).rejects.toThrow()
+    expect(core.sendTransaction).not.toHaveBeenCalled()
+  })
+
   it('throws on an empty call list', async () => {
     await expect(wagmiSender(config, ME).send([])).rejects.toThrow('No calls to send')
   })

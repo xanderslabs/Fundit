@@ -19,7 +19,8 @@ import { ACCOUNTS, LOCAL_RPC, rpc, USDC_WEI } from './fork'
 export { ACCOUNTS, rpc, USDC_WEI }
 
 const chain = { ...arc, rpcUrls: { default: { http: [LOCAL_RPC] } } }
-export const node = createPublicClient({ chain, transport: http(LOCAL_RPC) })
+// cacheTime 0: specs compare block numbers right after a transaction, and viem caches them for 4 s by default.
+export const node = createPublicClient({ chain, transport: http(LOCAL_RPC), cacheTime: 0 })
 
 export const FACTORY = getAddress(process.env.E2E_FACTORY ?? '')
 

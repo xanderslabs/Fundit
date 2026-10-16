@@ -43,7 +43,9 @@ async function loadPage(campaign: Address, createdAtBlock: bigint, param: PagePa
     ? [param.last, param.tip]
     : await Promise.all([
         arcClient.readContract({ address: campaign, abi: campaignAbi, functionName: 'lastActivityBlock' }),
-        arcClient.getBlockNumber(),
+        // No cache: viem keeps the block number for 4 s, and a tip older than a donation that was just
+        // mined would clamp the walk below it, so the new donation would be missing from the list.
+        arcClient.getBlockNumber({ cacheTime: 0 }),
       ])
   const page = await walkActivity(arcClient, campaign, {
     fromBlockTip: tip,

@@ -1,5 +1,5 @@
 import { type Address, getAddress, parseUnits } from 'viem'
-import { ACCOUNTS, approveAndDonate, balanceOf, connect, createCampaign, expect, node, rpc, summary, test, tokenAddress } from './fixtures'
+import { ACCOUNTS, approveAndDonate, balanceOf, connect, createCampaign, expect, node, summary, test, tokenAddress } from './fixtures'
 
 const A = ACCOUNTS.creator
 const B = ACCOUNTS.donor
@@ -60,9 +60,7 @@ test('A creates a USDC campaign, B donates with a tip and message, A withdraws t
   const net = parseUnits('9.801', 6)
   await expect(withdraw.getByRole('definition').filter({ hasText: '9.80 USDC' })).toBeVisible()
 
-  // Arc keeps producing blocks, but anvil automine only mines on a transaction, so the latest block here
-  // is still the donation's. See the known-issue test below for what happens without this.
-  await rpc('anvil_mine', ['0x1'])
+  // Nothing has been mined since the donation, so the withdrawal is estimated against the donation's block.
   const before = await balanceOf(usdc, A)
   const nativeBefore = await node.getBalance({ address: A })
   const blockBefore = await node.getBlockNumber()
@@ -91,9 +89,7 @@ test('A creates a USDC campaign, B donates with a tip and message, A withdraws t
   await expect(withdraw.getByText('Available: 0.00 USDC')).toBeVisible()
   expect((await summary(campaign)).available).toBe(0n)
 
-  // 4. A closes the campaign. The confirm dialog is accepted by the fixture. As above, move past the
-  // withdrawal's block first.
-  await rpc('anvil_mine', ['0x1'])
+  // 4. A closes the campaign straight after the withdrawal. The confirm dialog is accepted by the fixture.
   await a.getByRole('button', { name: 'Close fundraiser' }).click()
   await expect(a.getByText('The fundraiser is closed.')).toBeVisible()
   expect((await summary(campaign)).closed).toBe(true)
@@ -107,13 +103,12 @@ test('A creates a USDC campaign, B donates with a tip and message, A withdraws t
   await expect(closedPanel.getByRole('button', { name: 'Donate', exact: true })).toBeDisabled()
 })
 
-// Known issue found by this suite (reported in the Task 11 report). Campaign._activity() skips its two
-// SSTOREs when the last activity is in the current block. eth_estimateGas runs against the latest block,
-// so right after a donation it prices the withdrawal as if it shared the donation's block. The real
-// transaction lands one block later, needs about 3,200 more gas and runs out of gas: it reverts and the
-// organiser pays the network fee. This test pins today's behaviour. When the bug is fixed it fails,
-// and should become a test that the withdrawal goes through.
-test('known issue: a withdrawal right after a donation in the latest block runs out of gas', async ({ as }) => {
+// Regression: Campaign._activity() skips its two SSTOREs when the last activity is in the current block.
+// An estimate made against the latest block prices the withdrawal as if it shared the donation's block,
+// about 3,200 gas short. Before the fix the wallet (here the node, for eth_sendTransaction without gas)
+// estimated that way, and this withdrawal ran out of gas and reverted, with the organiser paying the fee.
+// The app now estimates on the Arc client and sends gas plus 25% (withGasMargin in src/lib/sender.ts).
+test('a withdrawal right after a donation in the latest block goes through', async ({ as }) => {
   const campaign = await createCampaign(A, 'USDC', 'E2E same-block fund')
   await approveAndDonate(B, campaign, '10')
   const donationBlock = await node.getBlockNumber()
@@ -122,15 +117,15 @@ test('known issue: a withdrawal right after a donation in the latest block runs 
   await connect(a, A)
   const withdraw = a.getByRole('region', { name: 'Withdraw' })
   await expect(withdraw.getByText('Available: 9.90 USDC')).toBeVisible()
-  // Nothing else has been mined: the estimate will run against the donation's block.
+  // Nothing else has been mined: the estimate runs against the donation's block.
   expect(await node.getBlockNumber()).toBe(donationBlock)
   await withdraw.getByRole('button', { name: 'Max' }).click()
   await withdraw.getByRole('button', { name: 'Withdraw', exact: true }).click()
-  await expect(withdraw.getByText('The transaction failed on chain. Nothing changed, but the network fee was spent.')).toBeVisible()
+  await expect(withdraw.getByText('Your withdrawal went through.')).toBeVisible()
 
   const block = await node.getBlock({ blockNumber: donationBlock + 1n, includeTransactions: true })
   const tx = block.transactions.find((t) => getAddress(t.from) === getAddress(A))!
   const receipt = await node.getTransactionReceipt({ hash: tx.hash })
-  expect(receipt.status).toBe('reverted')
-  expect((await summary(campaign)).available).toBe(parseUnits('9.9', 6))
+  expect(receipt.status).toBe('success')
+  expect((await summary(campaign)).available).toBe(0n)
 })

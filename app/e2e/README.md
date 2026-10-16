@@ -48,10 +48,12 @@ Every browser request goes through a Playwright route. Requests to `127.0.0.1` p
 get empty answers, and Iris and Gateway get `404` unless a spec routes them itself. A request to any other
 host is aborted and fails the test.
 
-## Known issue
+## Gas margin regression
 
-`create-donate-withdraw.spec.ts` has a test named `known issue: ...`. A campaign write sent while the
-campaign's last activity is in the latest block is under-estimated by about 3,200 gas, because
-`Campaign._activity()` skips its storage writes when the block number has not changed. The transaction
-reverts out of gas. The test pins this behavior, so it fails once the bug is fixed. The main flow mines an
-empty block before the withdrawal and the close, as a live chain would have by then.
+`create-donate-withdraw.spec.ts` sends a withdrawal while the campaign's last activity is in the latest
+block, and the main flow closes the campaign straight after the withdrawal. `Campaign._activity()` skips its
+storage writes when the block number has not changed, so an estimate made against the latest block is
+about 3,200 gas short. Anvil estimates that way for an `eth_sendTransaction` without `gas`, and some wallets
+and nodes do too. The app estimates each call on its Arc client and sends `gas` with 25% on top
+(`withGasMargin` in `src/lib/sender.ts`, also used for the passkey call gas). Without the app-supplied gas
+these writes revert out of gas.

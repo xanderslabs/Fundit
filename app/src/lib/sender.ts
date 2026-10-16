@@ -85,6 +85,14 @@ export async function waitForResult(client: ReceiptClient, hash: Hex, timeoutMs:
   return { status: 'reverted', hash, error: await revertReason(client, receipt), completed: 0 }
 }
 
+// A gas estimate may run against the latest block, but the transaction lands in a later one. Campaign._activity()
+// skips two storage writes when the campaign's last activity is in the current block, so right after a
+// donation, withdrawal or settle() the estimate comes out about 3,200 gas short and the write would run out
+// of gas. 25% on top covers that gap with room to spare. Used for wallet transactions and passkey call gas.
+export function withGasMargin(estimate: bigint): bigint {
+  return (estimate * 125n) / 100n
+}
+
 export function wagmiSender(config: Config, address: Address): Sender {
   return {
     kind: 'eoa',
@@ -101,10 +109,12 @@ export function wagmiSender(config: Config, address: Address): Sender {
       }
       let last: TxResult | null = null
       for (const [completed, call] of calls.entries()) {
+        // A revert here throws before anything is sent, like a wallet's own estimate would.
+        const gas = withGasMargin(await arcClient.estimateGas({ account: address, to: call.to, data: call.data }))
         let hash: Hex
         try {
           // chainId makes wagmi refuse to send if the wallet is not on Arc.
-          hash = await sendTransaction(config, { account: address, chainId: ARC_CHAIN_ID, to: call.to, data: call.data })
+          hash = await sendTransaction(config, { account: address, chainId: ARC_CHAIN_ID, to: call.to, data: call.data, gas })
         } catch (err) {
           if (isUserRejection(err)) return { status: 'rejected', completed }
           throw err
