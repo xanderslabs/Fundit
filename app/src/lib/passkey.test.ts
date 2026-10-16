@@ -1,13 +1,46 @@
-import { renderHook } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { type Address, getAddress, type Hex, type TransactionReceipt } from 'viem'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TX_TIMEOUT_MS } from '../config'
 import { useSender } from '../hooks/useSender'
-import { clearPasskeySession, type PasskeyBundler, passkeySender, readPasskeySession, savePasskeySession } from './passkey'
+import {
+  clearPasskeySession,
+  loginPasskey,
+  type PasskeyBundler,
+  passkeySender,
+  readPasskeySession,
+  savePasskeySession,
+  storedPasskeySender,
+  usePasskeySession,
+} from './passkey'
 import type { Call } from './sender'
 
 // The flag is off in tests by default. useSender only looks for a passkey session when it is on.
-vi.mock('../config', async (importOriginal) => ({ ...(await importOriginal<typeof import('../config')>()), PASSKEYS_ENABLED: true }))
+vi.mock('../config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../config')>()),
+  PASSKEYS_ENABLED: true,
+  CIRCLE_CLIENT_KEY: 'test-key',
+}))
+
+// A fake of the lazily loaded SDK module. toWebAuthnCredential is the passkey prompt.
+const kit = vi.hoisted(() => {
+  const bundler = { waitForUserOperationReceipt: vi.fn(), sendUserOperation: vi.fn() }
+  return {
+    bundler,
+    sdk: {
+      toWebAuthnCredential: vi.fn(async () => ({ id: 'cred-live', publicKey: '0x', raw: {} })),
+      toPasskeyTransport: vi.fn(() => ({})),
+      toModularTransport: vi.fn(() => ({})),
+      toCircleSmartAccount: vi.fn(async () => ({ address: '0x00000000000000000000000000000000000000cC' })),
+      getUserOperationGasPrice: vi.fn(),
+      WebAuthnMode: { Register: 'Register', Login: 'Login' },
+    },
+    createPublicClient: vi.fn(() => ({})),
+    createBundlerClient: vi.fn(() => bundler),
+    toWebAuthnAccount: vi.fn(() => ({})),
+  }
+})
+vi.mock('./passkeyKit', () => kit)
 vi.mock('wagmi', () => ({
   useConfig: () => ({}),
   useConnection: () => ({ address: '0x9999999999999999999999999999999999999999', isConnected: true }),
@@ -70,14 +103,14 @@ describe('passkeySender', () => {
     const b = bundler({ waitForUserOperationReceipt: vi.fn(() => new Promise<never>(() => {})) })
     const pending = passkeySender(ACCOUNT, b).send([A])
     await vi.advanceTimersByTimeAsync(TX_TIMEOUT_MS + 1)
-    expect(await pending).toEqual({ status: 'timeout', hash: OP_HASH, completed: 0 })
+    expect(await pending).toEqual({ status: 'timeout', hash: OP_HASH, completed: 0, hashKind: 'userop' })
     expect(b.waitForUserOperationReceipt).toHaveBeenCalledWith({ hash: OP_HASH, timeout: TX_TIMEOUT_MS })
   })
 
   // The bundler may error during the wait after the operation was accepted. It may still be mined.
   it('reports timeout when the receipt wait fails', async () => {
     const b = bundler({ waitForUserOperationReceipt: vi.fn(async () => Promise.reject(new Error('socket hang up'))) })
-    expect(await passkeySender(ACCOUNT, b).send([A])).toEqual({ status: 'timeout', hash: OP_HASH, completed: 0 })
+    expect(await passkeySender(ACCOUNT, b).send([A])).toEqual({ status: 'timeout', hash: OP_HASH, completed: 0, hashKind: 'userop' })
   })
 
   // Closing the passkey prompt throws NotAllowedError. That is a cancel, not an error.
@@ -85,6 +118,25 @@ describe('passkeySender', () => {
     const cancel = Object.assign(new Error('The operation either timed out or was not allowed.'), { name: 'NotAllowedError' })
     const b = bundler({ sendUserOperation: vi.fn(async () => Promise.reject(new Error('Signing failed', { cause: cancel }))) })
     expect(await passkeySender(ACCOUNT, b).send([A])).toEqual({ status: 'rejected', completed: 0 })
+  })
+})
+
+describe('recheck', () => {
+  // "Check again" after a passkey timeout must find the operation by its user operation hash, then show the
+  // real transaction, which is what the explorer knows.
+  it('resolves a timed-out user operation to the real transaction hash', async () => {
+    const b = bundler({ waitForUserOperationReceipt: vi.fn(async () => receipt(true)) })
+    const res = await passkeySender(ACCOUNT, b).recheck!(OP_HASH)
+    expect(b.waitForUserOperationReceipt).toHaveBeenCalledWith({ hash: OP_HASH, timeout: TX_TIMEOUT_MS })
+    expect(res).toMatchObject({ status: 'success', hash: TX_HASH })
+  })
+
+  // After a reload the signing account is gone. Reading a receipt needs no signature, so no passkey prompt.
+  it('rechecks a stored session through the bundler without a passkey prompt', async () => {
+    kit.bundler.waitForUserOperationReceipt.mockResolvedValue(receipt(true))
+    const s = storedPasskeySender({ address: ACCOUNT.address, credentialId: 'cred-1' })
+    expect(await s.recheck!(OP_HASH)).toMatchObject({ status: 'success', hash: TX_HASH })
+    expect(kit.sdk.toWebAuthnCredential).not.toHaveBeenCalled()
   })
 })
 
@@ -109,6 +161,22 @@ describe('passkey session store', () => {
     expect(() => savePasskeySession({ address: ACCOUNT.address, credentialId: 'cred-1' })).not.toThrow()
     expect(readPasskeySession()).toBeNull()
     expect(() => clearPasskeySession()).not.toThrow()
+  })
+
+  // Without storage the login cannot be saved, but it must still hold for this page load.
+  it('keeps the logged-in session for the page when localStorage throws', async () => {
+    const boom = () => {
+      throw new Error('SecurityError')
+    }
+    vi.stubGlobal('localStorage', { getItem: boom, setItem: boom, removeItem: boom })
+    const { result } = renderHook(() => usePasskeySession())
+    expect(result.current).toBeNull()
+    await act(async () => {
+      await loginPasskey()
+    })
+    expect(result.current).toEqual({ address: '0x00000000000000000000000000000000000000cC', credentialId: 'cred-live' })
+    act(() => clearPasskeySession())
+    expect(result.current).toBeNull()
   })
 })
 

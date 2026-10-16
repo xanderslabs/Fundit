@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import type { Hex } from 'viem'
 import { arc } from 'viem/chains'
-import { MAX_MESSAGE_BYTES, TX_TIMEOUT_MS } from '../config'
+import { MAX_MESSAGE_BYTES } from '../config'
 import { useSender } from '../hooks/useSender'
 import { clearPendingArc, pendingArc, savePendingArc } from '../lib/bridge'
 import type { CampaignView } from '../lib/campaigns'
@@ -11,9 +11,10 @@ import { arcClient } from '../lib/clients'
 import { buildDonateCalls, donationBreakdown, fetchDonorFunds } from '../lib/donate'
 import { explainError } from '../lib/errors'
 import { bpsToPercent, formatAmount, parseAmount } from '../lib/format'
-import { arcReceipts, type TxResult, waitForResult } from '../lib/sender'
+import type { TxResult } from '../lib/sender'
 import { byteLength } from '../lib/validate'
 import { CrossChainDonate, PendingBridgeTracker } from './CrossChainDonate'
+import { PASSKEY_LOGIN_TO_CHECK, PASSKEY_PROCESSING, recheckResult } from './TxStatus'
 
 const EXPLORER_URL = arc.blockExplorers.default.url
 const QUICK_AMOUNTS = ['10', '25', '50', '100'] as const
@@ -41,7 +42,8 @@ type Phase =
   | { kind: 'success'; hash: Hex }
   // approve is true when the transaction that timed out is the approval, not the donation.
   // note explains a re-check that failed to answer. The outcome is still unknown, so this phase still blocks.
-  | { kind: 'timeout'; hash: Hex; approve: boolean; note?: string }
+  // userop marks a passkey user operation hash: no explorer link, and only the passkey bundler can check it.
+  | { kind: 'timeout'; hash: Hex; approve: boolean; userop?: boolean; note?: string }
   // The approval is mined but the donation was not sent (cancelled or failed).
   | { kind: 'partial'; error?: string }
   | { kind: 'error'; message: string; hash?: Hex }
@@ -79,7 +81,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
     const saved = pendingArc(campaign)
     if (!saved) return { kind: 'idle' }
     const note = Date.now() - saved.createdAt > DAY_MS ? 'This was more than a day ago. Check the explorer before donating again.' : undefined
-    return { kind: 'timeout', hash: saved.hash, approve: saved.approve, note }
+    return { kind: 'timeout', hash: saved.hash, approve: saved.approve, userop: saved.hashKind === 'userop', note }
   })
   const [crossChainBusy, setCrossChainBusy] = useState(false)
   // Set synchronously, so a second click before React re-renders cannot start a second send or check.
@@ -87,7 +89,9 @@ export function DonatePanel({ view }: { view: CampaignView }) {
 
   // Keep the unconfirmed transaction across reloads. Forget it once an outcome is known or the donor starts over.
   useEffect(() => {
-    if (phase.kind === 'timeout') savePendingArc({ campaign, hash: phase.hash, approve: phase.approve })
+    if (phase.kind === 'timeout') {
+      savePendingArc({ campaign, hash: phase.hash, approve: phase.approve, ...(phase.userop ? { hashKind: 'userop' as const } : {}) })
+    }
     else if (phase.kind !== 'sending' && phase.kind !== 'checking') clearPendingArc(campaign)
   }, [phase, campaign])
 
@@ -132,7 +136,9 @@ export function DonatePanel({ view }: { view: CampaignView }) {
     }
     if (res.status === 'timeout') {
       // completed counts the calls mined before this one, so 0 with an approval means the approval timed out.
-      setPhase({ kind: 'timeout', hash: res.hash, approve: hadApprove && res.completed === 0 })
+      // A user operation runs the approval and the donation together, so its timeout is the donation's.
+      const userop = res.hashKind === 'userop'
+      setPhase({ kind: 'timeout', hash: res.hash, approve: !userop && hadApprove && res.completed === 0, userop })
       return
     }
     if (hadApprove && res.completed >= 1) {
@@ -171,12 +177,12 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   }
 
   // Checks the same transaction again. It never sends a new one, which could donate twice.
-  async function checkAgain(hash: Hex, approve: boolean) {
+  async function checkAgain(hash: Hex, approve: boolean, userop: boolean) {
     if (inFlight.current) return
     inFlight.current = true
     setPhase({ kind: 'checking' })
     try {
-      const res = await waitForResult(arcReceipts, hash, TX_TIMEOUT_MS)
+      const res = await recheckResult(sender, hash, userop)
       if (!approve) return handle(res, false)
       switch (res.status) {
         case 'success':
@@ -184,7 +190,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
           setPhase({ kind: 'partial' })
           return
         case 'timeout':
-          setPhase({ kind: 'timeout', hash, approve: true })
+          setPhase({ kind: 'timeout', hash, approve: true, userop })
           return
         case 'reverted':
           setPhase({ kind: 'error', message: res.error, hash })
@@ -195,7 +201,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
       }
     } catch (err) {
       // The check itself failed, so the transaction is still unknown. Stay blocked rather than invite a second send.
-      setPhase({ kind: 'timeout', hash, approve, note: `We could not check it. ${explainError(err)}` })
+      setPhase({ kind: 'timeout', hash, approve, userop, note: `We could not check it. ${explainError(err)}` })
     } finally {
       inFlight.current = false
     }
@@ -355,14 +361,19 @@ export function DonatePanel({ view }: { view: CampaignView }) {
                   <strong>Your {phase.approve ? 'approval' : 'donation'} is not confirmed yet.</strong> It may still go
                   through. Check it before you try again, so you do not give twice.
                 </p>
-                <p>
-                  <ExplorerLink hash={phase.hash} />
-                </p>
+                <p>{phase.userop ? PASSKEY_PROCESSING : <ExplorerLink hash={phase.hash} />}</p>
                 {phase.note && <p className="field-error">{phase.note}</p>}
+                {phase.userop && !sender?.recheck && <p className="field-error">{PASSKEY_LOGIN_TO_CHECK}</p>}
                 <div className="donate-actions">
-                  <button type="button" className="btn btn-outline" onClick={() => checkAgain(phase.hash, phase.approve)}>
-                    Check again
-                  </button>
+                  {(!phase.userop || sender?.recheck) && (
+                    <button
+                      type="button"
+                      className="btn btn-outline"
+                      onClick={() => checkAgain(phase.hash, phase.approve, phase.userop === true)}
+                    >
+                      Check again
+                    </button>
+                  )}
                   <button type="button" className="btn btn-outline" onClick={startOver}>
                     Start over
                   </button>

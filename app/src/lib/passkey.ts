@@ -3,7 +3,7 @@ import { type Address, type Hex, isAddress, type TransactionReceipt, type Transp
 import { arc } from 'viem/chains'
 import { CIRCLE_CLIENT_KEY, MODULAR_WALLETS_URL, PASSKEYS_ENABLED, TX_TIMEOUT_MS } from '../config'
 import { isUserRejection } from './errors'
-import { type Call, REVERTED, type Sender, withTimeout } from './sender'
+import { type Call, REVERTED, type Sender, type TxResult, withTimeout } from './sender'
 
 // Circle Modular Wallets. The SDK is large and only passkey users need it, so it loads with import() on
 // first use. The WebAuthn rpId comes from Circle and is bound to the client key's domain (fundit.xyz, or
@@ -47,6 +47,7 @@ export function savePasskeySession(s: StoredPasskey) {
 
 export function clearPasskeySession() {
   live = null
+  liveSession = null
   try {
     localStorage.removeItem(KEY)
   } catch {
@@ -62,7 +63,8 @@ function getSnapshot(): StoredPasskey | null {
   try {
     raw = localStorage.getItem(KEY)
   } catch {
-    raw = null
+    // No storage: the session from this page load, if any, lasts until the page closes.
+    return liveSession
   }
   if (raw !== snapshot.raw) snapshot = { raw, value: readPasskeySession() }
   return snapshot.value
@@ -87,9 +89,28 @@ export function usePasskeySession(): StoredPasskey | null {
 
 // The two bundler actions the sender uses. Kept this narrow so tests need no SDK.
 export type UserOperationResult = { success: boolean; receipt: TransactionReceipt }
-export type PasskeyBundler<A> = {
-  sendUserOperation(args: { account: A; calls: Call[] }): Promise<Hex>
+export type ReceiptBundler = {
   waitForUserOperationReceipt(args: { hash: Hex; timeout?: number }): Promise<UserOperationResult>
+}
+export type PasskeyBundler<A> = ReceiptBundler & {
+  sendUserOperation(args: { account: A; calls: Call[] }): Promise<Hex>
+}
+
+// Waits for a user operation, never longer than TX_TIMEOUT_MS, and maps it to a TxResult. Once mined, the
+// result carries the real transaction hash. Until then only the user operation hash is known.
+export async function userOperationResult(bundler: ReceiptBundler, hash: Hex): Promise<TxResult> {
+  const unknown: TxResult = { status: 'timeout', hash, completed: 0, hashKind: 'userop' }
+  let res: UserOperationResult | 'timeout'
+  try {
+    res = await withTimeout(bundler.waitForUserOperationReceipt({ hash, timeout: TX_TIMEOUT_MS }), TX_TIMEOUT_MS)
+  } catch {
+    // The operation was accepted, so it may still be mined. Reporting failure could make the person pay twice.
+    return unknown
+  }
+  if (res === 'timeout') return unknown
+  const txHash = res.receipt.transactionHash
+  if (res.success) return { status: 'success', hash: txHash, receipt: res.receipt }
+  return { status: 'reverted', hash: txHash, error: REVERTED, completed: 0 }
 }
 
 // All calls go in one user operation, so they succeed or fail together. There is no paymaster: the account
@@ -107,25 +128,17 @@ export function passkeySender<A extends { address: Address }>(account: A, bundle
         if (isUserRejection(err)) return { status: 'rejected', completed: 0 }
         throw err
       }
-      let res: UserOperationResult | 'timeout'
-      try {
-        res = await withTimeout(bundler.waitForUserOperationReceipt({ hash, timeout: TX_TIMEOUT_MS }), TX_TIMEOUT_MS)
-      } catch {
-        // The operation was accepted, so it may still be mined. Reporting failure could make the person pay twice.
-        return { status: 'timeout', hash, completed: 0 }
-      }
-      // Only the user operation hash is known until it is mined.
-      if (res === 'timeout') return { status: 'timeout', hash, completed: 0 }
-      const txHash = res.receipt.transactionHash
-      if (res.success) return { status: 'success', hash: txHash, receipt: res.receipt }
-      return { status: 'reverted', hash: txHash, error: REVERTED, completed: 0 }
+      return userOperationResult(bundler, hash)
     },
+    recheck: (hash) => userOperationResult(bundler, hash),
   }
 }
 
 type Live = { credentialId: string; account: { address: Address }; bundler: PasskeyBundler<{ address: Address }> }
 // The signing account for this page load. It is never stored; after a reload the person logs in again.
 let live: Live | null = null
+// The same session as live, as the store shape. getSnapshot falls back to it when storage throws.
+let liveSession: StoredPasskey | null = null
 
 function clientKey(): string {
   if (!PASSKEYS_ENABLED || CIRCLE_CLIENT_KEY === '') throw new Error('Passkey wallets are not set up on this site yet.')
@@ -140,10 +153,33 @@ async function loadSdk() {
 type Sdk = Awaited<ReturnType<typeof loadSdk>>
 type Credential = Awaited<ReturnType<Sdk['sdk']['toWebAuthnCredential']>>
 
-async function connect({ sdk, aa, viem }: Sdk, credential: Credential, key: string): Promise<Live> {
+function clients({ sdk, viem }: Sdk, key: string) {
   // The SDK pins its own viem (2.55.11), so its types differ from ours though the objects are the same.
   const transport = sdk.toModularTransport(ARC_URL, key) as unknown as Transport
   const client = viem.createPublicClient({ chain: arc, transport })
+  return { transport, client }
+}
+
+// A bundler with no account, for reading user operation receipts. It needs no passkey.
+let receiptBundler: Promise<ReceiptBundler> | null = null
+function readBundler(): Promise<ReceiptBundler> {
+  if (!receiptBundler) {
+    const key = clientKey()
+    receiptBundler = loadSdk().then((lib) => {
+      const { transport } = clients(lib, key)
+      return lib.aa.createBundlerClient({ chain: arc, transport }) as unknown as ReceiptBundler
+    })
+    // A failed load must not stick.
+    receiptBundler.catch(() => {
+      receiptBundler = null
+    })
+  }
+  return receiptBundler
+}
+
+async function connect(lib: Sdk, credential: Credential, key: string): Promise<Live> {
+  const { sdk, aa } = lib
+  const { transport, client } = clients(lib, key)
   type Params = Parameters<typeof sdk.toCircleSmartAccount>[0]
   const account = await sdk.toCircleSmartAccount({
     client: client as unknown as Params['client'],
@@ -178,8 +214,13 @@ async function credentialFor(mode: 'Register' | 'Login', opts: { username?: stri
   return connect(lib, credential, key)
 }
 
-function start(next: Live) {
+function setLive(next: Live) {
   live = next
+  liveSession = { address: next.account.address, credentialId: next.credentialId }
+}
+
+function start(next: Live) {
+  setLive(next)
   savePasskeySession({ address: next.account.address, credentialId: next.credentialId })
 }
 
@@ -207,7 +248,7 @@ async function ensureLive(stored: StoredPasskey): Promise<Live> {
   if (next.account.address.toLowerCase() !== stored.address.toLowerCase()) {
     throw new Error('That passkey opens a different wallet. Log out and log in again.')
   }
-  live = next
+  setLive(next)
   return next
 }
 
@@ -220,6 +261,8 @@ export function storedPasskeySender(stored: StoredPasskey): Sender {
       const { account, bundler } = await ensureLive(stored)
       return passkeySender(account, bundler).send(calls, opts)
     },
+    // Reading a receipt needs no signature, so this never asks for the passkey.
+    recheck: async (hash) => userOperationResult(await readBundler(), hash),
   }
 }
 

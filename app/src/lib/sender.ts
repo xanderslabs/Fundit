@@ -11,7 +11,9 @@ export type Call = { to: Address; data: Hex }
 export type TxResult =
   | { status: 'success'; hash: Hex; receipt: TransactionReceipt }
   | { status: 'reverted'; hash: Hex; error: string; completed: number }
-  | { status: 'timeout'; hash: Hex; completed: number }
+  // hashKind 'userop' means hash is a passkey user operation hash, not a transaction hash: the explorer and
+  // waitForResult cannot find it, so only sender.recheck can. Absent means a transaction hash.
+  | { status: 'timeout'; hash: Hex; completed: number; hashKind?: 'tx' | 'userop' }
   | { status: 'rejected'; completed: number }
 
 // The single write path. Every action builds Calls and hands them to a Sender.
@@ -21,6 +23,9 @@ export interface Sender {
   kind: 'eoa' | 'passkey'
   address: Address
   send(calls: Call[], opts?: { label: string }): Promise<TxResult>
+  // Checks a timed-out result again without sending anything or asking for a signature. Senders whose
+  // timeouts carry a transaction hash leave it out, and callers use waitForResult.
+  recheck?(hash: Hex): Promise<TxResult>
 }
 
 // The viem public actions waitForResult needs. viem resolves a reverted receipt; it does not throw.

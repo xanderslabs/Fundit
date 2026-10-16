@@ -14,7 +14,8 @@ const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
 export type PendingBridge = { kind: 'bridge'; campaign: Address; burnTx: Hex; srcDomain: number; amount: string; createdAt: number }
 export type PendingSubmitted = { kind: 'submitted'; id: string; campaign: Address; srcDomain: number; amount: string; createdAt: number }
-export type PendingArc = { kind: 'arc'; campaign: Address; hash: Hex; approve: boolean; createdAt: number }
+// hashKind 'userop' marks a passkey user operation hash, which only the passkey bundler can check.
+export type PendingArc = { kind: 'arc'; campaign: Address; hash: Hex; approve: boolean; hashKind?: 'userop'; createdAt: number }
 export type PendingCrossChain = PendingBridge | PendingSubmitted
 type Entry = PendingBridge | PendingSubmitted | PendingArc
 
@@ -27,7 +28,7 @@ function isEntry(e: unknown): e is Entry {
   const knownDomain = CCTP_CHAINS.some((c) => c.domain === x.srcDomain)
   if (x.kind === 'bridge') return isTxHash(x.burnTx) && knownDomain && typeof x.amount === 'string'
   if (x.kind === 'submitted') return typeof x.id === 'string' && knownDomain && typeof x.amount === 'string'
-  if (x.kind === 'arc') return isTxHash(x.hash) && typeof x.approve === 'boolean'
+  if (x.kind === 'arc') return isTxHash(x.hash) && typeof x.approve === 'boolean' && (x.hashKind === undefined || x.hashKind === 'userop')
   return false
 }
 
@@ -83,7 +84,7 @@ export function pendingArc(campaign: Address): PendingArc | null {
 }
 
 // Saving the same transaction again keeps its first createdAt, so its age stays true after a reload.
-export function savePendingArc(p: { campaign: Address; hash: Hex; approve: boolean }) {
+export function savePendingArc(p: { campaign: Address; hash: Hex; approve: boolean; hashKind?: 'userop' }) {
   const all = readAll()
   const prev = all.find((e): e is PendingArc => e.kind === 'arc' && same(e.campaign, p.campaign))
   const createdAt = prev && same(prev.hash, p.hash) ? prev.createdAt : Date.now()

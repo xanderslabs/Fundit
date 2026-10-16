@@ -193,6 +193,22 @@ describe('Manage', () => {
     expect(screen.getByText('0.30 USDC')).toBeTruthy()
   })
 
+  // A lower fee at send time is in the organiser's favour, and the cap must be the fresh one Circle quotes now.
+  it('sends with the fresh fee cap when the fee dropped since the preview', async () => {
+    const fees = stubFees(300000)
+    state.view = view()
+    const send = fakeSender()
+    renderPage()
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText('Amount'), '10')
+    await user.selectOptions(screen.getByLabelText('Send to'), 'Base')
+    expect(await screen.findByText('0.30 USDC')).toBeTruthy()
+    fees.high = 200000
+    await user.click(button('Withdraw'))
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+    expect(decode(send.mock.calls[0]![0][0]!.data).args[3]).toBe(200000n)
+  })
+
   // This refusal is the organiser's to fix, so it reads as plain advice, not as an unexpected failure.
   it('refuses an amount that no longer covers the fee with a plain message', async () => {
     const fees = stubFees(200000)

@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import type { Hex } from 'viem'
 import { arc } from 'viem/chains'
 import { TX_TIMEOUT_MS } from '../config'
-import { explainError } from '../lib/errors'
+import { explainError, PlainError } from '../lib/errors'
 import { arcReceipts, type Call, type Sender, type TxResult, waitForResult } from '../lib/sender'
 
 const EXPLORER_URL = arc.blockExplorers.default.url
@@ -12,9 +12,23 @@ export type TxPhase =
   | { kind: 'sending' }
   | { kind: 'checking'; hash: Hex }
   | { kind: 'success'; hash: Hex }
-  // The outcome is unknown. note explains a re-check that failed to answer.
-  | { kind: 'timeout'; hash: Hex; note?: string }
+  // The outcome is unknown. note explains a re-check that failed to answer. userop marks a passkey user
+  // operation hash, which the explorer cannot show.
+  | { kind: 'timeout'; hash: Hex; userop?: boolean; note?: string }
   | { kind: 'error'; message: string; hash?: Hex }
+
+export const PASSKEY_PROCESSING = 'Your passkey transaction is still processing.'
+export const PASSKEY_LOGIN_TO_CHECK = 'Log in with your passkey to check this transaction.'
+
+// The re-check for a timed-out result: a user operation hash goes back to the sender's bundler, a
+// transaction hash to the Arc RPC. Neither sends anything.
+export function recheckResult(sender: Sender | null, hash: Hex, userop: boolean): Promise<TxResult> {
+  if (userop) {
+    if (!sender?.recheck) return Promise.reject(new PlainError(PASSKEY_LOGIN_TO_CHECK))
+    return sender.recheck(hash)
+  }
+  return waitForResult(arcReceipts, hash, TX_TIMEOUT_MS)
+}
 
 export function ExplorerLink({ hash }: { hash: Hex }) {
   return (
@@ -30,6 +44,8 @@ export function useTx(onSuccess: () => void) {
   const [phase, setPhase] = useState<TxPhase>({ kind: 'idle' })
   // Set synchronously, so a second click before React re-renders cannot start a second send or check.
   const inFlight = useRef(false)
+  // The sender of the last send, so a re-check of its timeout goes the same way.
+  const lastSender = useRef<Sender | null>(null)
 
   function handle(res: TxResult) {
     switch (res.status) {
@@ -38,7 +54,7 @@ export function useTx(onSuccess: () => void) {
         setPhase({ kind: 'success', hash: res.hash })
         return
       case 'timeout':
-        setPhase({ kind: 'timeout', hash: res.hash })
+        setPhase({ kind: 'timeout', hash: res.hash, userop: res.hashKind === 'userop' })
         return
       case 'reverted':
         setPhase({ kind: 'error', message: res.error, hash: res.hash })
@@ -53,6 +69,7 @@ export function useTx(onSuccess: () => void) {
     if (inFlight.current) return
     inFlight.current = true
     setPhase({ kind: 'sending' })
+    lastSender.current = sender
     try {
       const call = await build()
       handle(await sender.send([call], { label }))
@@ -64,14 +81,14 @@ export function useTx(onSuccess: () => void) {
   }
 
   // Checks the same transaction again. It never sends a new one.
-  async function checkAgain(hash: Hex) {
+  async function checkAgain(hash: Hex, userop = false) {
     if (inFlight.current) return
     inFlight.current = true
     setPhase({ kind: 'checking', hash })
     try {
-      handle(await waitForResult(arcReceipts, hash, TX_TIMEOUT_MS))
+      handle(await recheckResult(lastSender.current, hash, userop))
     } catch (err) {
-      setPhase({ kind: 'timeout', hash, note: `We could not check it. ${explainError(err)}` })
+      setPhase({ kind: 'timeout', hash, userop, note: `We could not check it. ${explainError(err)}` })
     } finally {
       inFlight.current = false
     }
@@ -117,12 +134,10 @@ export function TxStatus({
           <p>
             <strong>Your {noun} is not confirmed yet.</strong> It may still go through. Check it before you try again.
           </p>
-          <p>
-            <ExplorerLink hash={phase.hash} />
-          </p>
+          <p>{phase.userop ? PASSKEY_PROCESSING : <ExplorerLink hash={phase.hash} />}</p>
           {phase.note && <p className="field-error">{phase.note}</p>}
           <div className="donate-actions">
-            <button type="button" className="btn btn-outline" onClick={() => tx.checkAgain(phase.hash)}>
+            <button type="button" className="btn btn-outline" onClick={() => tx.checkAgain(phase.hash, phase.userop)}>
               Check again
             </button>
             <button type="button" className="btn btn-outline" onClick={() => tx.startOver(startOverWarning)}>

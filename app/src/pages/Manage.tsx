@@ -217,6 +217,7 @@ function WithdrawSection({ view, sender }: { view: CampaignView; sender: Sender 
           queryClient.setQueryData(['payout-fee', dest, fast, net.toString()], fresh)
           throw new PlainError(fresh.maxFee >= net ? TOO_SMALL : FEE_CHANGED)
         }
+        // Defensive: unreachable while submit needs a preview that covers the fee and a higher fee stops above.
         if (fresh && fresh.maxFee >= net) throw new PlainError(TOO_SMALL)
         return buildWithdrawCall({ campaign, amount, dest, recipient, fee: fresh, fast })
       },

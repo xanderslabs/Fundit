@@ -390,4 +390,59 @@ describe('DonatePanel', () => {
     expect(await screen.findByText(/Thank you/)).toBeTruthy()
     expect(send).toHaveBeenCalledTimes(1)
   })
+  describe('passkey wallet', () => {
+    const TX = `0x${'cd'.repeat(32)}` as Hex
+    const PROCESSING = 'Your passkey transaction is still processing.'
+
+    function passkeySender(...results: TxResult[]) {
+      const send = vi.fn(async (_calls: Call[]) => results.shift() ?? success)
+      const recheckFn = vi.fn(async (_hash: Hex): Promise<TxResult> => ({
+        status: 'success',
+        hash: TX,
+        receipt: { status: 'success' } as TransactionReceipt,
+      }))
+      state.sender = { kind: 'passkey', address: ME, send, recheck: recheckFn }
+      return { send, recheck: recheckFn }
+    }
+
+    // A user operation hash is unknown to the explorer and to eth_getTransactionReceipt. Only the bundler can find it.
+    it('rechecks a timed-out user operation through the sender and then links the real transaction', async () => {
+      const { recheck: recheckFn } = passkeySender({ status: 'timeout', hash: HASH, completed: 0, hashKind: 'userop' })
+      state.balance = 1000_000000n
+      renderPanel(view('USDC'))
+      const user = await fillAndDonate()
+      // The approval and the donation are one user operation, so this is the donation, not a lone approval.
+      expect(await screen.findByText(/donation is not confirmed yet/)).toBeTruthy()
+      expect(screen.getByText(PROCESSING)).toBeTruthy()
+      expect(screen.queryByRole('link', { name: /explorer/i })).toBeNull()
+      await user.click(screen.getByRole('button', { name: 'Check again' }))
+      expect(await screen.findByText(/Thank you/)).toBeTruthy()
+      expect(recheckFn).toHaveBeenCalledWith(HASH)
+      expect(screen.getByRole('link', { name: /explorer/i }).getAttribute('href')).toBe(`https://explorer.arc.io/tx/${TX}`)
+    })
+
+    // After a reload the saved entry must say which kind of hash it holds, or the wrong check runs.
+    it('saves the hash kind with the pending donation', async () => {
+      passkeySender({ status: 'timeout', hash: HASH, completed: 0, hashKind: 'userop' })
+      state.balance = 1000_000000n
+      renderPanel(view('USDC'))
+      await fillAndDonate()
+      await screen.findByText(PROCESSING)
+      const saved = JSON.parse(localStorage.getItem('fundit.pendingBridges')!)
+      expect(saved[0]).toMatchObject({ kind: 'arc', hash: HASH, hashKind: 'userop' })
+    })
+
+    it('asks to log in with the passkey when a saved user operation has no passkey session', () => {
+      localStorage.setItem(
+        'fundit.pendingBridges',
+        JSON.stringify([{ kind: 'arc', campaign: CAMPAIGN, hash: HASH, approve: false, hashKind: 'userop', createdAt: Date.now() }]),
+      )
+      fakeSender()
+      renderPanel(view('USDC'))
+      expect(screen.getByText('Log in with your passkey to check this transaction.')).toBeTruthy()
+      expect(screen.queryByRole('button', { name: 'Check again' })).toBeNull()
+      expect(screen.queryByRole('link', { name: /explorer/i })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Donate' })).toBeNull()
+    })
+  })
 })
