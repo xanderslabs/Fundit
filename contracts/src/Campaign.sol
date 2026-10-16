@@ -2,15 +2,35 @@
 pragma solidity 0.8.30;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 import {ICampaignFactory} from "./interfaces/ICampaignFactory.sol";
+import {ITokenMessengerV2} from "./interfaces/ITokenMessengerV2.sol";
 import {MetadataLib} from "./MetadataLib.sol";
 import {Metadata, Summary} from "./Types.sol";
 
 /// @notice One crowdfunding escrow, deployed by CampaignFactory as an EIP-1167 clone.
-contract Campaign {
+contract Campaign is ReentrancyGuardTransient {
+    using SafeERC20 for IERC20;
+
     error AlreadyInitialized();
+    error NotCreator();
+    error ZeroAmount();
+    error CampaignClosed();
+    error MessageTooLong();
+    error InsufficientBalance();
+    error InvalidRecipient();
+    error FeeTooHighForAmount();
+
+    event Donated(address indexed donor, uint256 amount, uint256 fee, uint256 tip, string message);
+    event ExternalDonationSettled(uint256 gross, uint256 fee);
+    event Withdrawn(uint32 indexed destDomain, bytes32 indexed recipient, uint256 amount, uint256 fee, uint256 net);
+    event Closed();
 
     uint256 public constant BPS = 10_000;
+    /// @notice CCTP domain of Arc. Withdrawals to this domain are plain transfers.
+    uint32 public constant ARC_DOMAIN = 26;
+    uint256 public constant MAX_MESSAGE_LENGTH = 280;
 
     bool private initialized;
     ICampaignFactory public factory;
@@ -20,21 +40,16 @@ contract Campaign {
     uint16 public donationFeeBps;
     uint16 public withdrawFeeBps;
     uint64 public createdAt;
-    // forge-lint: disable-next-line(uninitialized-state)
     bool public closed;
     Metadata private meta;
 
     /// @notice Donation amounts before fees, tips excluded. Settled inflows are added here.
-    // forge-lint: disable-next-line(uninitialized-state)
     uint256 public grossDonated;
     /// @notice Net amount the creator can withdraw.
-    // forge-lint: disable-next-line(uninitialized-state)
     uint256 public creatorBalance;
     /// @notice Donation fees, tips and withdrawal fees not yet claimed by the treasury.
-    // forge-lint: disable-next-line(uninitialized-state)
     uint256 public feesAccrued;
     /// @notice Total amount the creator has withdrawn.
-    // forge-lint: disable-next-line(uninitialized-state)
     uint256 public withdrawn;
 
     /// @dev Locks the implementation so only clones can be initialized.
@@ -68,9 +83,103 @@ contract Campaign {
         _setMeta(meta_);
     }
 
+    modifier onlyCreator() {
+        _checkCreator();
+        _;
+    }
+
+    /// @notice Donates `amount` towards the goal plus an optional `tip` for the platform.
+    /// @dev The caller must approve `amount + tip`. The donation fee is taken from `amount`.
+    function donate(uint256 amount, uint256 tip, string calldata message) external nonReentrant {
+        if (amount == 0) revert ZeroAmount();
+        if (closed) revert CampaignClosed();
+        if (bytes(message).length > MAX_MESSAGE_LENGTH) revert MessageTooLong();
+        settle();
+
+        uint256 fee = amount * donationFeeBps / BPS;
+        grossDonated += amount;
+        creatorBalance += amount - fee;
+        feesAccrued += fee + tip;
+        emit Donated(msg.sender, amount, fee, tip, message);
+
+        token.safeTransferFrom(msg.sender, address(this), amount + tip);
+    }
+
+    /// @notice Books any unaccounted tokens as a gross donation, charging the donation fee.
+    /// @dev Anyone can call it. It never reverts, so it is safe to call before every payout.
+    function settle() public returns (uint256 gross) {
+        gross = unaccounted();
+        if (gross == 0) return 0;
+        uint256 fee = gross * donationFeeBps / BPS;
+        grossDonated += gross;
+        creatorBalance += gross - fee;
+        feesAccrued += fee;
+        emit ExternalDonationSettled(gross, fee);
+    }
+
+    /// @notice Pays `amount` of the creator balance, less the withdrawal fee, to `recipient`.
+    /// @param destDomain ARC_DOMAIN for a plain transfer on Arc, any other CCTP domain to burn and mint there.
+    /// @param recipient Left-padded address on Arc, or the CCTP `mintRecipient` on other chains.
+    /// @param maxFee CCTP fast-transfer fee cap. Ignored on Arc.
+    /// @param minFinalityThreshold CCTP finality threshold. Ignored on Arc.
+    /// @param hookData Empty for `depositForBurn`, otherwise passed to `depositForBurnWithHook`.
+    function withdraw(
+        uint256 amount,
+        uint32 destDomain,
+        bytes32 recipient,
+        uint256 maxFee,
+        uint32 minFinalityThreshold,
+        bytes calldata hookData
+    ) external nonReentrant onlyCreator {
+        settle();
+        if (amount == 0) revert ZeroAmount();
+        if (amount > creatorBalance) revert InsufficientBalance();
+
+        uint256 fee = amount * withdrawFeeBps / BPS;
+        uint256 net = amount - fee;
+
+        if (destDomain == ARC_DOMAIN) {
+            if (uint256(recipient) >> 160 != 0 || recipient == bytes32(0)) revert InvalidRecipient();
+        } else {
+            if (recipient == bytes32(0)) revert InvalidRecipient();
+            if (maxFee >= net) revert FeeTooHighForAmount();
+        }
+
+        creatorBalance -= amount;
+        feesAccrued += fee;
+        withdrawn += amount;
+        emit Withdrawn(destDomain, recipient, amount, fee, net);
+
+        if (destDomain == ARC_DOMAIN) {
+            token.safeTransfer(address(uint160(uint256(recipient))), net);
+        } else {
+            ITokenMessengerV2 messenger = factory.tokenMessenger();
+            token.forceApprove(address(messenger), net);
+            if (hookData.length == 0) {
+                messenger.depositForBurn(
+                    net, destDomain, recipient, address(token), bytes32(0), maxFee, minFinalityThreshold
+                );
+            } else {
+                messenger.depositForBurnWithHook(
+                    net, destDomain, recipient, address(token), bytes32(0), maxFee, minFinalityThreshold, hookData
+                );
+            }
+        }
+    }
+
+    /// @notice Ends the campaign for new donate() calls. One-way. Withdrawals stay open.
+    function close() external onlyCreator {
+        if (closed) revert CampaignClosed();
+        closed = true;
+        emit Closed();
+    }
+
     /// @notice Campaign tokens held but not yet booked (plain transfers, CCTP or Gateway mints).
+    /// @dev Saturates at zero so settle() and the views never revert if the balance drifts below the counters.
     function unaccounted() public view returns (uint256) {
-        return token.balanceOf(address(this)) - creatorBalance - feesAccrued;
+        uint256 balance = token.balanceOf(address(this));
+        uint256 booked = creatorBalance + feesAccrued;
+        return balance > booked ? balance - booked : 0;
     }
 
     /// @notice Gross amount raised. Withdrawals never reduce it.
@@ -98,6 +207,10 @@ contract Campaign {
             createdAt: createdAt,
             meta: meta
         });
+    }
+
+    function _checkCreator() internal view {
+        if (msg.sender != creator) revert NotCreator();
     }
 
     /// @dev Copies validated metadata into storage, replacing any previous links.
