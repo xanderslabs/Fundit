@@ -3,6 +3,7 @@ import { type Address, isAddress } from 'viem'
 import { arc } from 'viem/chains'
 import { ActivityList } from '../components/ActivityList'
 import { CampaignImage } from '../components/CampaignImage'
+import { DonatePanel } from '../components/DonatePanel'
 import { Progress } from '../components/Progress'
 import { StatusBadge } from '../components/StatusBadge'
 import { useCampaign } from '../hooks/useCampaigns'
@@ -48,20 +49,6 @@ function CampaignStats({ view }: { view: CampaignView }) {
         </div>
       </dl>
     </div>
-  )
-}
-
-// Task 5 replaces this with the donate panel.
-function DonatePanelSlot({ view }: { view: CampaignView }) {
-  return (
-    <section className="panel" aria-label="Donate">
-      <h2>Donate</h2>
-      {view.summary.closed ? (
-        <p className="muted">This fundraiser is closed and no longer takes donations.</p>
-      ) : (
-        <p className="muted">Donations open here soon. You will be able to give {view.symbol} from Arc or another chain.</p>
-      )}
-    </section>
   )
 }
 
@@ -130,7 +117,7 @@ function CampaignBody({ view }: { view: CampaignView }) {
           <div className="panel">
             <CampaignStats view={view} />
           </div>
-          <DonatePanelSlot view={view} />
+          <DonatePanel view={view} />
         </aside>
         <div className="campaign-body">
           <section>

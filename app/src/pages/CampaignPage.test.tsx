@@ -21,7 +21,11 @@ vi.mock('../hooks/useActivity', () => ({
   useActivity: () => ({ isPending: true, isError: false, isSuccess: false, hasNextPage: false }),
 }))
 
-function view(meta: Partial<CampaignView['summary']['meta']>): CampaignView {
+// No wallet connected: the donate panel shows its connect prompt. DonatePanel.test.tsx covers donating.
+vi.mock('../hooks/useSender', () => ({ useSender: () => null }))
+vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: () => {} }) }))
+
+function view(meta: Partial<CampaignView['summary']['meta']>, closed = false): CampaignView {
   return {
     address: ADDRESS,
     symbol: 'USDC',
@@ -32,7 +36,7 @@ function view(meta: Partial<CampaignView['summary']['meta']>): CampaignView {
       raised: 250000000n,
       available: 250000000n,
       withdrawn: 0n,
-      closed: false,
+      closed,
       donationFeeBps: 0,
       withdrawFeeBps: 250,
       createdAt: 1760000000n,
@@ -99,12 +103,21 @@ describe('CampaignPage', () => {
     expect(container.querySelector('img')).toBeNull()
   })
 
-  it('shows progress, raised, goal and the donate placeholder', () => {
+  it('shows progress, raised, goal and the donate panel', () => {
     hookState.current = { data: view({}), isPending: false, isError: false }
     renderPage()
     expect(screen.getAllByText(/250\.00 USDC/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/1,000\.00 USDC/).length).toBeGreaterThan(0)
     expect(screen.getByText('25%')).toBeTruthy()
     expect(screen.getByRole('region', { name: 'Donate' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Connect wallet to donate' })).toBeTruthy()
+  })
+
+  // A closed campaign reverts every donation, so the page must not offer one.
+  it('disables donating on a closed campaign', () => {
+    hookState.current = { data: view({}, true), isPending: false, isError: false }
+    renderPage()
+    expect(screen.getByText('This campaign is closed.')).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Donate' }) as HTMLButtonElement).disabled).toBe(true)
   })
 })
