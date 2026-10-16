@@ -1,4 +1,4 @@
-import type { Address, Chain, Hex } from 'viem'
+import { type Address, type Chain, type Hex, parseAbi } from 'viem'
 import { arbitrum, avalanche, base, mainnet, optimism, polygon } from 'viem/chains'
 import { loadConfig } from './deployConfig'
 
@@ -59,6 +59,17 @@ export const CHAIN_LABELS: Record<'Arc' | CctpChainKey, string> = {
   Base: 'Base',
   Polygon: 'Polygon',
 }
+
+// Basenames, read on Base. The L1 lookup through ENSIP-19 reverts today, so the app asks Base directly.
+// ENS L2ReverseRegistrar on Base: the primary name an address has set.
+export const L2_REVERSE_REGISTRAR: Address = '0x0000000000D8e504002cC26E3Ec46D81971C1664'
+// Basenames L2Resolver: forward address and text records for *.base.eth.
+export const BASENAME_RESOLVER: Address = '0xC6d566A56A1aFf6508b41f6c90ff131615583BCD'
+export const basenameAbi = parseAbi([
+  'function nameForAddr(address addr) view returns (string)',
+  'function addr(bytes32 node) view returns (address)',
+  'function text(bytes32 node, string key) view returns (string)',
+])
 
 const deploy = loadConfig(env)
 

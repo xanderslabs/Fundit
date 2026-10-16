@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import type { Address } from 'viem'
-import { mainnetClient } from '../lib/clients'
+import { baseClient, mainnetClient } from '../lib/clients'
 import { resolveName } from '../lib/names'
 
 const HOUR = 60 * 60 * 1000
@@ -9,7 +9,7 @@ const HOUR = 60 * 60 * 1000
 export function useName(address: Address) {
   return useQuery({
     queryKey: ['name', address.toLowerCase()],
-    queryFn: () => resolveName(mainnetClient, address),
+    queryFn: () => resolveName({ l1: mainnetClient, base: baseClient }, address),
     staleTime: HOUR,
     gcTime: HOUR,
     retry: false,

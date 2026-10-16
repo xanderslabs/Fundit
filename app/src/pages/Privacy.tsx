@@ -1,4 +1,5 @@
 import { Link } from 'react-router'
+import { PASSKEYS_ENABLED } from '../config'
 
 export function Privacy() {
   return (
@@ -34,7 +35,7 @@ export function Privacy() {
       <p>Fundit sets no cookies. It uses your browser's local storage only for:</p>
       <ul>
         <li>Reminders of transactions you started that have not finished yet, so the page can check on them.</li>
-        <li>Your passkey wallet session, if you use a passkey wallet.</li>
+        {PASSKEYS_ENABLED && <li>Your passkey wallet session, if you use a passkey wallet.</li>}
         <li>
           Your wallet connection, which the wallet connection tools (wagmi, Reown and WalletConnect) save so you stay
           connected after a reload.
@@ -45,8 +46,9 @@ export function Privacy() {
       <h2>4. Names and avatars</h2>
       <p>
         Fundit shows ENS names and Basenames instead of addresses where they exist. To do this, your browser asks a
-        public Ethereum RPC provider for the name and avatar linked to each address on the page. Avatar images load
-        from wherever their owner stored them.
+        public Ethereum RPC provider and a public Base RPC provider for the name and avatar linked to each address on
+        the page. An avatar is shown only when it is a plain https link, and the image loads from wherever its owner
+        stored it.
       </p>
 
       <h2>5. Third parties</h2>
@@ -56,7 +58,9 @@ export function Privacy() {
       </p>
       <ul>
         <li>Public RPC providers for Arc, Ethereum and the other supported chains, to read and send transactions.</li>
-        <li>Circle, for cross-chain transfers (CCTP), unified balances (Gateway) and passkey wallets.</li>
+        <li>
+          Circle, for cross-chain transfers (CCTP){PASSKEYS_ENABLED ? ', unified balances (Gateway) and passkey wallets' : ' and unified balances (Gateway)'}.
+        </li>
         <li>Reown and WalletConnect, to connect your wallet.</li>
         <li>The sites that host fundraiser images and avatars.</li>
       </ul>

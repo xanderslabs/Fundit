@@ -12,10 +12,11 @@ export function ShareButton({ url, title }: Props) {
     if (typeof navigator.share === 'function') {
       try {
         await navigator.share({ title, url })
-      } catch {
-        // Closing the share sheet throws. Nothing to do.
+        return
+      } catch (err) {
+        // Closing the share sheet throws AbortError, which needs nothing. Any other failure falls back to copying.
+        if (err instanceof DOMException && err.name === 'AbortError') return
       }
-      return
     }
     try {
       await navigator.clipboard.writeText(url)

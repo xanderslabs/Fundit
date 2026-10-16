@@ -1,4 +1,5 @@
 import { Link } from 'react-router'
+import { PASSKEYS_ENABLED } from '../config'
 
 export function Terms() {
   return (
@@ -35,8 +36,8 @@ export function Terms() {
       </p>
       <h3>3.2 Your wallet</h3>
       <p>
-        To start a fundraiser or donate you connect a wallet you control, or use a passkey wallet where offered. You are
-        responsible for keeping your wallet, keys and devices safe. We cannot recover a lost wallet or reverse a
+        To start a fundraiser or donate you connect a wallet you control
+        {PASSKEYS_ENABLED && ', or use a Circle passkey wallet'}. You are responsible for keeping your wallet, keys and devices safe. We cannot recover a lost wallet or reverse a
         transaction.
       </p>
 
@@ -55,8 +56,10 @@ export function Terms() {
       </p>
       <h3>4.2 Withdrawing</h3>
       <p>
-        The organiser can withdraw on Arc, or have the money sent to a supported chain through Circle's Cross-Chain
-        Transfer Protocol (CCTP). Fundit does not hold anything back: you keep what you raise, minus the fees below.
+        The organiser of a USDC fundraiser can withdraw on Arc, or have the money sent to a supported chain through
+        Circle's Cross-Chain Transfer Protocol (CCTP). An EURC fundraiser pays out on Arc only, because cross-chain EURC
+        payouts are not available today. Fundit does not hold anything back: you keep what you raise, minus the fees
+        below.
       </p>
 
       <h2>5. Fees</h2>
@@ -85,16 +88,17 @@ export function Terms() {
 
       <h2>7. Third-party services</h2>
       <p>
-        Fundit relies on services we do not run: the Arc blockchain, Circle (USDC, EURC, CCTP, Gateway and passkey
-        wallets), Reown and WalletConnect for connecting wallets, and public RPC providers for reading blockchain data.
+        Fundit relies on services we do not run: the Arc blockchain, Circle (USDC, EURC, CCTP, Gateway
+        {PASSKEYS_ENABLED && ' and passkey wallets'}), Reown and WalletConnect for connecting wallets, and public RPC providers for reading blockchain data.
         Their own terms apply to your use of them, and we are not responsible for their availability or errors.
       </p>
 
       <h2>8. What we can change</h2>
       <p>
-        The Fundit team can pause the creation of new fundraisers, choose which fundraiser is featured, and set the fee
-        rates for fundraisers created in the future. None of these change the money or the fee rates of a fundraiser
-        that already exists.
+        The Fundit team can pause the creation of new fundraisers, choose which fundraiser is featured, set the fee
+        rates for fundraisers created in the future, and change the treasury address that receives fees and tips. The
+        team can never move the money held by a fundraiser or change the fee rates of a fundraiser that already
+        exists.
       </p>
 
       <h2>9. Intellectual property</h2>

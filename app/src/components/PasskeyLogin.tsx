@@ -1,16 +1,13 @@
 import { type FormEvent, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { explainError } from '../lib/errors'
+import { shortAddress } from '../lib/names'
 import { loginPasskey, logoutPasskey, registerPasskey, usePasskeySession } from '../lib/passkey'
 
 export const PASSKEY_INTRO =
   'A passkey lets you sign in with your fingerprint, face or device PIN, with no wallet app to install. It opens a Fundit wallet on Arc that you add USDC to before you donate.'
 
 const MAX_USERNAME = 50
-
-function shortAddress(address: string) {
-  return `${address.slice(0, 6)}...${address.slice(-4)}`
-}
 
 // Sign up with a username, or log in with a passkey already on this device.
 export function PasskeyLogin({ onDone }: { onDone?: () => void }) {
