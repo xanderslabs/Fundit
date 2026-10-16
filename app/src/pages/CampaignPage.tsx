@@ -5,19 +5,18 @@ import { ActivityList } from '../components/ActivityList'
 import { BackupBanner } from '../components/BackupBanner'
 import { CampaignImage } from '../components/CampaignImage'
 import { DonatePanel } from '../components/DonatePanel'
+import { Name } from '../components/Name'
 import { Progress } from '../components/Progress'
+import { ShareButton } from '../components/ShareButton'
 import { StatusBadge } from '../components/StatusBadge'
 import { useCampaign } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
 import type { CampaignView } from '../lib/campaigns'
 import { bpsToPercent, formatAmount } from '../lib/format'
+import { shortAddress } from '../lib/names'
 import { safeHttpsUrl } from '../lib/urls'
 
 const EXPLORER_URL = arc.blockExplorers.default.url
-
-function shortAddress(address: string) {
-  return `${address.slice(0, 6)}...${address.slice(-4)}`
-}
 
 function NotACampaign() {
   return (
@@ -73,16 +72,13 @@ function CampaignLinks({ links }: { links: readonly string[] }) {
   )
 }
 
-// Task 10 swaps the raw address for a Name component.
 function CreatorLine({ creator, address }: { creator: Address; address: Address }) {
   return (
     <dl className="facts">
       <div>
         <dt>Organiser</dt>
         <dd>
-          <a href={`${EXPLORER_URL}/address/${creator}`} target="_blank" rel="noopener noreferrer" title={creator}>
-            {shortAddress(creator)}
-          </a>
+          <Name address={creator} />
         </dd>
       </div>
       <div>
@@ -114,11 +110,14 @@ function CampaignBody({ view }: { view: CampaignView }) {
           <span className="muted">Started {created}</span>
         </div>
         <h1>{summary.meta.title || 'Untitled fundraiser'}</h1>
-        {isCreator && (
-          <Link to={`/manage/${view.address}`} className="btn btn-outline">
-            Manage fundraiser
-          </Link>
-        )}
+        <div className="campaign-actions">
+          <ShareButton url={`${window.location.origin}/c/${view.address}`} title={summary.meta.title || 'A fundraiser on Fundit'} />
+          {isCreator && (
+            <Link to={`/manage/${view.address}`} className="btn btn-outline">
+              Manage fundraiser
+            </Link>
+          )}
+        </div>
       </header>
       <BackupBanner view={view} />
       <div className="campaign-grid">

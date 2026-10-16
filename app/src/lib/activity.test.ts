@@ -2,7 +2,7 @@ import { type Address, encodeAbiParameters, encodeEventTopics, type Hex, pad, to
 import { describe, expect, it } from 'vitest'
 import { campaignAbi } from '../abi/campaign'
 import { MAX_LOG_RANGE, MAX_LOGS } from '../config'
-import { type ActivityItem, type LogClient, walkActivity } from './activity'
+import { type ActivityItem, type LogClient, recentDonationsBy, type DonationClient, walkActivity } from './activity'
 
 const CAMPAIGN = '0x00000000000000000000000000000000000000a1' as Address
 const DONOR = '0x1111111111111111111111111111111111111111' as Address
@@ -240,5 +240,38 @@ describe('walkActivity', () => {
     expect(donated.data).toMatchObject({ donor: DONOR, amount: 5n, tip: 1n, message: 'm' })
     expect(donated.txHash).toBe(logs[0]!.transactionHash)
     expect(res.items.find((i) => i.kind === 'creator-change')!.data).toMatchObject({ newCreator: OTHER })
+  })
+})
+
+describe('recentDonationsBy', () => {
+  const FAKE = '0x00000000000000000000000000000000000000f0' as Address
+
+  // A clone outside the factory can emit a Donated event with any donor, so its logs must not count.
+  it('drops logs from addresses the factory does not know', async () => {
+    const real = { ...donation(TIP - 5n, 1n), address: CAMPAIGN }
+    const fake = { ...donation(TIP - 3n, 1n), address: FAKE }
+    const stranger = { ...rawLog('Donated', { donor: OTHER, amount: 1n, fee: 0n, tip: 0n, message: '', prevActivityBlock: 1n }, TIP - 2n), address: CAMPAIGN }
+    const checked: Address[] = []
+    const client = {
+      async getBlockNumber() {
+        return TIP
+      },
+      async getLogs({ args, fromBlock, toBlock }: { args: { donor: Address }; fromBlock: bigint; toBlock: bigint }) {
+        if (toBlock - fromBlock + 1n > MAX_LOG_RANGE) throw new Error('requested range too large')
+        return [real, fake, stranger].filter(
+          (l) => l.blockNumber >= fromBlock && l.blockNumber <= toBlock && l.topics[1] === pad(args.donor).toLowerCase(),
+        )
+      },
+      async multicall({ contracts }: { contracts: readonly { args: readonly [Address] }[] }) {
+        return contracts.map((c) => {
+          checked.push(c.args[0])
+          return c.args[0] === CAMPAIGN
+        })
+      },
+    } as unknown as DonationClient
+    const items = await recentDonationsBy(client, DONOR, { blocks: 20_000n })
+    expect(items.map((i) => i.campaign)).toEqual([CAMPAIGN])
+    expect(items[0]!.data).toMatchObject({ donor: DONOR, amount: 1_000_000n })
+    expect(checked).toContain(FAKE)
   })
 })

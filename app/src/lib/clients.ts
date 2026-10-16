@@ -1,6 +1,10 @@
 import { createPublicClient, http } from 'viem'
-import { arc } from 'viem/chains'
-import { ARC_RPC_URL } from '../config'
+import { arc, mainnet } from 'viem/chains'
+import { ARC_RPC_URL, MAINNET_RPC_URL } from '../config'
 
 // Read-only Arc client for campaign reads. Writes go through the wallet, not this client.
 export const arcClient = createPublicClient({ chain: arc, transport: http(ARC_RPC_URL) })
+
+// Ethereum mainnet, only for ENS names and Basenames. A page full of cards asks for many names at once,
+// so the calls go out as JSON-RPC batches.
+export const mainnetClient = createPublicClient({ chain: mainnet, transport: http(MAINNET_RPC_URL, { batch: true }) })

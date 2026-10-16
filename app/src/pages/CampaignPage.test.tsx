@@ -25,6 +25,8 @@ vi.mock('../hooks/useActivity', () => ({
 vi.mock('../hooks/useSender', () => ({ useSender: () => null }))
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: () => {} }) }))
 vi.mock('wagmi', () => ({ useConnection: () => ({ isConnected: false }) }))
+// Names come from Ethereum mainnet; lib/names.test.ts covers the lookup.
+vi.mock('../hooks/useName', () => ({ useName: () => ({ data: undefined }) }))
 
 function view(meta: Partial<CampaignView['summary']['meta']>, closed = false): CampaignView {
   return {

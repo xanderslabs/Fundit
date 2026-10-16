@@ -6,6 +6,7 @@ import {
   fetchCampaign,
   fetchCampaignPage,
   fetchFeatured,
+  myCampaigns,
   type ReadClient,
   type Summary,
   uniqueByAddress,
@@ -133,5 +134,27 @@ describe('uniqueByAddress', () => {
     const upper = A.toUpperCase().replace('0X', '0x') as Address
     const out = uniqueByAddress([v(C, 'c'), v(B, 'b'), v(B, 'b again'), v(A, 'a'), v(upper, 'a again')])
     expect(out.map((x) => x.summary.meta.title)).toEqual(['c', 'b', 'a'])
+  })
+})
+
+describe('myCampaigns', () => {
+  const ME = '0x1111111111111111111111111111111111111111' as Address
+  const NEW_OWNER = '0x9999999999999999999999999999999999999999' as Address
+
+  // campaignsOf keeps every campaign the address ever created. A backup may have taken one over since,
+  // and the old creator must not see it as theirs.
+  it('removes duplicates and drops campaigns whose creator changed', async () => {
+    const summaries: Record<string, Summary> = { [A]: summary('mine'), [B]: { ...summary('taken over'), creator: NEW_OWNER } }
+    const client = {
+      async readContract({ functionName }: { functionName: string }) {
+        if (functionName === 'campaignsOf') return [A, B, A]
+        throw new Error(`unexpected ${functionName}`)
+      },
+      async multicall({ contracts }: { contracts: readonly { address: Address; functionName: string }[] }) {
+        return contracts.map((c) => summaries[c.address])
+      },
+    } as unknown as ReadClient
+    const mine = await myCampaigns(client, ME)
+    expect(mine.map((v) => v.address)).toEqual([A])
   })
 })

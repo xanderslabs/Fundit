@@ -4,20 +4,13 @@ import type { TokenSymbol } from '../config'
 import { useActivity } from '../hooks/useActivity'
 import type { ActivityItem } from '../lib/activity'
 import { formatAmount } from '../lib/format'
+import { Name } from './Name'
 
 const EXPLORER_URL = arc.blockExplorers.default.url
 const ZERO = '0x0000000000000000000000000000000000000000'
 
-function shortAddress(address: string) {
-  return `${address.slice(0, 6)}...${address.slice(-4)}`
-}
-
 function Who({ address }: { address: Address }) {
-  return (
-    <a href={`${EXPLORER_URL}/address/${address}`} target="_blank" rel="noopener noreferrer" title={address}>
-      {shortAddress(address)}
-    </a>
-  )
+  return <Name address={address} avatar={false} />
 }
 
 // Every field comes from a decoded Campaign event, so the types follow the ABI.

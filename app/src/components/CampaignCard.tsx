@@ -2,6 +2,7 @@ import { Link } from 'react-router'
 import type { CampaignView } from '../lib/campaigns'
 import { formatAmount } from '../lib/format'
 import { CampaignImage } from './CampaignImage'
+import { Name } from './Name'
 import { Progress } from './Progress'
 import { StatusBadge } from './StatusBadge'
 
@@ -19,6 +20,9 @@ export function CampaignCard({ view, featured = false }: Props) {
           <span className="badge badge-token">{symbol}</span>
         </div>
         <h3 className="card-title">{summary.meta.title || 'Untitled fundraiser'}</h3>
+        <p className="card-by muted">
+          by <Name address={summary.creator} link={false} avatar={false} />
+        </p>
         {featured && summary.meta.description && <p className="card-text">{summary.meta.description}</p>}
         <Progress raised={summary.raised} goal={summary.goal} />
         <p className="card-amounts">

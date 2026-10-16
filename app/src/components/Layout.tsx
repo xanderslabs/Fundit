@@ -1,18 +1,16 @@
 import { useAppKit, useAppKitAccount } from '@reown/appkit/react'
 import { Link, NavLink, Outlet } from 'react-router'
+import type { Address } from 'viem'
 import { PASSKEYS_ENABLED } from '../config'
+import { Name } from './Name'
 import { PasskeyMenu } from './PasskeyLogin'
-
-function shortAddress(address: string) {
-  return `${address.slice(0, 6)}...${address.slice(-4)}`
-}
 
 function ConnectButton() {
   const { open } = useAppKit()
   const { address, isConnected } = useAppKitAccount()
   return (
     <button type="button" className={isConnected ? 'btn btn-outline' : 'btn'} onClick={() => open()}>
-      {isConnected && address ? shortAddress(address) : 'Connect wallet'}
+      {isConnected && address ? <Name address={address as Address} link={false} /> : 'Connect wallet'}
     </button>
   )
 }

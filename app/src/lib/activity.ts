@@ -1,6 +1,7 @@
 import { type Address, decodeEventLog, type Hex, type Log, type PublicClient } from 'viem'
 import { campaignAbi } from '../abi/campaign'
-import { MAX_LOG_RANGE, MAX_LOGS } from '../config'
+import { factoryAbi } from '../abi/factory'
+import { FACTORY_ADDRESS, FACTORY_DEPLOY_BLOCK, MAX_LOG_RANGE, MAX_LOGS } from '../config'
 
 export type ActivityKind =
   | 'donation'
@@ -75,11 +76,13 @@ function decode(log: Log): Decoded | null {
   }
 }
 
+type RangeFetch = (fromBlock: bigint, toBlock: bigint) => Promise<Log[]>
+
 // Fetches [from, to]. If the RPC refuses the range or hits the log cap, halves it and retries each part.
-async function getLogsSplit(client: LogClient, address: Address, from: bigint, to: bigint): Promise<Log[]> {
+async function getLogsSplit(fetchRange: RangeFetch, from: bigint, to: bigint): Promise<Log[]> {
   let refused: unknown = null
   try {
-    const logs = (await client.getLogs({ address, fromBlock: from, toBlock: to })) as Log[]
+    const logs = await fetchRange(from, to)
     if (logs.length < MAX_LOGS) return logs
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
@@ -88,12 +91,12 @@ async function getLogsSplit(client: LogClient, address: Address, from: bigint, t
   }
   if (from === to) throw refused ?? new Error(`Block ${from} has ${MAX_LOGS} or more logs`)
   const mid = from + (to - from) / 2n
-  const older = await getLogsSplit(client, address, from, mid)
-  const newer = await getLogsSplit(client, address, mid + 1n, to)
+  const older = await getLogsSplit(fetchRange, from, mid)
+  const newer = await getLogsSplit(fetchRange, mid + 1n, to)
   return [...older, ...newer]
 }
 
-function newestFirst(a: Decoded, b: Decoded): number {
+function newestFirst(a: ActivityItem, b: ActivityItem): number {
   if (a.blockNumber !== b.blockNumber) return a.blockNumber > b.blockNumber ? -1 : 1
   return b.logIndex - a.logIndex
 }
@@ -109,11 +112,13 @@ export async function walkActivity(
   let cursor = opts.cursor ?? opts.lastActivityBlock
   if (cursor > opts.fromBlockTip) cursor = opts.fromBlockTip
   const found: Decoded[] = []
+  const fetchRange: RangeFetch = async (fromBlock, toBlock) =>
+    (await client.getLogs({ address: campaign, fromBlock, toBlock })) as Log[]
 
   while (cursor >= createdAtBlock) {
     const lowest = cursor - MAX_LOG_RANGE + 1n
     const from = lowest > createdAtBlock ? lowest : createdAtBlock
-    const window = (await getLogsSplit(client, campaign, from, cursor))
+    const window = (await getLogsSplit(fetchRange, from, cursor))
       .map(decode)
       .filter((d): d is Decoded => d !== null)
     found.push(...window)
@@ -144,4 +149,63 @@ export async function walkActivity(
 
 function strip({ prev: _prev, ...item }: Decoded): ActivityItem {
   return item
+}
+
+export type DonationItem = ActivityItem & { campaign: Address }
+
+export type DonationClient = Pick<PublicClient, 'getLogs' | 'getBlockNumber' | 'multicall'>
+
+export const RECENT_DONATION_BLOCKS = 200_000n
+
+type DonatedEvent = Extract<(typeof campaignAbi)[number], { type: 'event'; name: 'Donated' }>
+const DONATED = campaignAbi.find((x): x is DonatedEvent => x.type === 'event' && x.name === 'Donated')!
+
+// factory.isCampaign never turns false, so a true answer is kept for the session. False is asked again.
+const knownCampaigns = new Set<string>()
+
+async function onlyCampaigns(client: DonationClient, addresses: Address[]): Promise<Set<string>> {
+  const unknown = [...new Set(addresses.map((a) => a.toLowerCase()))].filter((a) => !knownCampaigns.has(a))
+  if (unknown.length > 0) {
+    const answers = await client.multicall({
+      contracts: unknown.map(
+        (a) => ({ address: FACTORY_ADDRESS, abi: factoryAbi, functionName: 'isCampaign', args: [a as Address] }) as const,
+      ),
+      allowFailure: false,
+    })
+    unknown.forEach((a, i) => {
+      if (answers[i]) knownCampaigns.add(a)
+    })
+  }
+  return knownCampaigns
+}
+
+// Donated logs from any address, filtered by the indexed donor topic, newest first. Anyone can deploy a
+// contract that emits Donated, so only logs from factory campaigns are kept. Donations made from other
+// chains arrive through CCTP or Gateway and do not name the donor on Arc, so they cannot appear here.
+export async function recentDonationsBy(
+  client: DonationClient,
+  donor: Address,
+  opts: { blocks?: bigint } = {},
+): Promise<DonationItem[]> {
+  const tip = await client.getBlockNumber()
+  const span = opts.blocks ?? RECENT_DONATION_BLOCKS
+  const start = tip - span + 1n > FACTORY_DEPLOY_BLOCK ? tip - span + 1n : FACTORY_DEPLOY_BLOCK
+  const fetchRange: RangeFetch = async (fromBlock, toBlock) =>
+    (await client.getLogs<DonatedEvent>({ event: DONATED, args: { donor }, fromBlock, toBlock })) as Log[]
+
+  const logs: Log[] = []
+  for (let to = tip; to >= start; to -= MAX_LOG_RANGE) {
+    const from = to - MAX_LOG_RANGE + 1n > start ? to - MAX_LOG_RANGE + 1n : start
+    logs.push(...(await getLogsSplit(fetchRange, from, to)))
+  }
+  if (logs.length === 0) return []
+  const campaigns = await onlyCampaigns(client, logs.map((l) => l.address))
+  return logs
+    .filter((l) => campaigns.has(l.address.toLowerCase()))
+    .map((l) => {
+      const d = decode(l)
+      return d && d.kind === 'donation' ? { ...strip(d), campaign: l.address } : null
+    })
+    .filter((d): d is DonationItem => d !== null)
+    .sort(newestFirst)
 }

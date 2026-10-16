@@ -1,5 +1,5 @@
 import type { Address, ContractFunctionReturnType, PublicClient } from 'viem'
-import { zeroAddress } from 'viem'
+import { isAddressEqual, zeroAddress } from 'viem'
 import { campaignAbi } from '../abi/campaign'
 import { factoryAbi } from '../abi/factory'
 import { FACTORY_ADDRESS, TOKENS, type TokenSymbol } from '../config'
@@ -79,4 +79,26 @@ export async function fetchFactoryFees(client: ReadClient): Promise<FactoryFees>
     client.readContract({ address: FACTORY_ADDRESS, abi: factoryAbi, functionName: 'withdrawFeeBps' }),
   ])
   return { donationFeeBps, withdrawFeeBps }
+}
+
+// campaignsOf lists every campaign the address created, including ones a backup has taken over since.
+// Only the ones the address still runs are returned, newest first.
+export async function myCampaigns(client: ReadClient, creator: Address): Promise<CampaignView[]> {
+  const created = await client.readContract({
+    address: FACTORY_ADDRESS,
+    abi: factoryAbi,
+    functionName: 'campaignsOf',
+    args: [creator],
+  })
+  const seen = new Set<string>()
+  const addresses = created.filter((a) => !seen.has(a.toLowerCase()) && seen.add(a.toLowerCase()))
+  if (addresses.length === 0) return []
+  const summaries = await client.multicall({
+    contracts: addresses.map((address) => ({ address, abi: campaignAbi, functionName: 'summary' }) as const),
+    allowFailure: false,
+  })
+  return addresses
+    .map((address, i) => toView(address, summaries[i] as Summary))
+    .filter((v) => isAddressEqual(v.summary.creator, creator))
+    .reverse()
 }
