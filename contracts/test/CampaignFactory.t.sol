@@ -222,6 +222,15 @@ contract CampaignFactoryTest is Base {
         assertEq(factory.owner(), bob);
     }
 
+    // Renouncing would leave fees and the treasury frozen forever with no way to rotate a
+    // compromised treasury, so the owner cannot give up ownership by accident.
+    function test_RenounceOwnership_Reverts() public {
+        vm.prank(owner);
+        vm.expectRevert(CampaignFactory.RenounceDisabled.selector);
+        factory.renounceOwnership();
+        assertEq(factory.owner(), owner);
+    }
+
     // A second initialize would let anyone rewrite the creator and steal the funds.
     function test_Initialize_CannotBeCalledTwice() public {
         address c = _create(usdcToken, 1e6);

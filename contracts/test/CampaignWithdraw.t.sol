@@ -152,6 +152,7 @@ contract CampaignWithdrawTest is Base {
         assertEq(messenger.lastMaxFee(), 1e6);
         assertEq(messenger.lastMinFinality(), 1000);
         assertEq(messenger.lastHookData().length, 0);
+        assertEq(messenger.lastDestinationCaller(), bytes32(0));
         assertEq(usdc.balanceOf(address(messenger)), net);
         assertEq(usdc.allowance(address(campaign), address(messenger)), 0);
         assertEq(campaign.creatorBalance(), 97.5e6 - 50e6);
@@ -168,6 +169,7 @@ contract CampaignWithdrawTest is Base {
         assertEq(messenger.calls(), 1);
         assertEq(messenger.lastAmount(), 50e6 - 0.5e6);
         assertEq(messenger.lastHookData(), hex"cafe");
+        assertEq(messenger.lastDestinationCaller(), bytes32(0));
         assertEq(usdc.allowance(address(campaign), address(messenger)), 0);
         _assertBooked();
     }

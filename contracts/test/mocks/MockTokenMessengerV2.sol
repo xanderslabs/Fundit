@@ -10,6 +10,7 @@ contract MockTokenMessengerV2 is ITokenMessengerV2 {
     uint32 public lastDomain;
     bytes32 public lastRecipient;
     address public lastBurnToken;
+    bytes32 public lastDestinationCaller;
     uint256 public lastMaxFee;
     uint32 public lastMinFinality;
     bytes public lastHookData;
@@ -20,11 +21,12 @@ contract MockTokenMessengerV2 is ITokenMessengerV2 {
         uint32 destinationDomain,
         bytes32 mintRecipient,
         address burnToken,
-        bytes32,
+        bytes32 destinationCaller,
         uint256 maxFee,
         uint32 minFinalityThreshold
     ) external {
         _record(amount, destinationDomain, mintRecipient, burnToken, maxFee, minFinalityThreshold, "");
+        lastDestinationCaller = destinationCaller;
     }
 
     function depositForBurnWithHook(
@@ -32,12 +34,13 @@ contract MockTokenMessengerV2 is ITokenMessengerV2 {
         uint32 destinationDomain,
         bytes32 mintRecipient,
         address burnToken,
-        bytes32,
+        bytes32 destinationCaller,
         uint256 maxFee,
         uint32 minFinalityThreshold,
         bytes calldata hookData
     ) external {
         _record(amount, destinationDomain, mintRecipient, burnToken, maxFee, minFinalityThreshold, hookData);
+        lastDestinationCaller = destinationCaller;
     }
 
     function _record(

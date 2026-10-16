@@ -20,6 +20,7 @@ contract CampaignFactory is Ownable2Step, ICampaignFactory {
     error FeeTooHigh();
     error ZeroAddress();
     error NotCampaign();
+    error RenounceDisabled();
 
     event CampaignCreated(
         address indexed campaign,
@@ -146,6 +147,11 @@ contract CampaignFactory is Ownable2Step, ICampaignFactory {
     function unpauseCreation() external onlyOwner {
         creationPaused = false;
         emit CreationPausedSet(false);
+    }
+
+    /// @notice Always reverts. Without an owner the treasury could never be rotated.
+    function renounceOwnership() public pure override {
+        revert RenounceDisabled();
     }
 
     function _salt(address creator, uint256 nonce) private pure returns (bytes32) {

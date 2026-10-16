@@ -21,11 +21,17 @@ contract Campaign is ReentrancyGuardTransient {
     error InsufficientBalance();
     error InvalidRecipient();
     error FeeTooHighForAmount();
+    error CannotSweepCampaignToken();
+    error ZeroAddress();
+    error InvalidGoal();
 
     event Donated(address indexed donor, uint256 amount, uint256 fee, uint256 tip, string message);
     event ExternalDonationSettled(uint256 gross, uint256 fee);
     event Withdrawn(uint32 indexed destDomain, bytes32 indexed recipient, uint256 amount, uint256 fee, uint256 net);
     event Closed();
+    event FeesClaimed(address indexed treasury, uint256 amount);
+    event Swept(address indexed token, address indexed to, uint256 amount);
+    event Edited(uint256 goal);
 
     uint256 public constant BPS = 10_000;
     /// @notice CCTP domain of Arc. Withdrawals to this domain are plain transfers.
@@ -94,7 +100,7 @@ contract Campaign is ReentrancyGuardTransient {
         if (amount == 0) revert ZeroAmount();
         if (closed) revert CampaignClosed();
         if (bytes(message).length > MAX_MESSAGE_LENGTH) revert MessageTooLong();
-        settle();
+        _settle();
 
         uint256 fee = amount * donationFeeBps / BPS;
         grossDonated += amount;
@@ -107,7 +113,12 @@ contract Campaign is ReentrancyGuardTransient {
 
     /// @notice Books any unaccounted tokens as a gross donation, charging the donation fee.
     /// @dev Anyone can call it. It never reverts, so it is safe to call before every payout.
-    function settle() public returns (uint256 gross) {
+    function settle() external nonReentrant returns (uint256 gross) {
+        return _settle();
+    }
+
+    /// @dev Body of settle(), for callers that already hold the reentrancy lock.
+    function _settle() internal returns (uint256 gross) {
         gross = unaccounted();
         if (gross == 0) return 0;
         uint256 fee = gross * donationFeeBps / BPS;
@@ -131,7 +142,7 @@ contract Campaign is ReentrancyGuardTransient {
         uint32 minFinalityThreshold,
         bytes calldata hookData
     ) external nonReentrant onlyCreator {
-        settle();
+        _settle();
         if (amount == 0) revert ZeroAmount();
         if (amount > creatorBalance) revert InsufficientBalance();
 
@@ -165,6 +176,37 @@ contract Campaign is ReentrancyGuardTransient {
                 );
             }
         }
+    }
+
+    /// @notice Sends all accrued fees and tips to the factory's current treasury. Anyone can call it.
+    /// @dev Settles first so pending inflows pay their donation fee. Returns 0 and does nothing when no fees are owed.
+    function claimFees() external nonReentrant returns (uint256 amount) {
+        _settle();
+        amount = feesAccrued;
+        if (amount == 0) return 0;
+        address treasury = factory.treasury();
+        feesAccrued = 0;
+        emit FeesClaimed(treasury, amount);
+        token.safeTransfer(treasury, amount);
+    }
+
+    /// @notice Sends the whole balance of a token that is not the campaign token to `to`, with no fee.
+    function sweep(IERC20 other, address to) external nonReentrant onlyCreator {
+        if (other == token) revert CannotSweepCampaignToken();
+        if (to == address(0)) revert ZeroAddress();
+        uint256 amount = other.balanceOf(address(this));
+        emit Swept(address(other), to, amount);
+        other.safeTransfer(to, amount);
+    }
+
+    /// @notice Replaces the goal and all metadata. Creator only, while the campaign is open.
+    function edit(uint256 goal_, Metadata calldata meta_) external onlyCreator {
+        if (closed) revert CampaignClosed();
+        if (goal_ == 0) revert InvalidGoal();
+        MetadataLib.validate(meta_);
+        goal = goal_;
+        _setMeta(meta_);
+        emit Edited(goal_);
     }
 
     /// @notice Ends the campaign for new donate() calls. One-way. Withdrawals stay open.
