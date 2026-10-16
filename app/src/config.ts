@@ -63,9 +63,11 @@ export const CHAIN_LABELS: Record<'Arc' | CctpChainKey, string> = {
 // Basenames, read on Base. The L1 lookup through ENSIP-19 reverts today, so the app asks Base directly.
 // ENS L2ReverseRegistrar on Base: the primary name an address has set.
 export const L2_REVERSE_REGISTRAR: Address = '0x0000000000D8e504002cC26E3Ec46D81971C1664'
-// Basenames L2Resolver: forward address and text records for *.base.eth.
-export const BASENAME_RESOLVER: Address = '0xC6d566A56A1aFf6508b41f6c90ff131615583BCD'
+// Basenames registry: which resolver each *.base.eth name uses now. Owners can switch resolvers, so the
+// address and avatar are read from the current one, never from a fixed resolver.
+export const BASENAME_REGISTRY: Address = '0xB94704422c2a1E396835A571837Aa5AE53285a95'
 export const basenameAbi = parseAbi([
+  'function resolver(bytes32 node) view returns (address)',
   'function nameForAddr(address addr) view returns (string)',
   'function addr(bytes32 node) view returns (address)',
   'function text(bytes32 node, string key) view returns (string)',

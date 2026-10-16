@@ -1,6 +1,6 @@
-import { type Address, isAddressEqual, namehash, type PublicClient } from 'viem'
+import { type Address, isAddressEqual, namehash, type PublicClient, zeroAddress } from 'viem'
 import { normalize } from 'viem/ens'
-import { BASENAME_RESOLVER, basenameAbi, L2_REVERSE_REGISTRAR } from '../config'
+import { BASENAME_REGISTRY, basenameAbi, L2_REVERSE_REGISTRAR } from '../config'
 import { safeHttpsUrl } from './urls'
 
 export type NameClients = {
@@ -27,7 +27,8 @@ function avatarUrl(record: string | null): string | null {
 }
 
 // The primary Basename, read on Base. A reverse record can name anything, so the name only counts when
-// the Basename resolves back to this address.
+// the Basename resolves back to this address through the resolver the registry names for it today.
+// viem has no universal resolver on Base, so this is done by hand.
 async function basename(base: NameClients['base'], address: Address): Promise<ResolvedName> {
   const name = await base.readContract({
     address: L2_REVERSE_REGISTRAR,
@@ -37,10 +38,12 @@ async function basename(base: NameClients['base'], address: Address): Promise<Re
   })
   if (!name) return NONE
   const node = namehash(normalize(name))
-  const owner = await base.readContract({ address: BASENAME_RESOLVER, abi: basenameAbi, functionName: 'addr', args: [node] })
+  const resolver = await base.readContract({ address: BASENAME_REGISTRY, abi: basenameAbi, functionName: 'resolver', args: [node] })
+  if (isAddressEqual(resolver, zeroAddress)) return NONE
+  const owner = await base.readContract({ address: resolver, abi: basenameAbi, functionName: 'addr', args: [node] })
   if (!isAddressEqual(owner, address)) return NONE
   const record = await orNull(() =>
-    base.readContract({ address: BASENAME_RESOLVER, abi: basenameAbi, functionName: 'text', args: [node, 'avatar'] }),
+    base.readContract({ address: resolver, abi: basenameAbi, functionName: 'text', args: [node, 'avatar'] }),
   )
   return { name, avatar: avatarUrl(record), source: 'basename' }
 }

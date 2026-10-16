@@ -1,10 +1,14 @@
 import { type Address, namehash } from 'viem'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { BASENAME_RESOLVER, L2_REVERSE_REGISTRAR } from '../config'
+import { BASENAME_REGISTRY, L2_REVERSE_REGISTRAR } from '../config'
 import { type NameClients, resolveName } from './names'
 
 const WHO = '0x1111111111111111111111111111111111111111' as Address
 const OTHER = '0x2222222222222222222222222222222222222222' as Address
+const ZERO = '0x0000000000000000000000000000000000000000' as Address
+// The default Basenames L2Resolver, and a custom resolver a name owner can switch to.
+const DEFAULT_RESOLVER = '0xC6d566A56A1aFf6508b41f6c90ff131615583BCD' as Address
+const CUSTOM_RESOLVER = '0x00000000000000000000000000000000000000c5' as Address
 
 type Answer<T> = T | Error | undefined
 
@@ -19,13 +23,21 @@ function fakeClients(opts: {
   basename?: Answer<string>
   basenameAddr?: Answer<Address>
   basenameAvatar?: Answer<string>
+  // The resolver the registry names for the Basename. Defaults to the L2Resolver.
+  resolver?: Answer<Address>
+  // Records left behind in the default resolver after the owner switched away from it.
+  staleAddr?: Address
 }) {
+  const current = opts.resolver instanceof Error ? undefined : (opts.resolver ?? DEFAULT_RESOLVER)
   const getEnsName = vi.fn((_: { address: Address }) => answer(opts.ens, null))
   const getEnsText = vi.fn((_: { name: string; key: string }) => answer(opts.ensAvatar, null))
   const readContract = vi.fn(({ address, functionName, args }: { address: Address; functionName: string; args: readonly unknown[] }) => {
     if (address === L2_REVERSE_REGISTRAR && functionName === 'nameForAddr') return answer(opts.basename, '')
-    if (address === BASENAME_RESOLVER && functionName === 'addr') return answer(opts.basenameAddr, '0x0000000000000000000000000000000000000000')
-    if (address === BASENAME_RESOLVER && functionName === 'text' && args[1] === 'avatar') return answer(opts.basenameAvatar, '')
+    if (address === BASENAME_REGISTRY && functionName === 'resolver') return answer(opts.resolver, DEFAULT_RESOLVER)
+    if (address === current && functionName === 'addr') return answer(opts.basenameAddr, ZERO)
+    if (address === current && functionName === 'text' && args[1] === 'avatar') return answer(opts.basenameAvatar, '')
+    if (address === DEFAULT_RESOLVER && functionName === 'addr') return answer(opts.staleAddr, ZERO)
+    if (address === DEFAULT_RESOLVER && functionName === 'text') return Promise.resolve('https://example.com/stale.png')
     return Promise.reject(new Error(`unexpected ${functionName} on ${address}`))
   })
   const clients = { l1: { getEnsName, getEnsText }, base: { readContract } } as unknown as NameClients
@@ -51,7 +63,46 @@ describe('resolveName', () => {
       basenameAvatar: 'https://example.com/bob.png',
     })
     expect(await resolveName(clients, WHO)).toEqual({ name: 'bob.base.eth', avatar: 'https://example.com/bob.png', source: 'basename' })
-    expect(readContract).toHaveBeenCalledWith(expect.objectContaining({ functionName: 'addr', args: [namehash('bob.base.eth')] }))
+    expect(readContract).toHaveBeenCalledWith(
+      expect.objectContaining({ address: BASENAME_REGISTRY, functionName: 'resolver', args: [namehash('bob.base.eth')] }),
+    )
+    expect(readContract).toHaveBeenCalledWith(
+      expect.objectContaining({ address: DEFAULT_RESOLVER, functionName: 'addr', args: [namehash('bob.base.eth')] }),
+    )
+  })
+
+  // After an owner moves a name to their own resolver, the default resolver can still hold the old
+  // owner's address. Checking the default resolver would let that old owner keep showing the name.
+  it('verifies against the resolver the registry names, not the default one', async () => {
+    const { clients, readContract } = fakeClients({
+      basename: 'bob.base.eth',
+      resolver: CUSTOM_RESOLVER,
+      basenameAddr: OTHER,
+      staleAddr: WHO,
+    })
+    expect(await resolveName(clients, WHO)).toEqual({ name: null, avatar: null, source: null })
+    expect(readContract).toHaveBeenCalledWith(expect.objectContaining({ address: CUSTOM_RESOLVER, functionName: 'addr' }))
+  })
+
+  it('uses the avatar from the current resolver', async () => {
+    const { clients } = fakeClients({
+      basename: 'bob.base.eth',
+      resolver: CUSTOM_RESOLVER,
+      basenameAddr: WHO,
+      basenameAvatar: 'https://example.com/current.png',
+    })
+    expect(await resolveName(clients, WHO)).toEqual({ name: 'bob.base.eth', avatar: 'https://example.com/current.png', source: 'basename' })
+  })
+
+  // No resolver means the name resolves to nothing, so it cannot be verified.
+  it('gives no name when the registry has no resolver for it', async () => {
+    const { clients } = fakeClients({ basename: 'bob.base.eth', resolver: ZERO, staleAddr: WHO, basenameAddr: WHO })
+    expect(await resolveName(clients, WHO)).toEqual({ name: null, avatar: null, source: null })
+  })
+
+  it('gives no name when the registry lookup fails', async () => {
+    const { clients } = fakeClients({ basename: 'bob.base.eth', resolver: new Error('rpc down'), staleAddr: WHO })
+    expect(await resolveName(clients, WHO)).toEqual({ name: null, avatar: null, source: null })
   })
 
   // Anyone can set their reverse record to any name, for example a famous one. Without the forward check
