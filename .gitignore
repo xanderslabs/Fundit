@@ -13,3 +13,6 @@ contracts/broadcast/*/5042/dry-run/
 app/dist/
 .wrangler/
 .superpowers/sdd/
+app/dist-e2e/
+app/test-results/
+app/playwright-report/
