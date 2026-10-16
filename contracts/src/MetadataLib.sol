@@ -15,7 +15,7 @@ library MetadataLib {
 
     /// @dev Reverts InvalidMetadata unless: title is 1 to 100 bytes, description is at most
     /// 5000 bytes, imageUrl is empty or starts with "https://" and is at most 500 bytes, and
-    /// there are at most 5 links of at most 200 bytes each.
+    /// there are at most 5 links, each starting with "https://" and at most 200 bytes.
     function validate(Metadata calldata meta) internal pure {
         uint256 titleLen = bytes(meta.title).length;
         if (titleLen == 0 || titleLen > MAX_TITLE) revert InvalidMetadata();
@@ -30,9 +30,13 @@ library MetadataLib {
 
         uint256 n = meta.links.length;
         if (n > MAX_LINKS) revert InvalidMetadata();
+        // forge-lint: disable-start(require-revert-in-loop)
         for (uint256 i = 0; i < n; ++i) {
-            // forge-lint: disable-next-line(require-revert-in-loop)
-            if (bytes(meta.links[i]).length > MAX_LINK) revert InvalidMetadata();
+            bytes calldata link = bytes(meta.links[i]);
+            if (link.length < 8 || link.length > MAX_LINK) revert InvalidMetadata();
+            // forge-lint: disable-next-line(unsafe-typecast)
+            if (bytes8(link[:8]) != bytes8("https://")) revert InvalidMetadata();
         }
+        // forge-lint: disable-end(require-revert-in-loop)
     }
 }

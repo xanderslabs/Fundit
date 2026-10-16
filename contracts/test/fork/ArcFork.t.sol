@@ -165,9 +165,8 @@ contract ArcForkTest is Test {
             console.log("MEMO: call reverted");
             console.logBytes(ret);
         } else {
-            bytes32 donatedTopic = keccak256("Donated(address,uint256,uint256,uint256,string)");
             for (uint256 i = 0; i < logs.length; ++i) {
-                if (logs[i].emitter == address(c) && logs[i].topics[0] == donatedTopic) {
+                if (logs[i].emitter == address(c) && logs[i].topics[0] == Campaign.Donated.selector) {
                     seen = address(uint160(uint256(logs[i].topics[1])));
                     break;
                 }

@@ -54,8 +54,8 @@ ARC_FORK=1 ARC_FORK_STRICT=1 arc-forge test --match-path test/fork/ArcFork.t.sol
 
 ### Simulate the deploy
 
-Copy `.env.example` to `.env` and fill it in. For a simulation, use a throwaway key such as
-the Anvil default key, never a real one. Without `--broadcast`, no transaction is sent:
+Copy `.env.example` to `.env` and fill it in. Leave `DEPLOYER_PRIVATE_KEY` empty. Without
+`--broadcast`, no transaction is sent:
 
 ```shell
 set -a && source .env && set +a
@@ -64,3 +64,41 @@ arc-forge script script/Deploy.s.sol --fork-url arc
 
 The script logs `factory`, `implementation` and the EURC payout domains, followed by the gas
 estimate. Dry-run output under `broadcast/*/5042/dry-run/` is ignored by git.
+
+### Choose a signer
+
+When `DEPLOYER_PRIVATE_KEY` is empty, the script calls `vm.startBroadcast()` with no key and
+signs with the account you pass to forge. Use an encrypted keystore or a Ledger. Both keep the
+private key out of `.env` and your shell history.
+
+Keystore (create it once with `cast wallet import deployer --interactive`):
+
+```shell
+arc-forge script script/Deploy.s.sol --fork-url arc --account deployer --sender <deployer address>
+```
+
+Ledger:
+
+```shell
+arc-forge script script/Deploy.s.sol --fork-url arc --ledger --sender <deployer address>
+```
+
+Add `--broadcast` only for the real deploy. A raw key in `DEPLOYER_PRIVATE_KEY` still works,
+but avoid it for mainnet.
+
+## Reading campaign history
+
+Each `Campaign` stores `createdAtBlock` and `lastActivityBlock`. Every campaign event ends with
+`prevActivityBlock`, the latest block with campaign events before the block it was emitted in.
+Events in the creation block carry `createdAtBlock`. The Arc RPC serves at most 10,000 blocks
+per `eth_getLogs` call, so walk backwards and skip the quiet blocks:
+
+1. Set `to = lastActivityBlock()`.
+2. Call `eth_getLogs` for the campaign address from `from = max(createdAtBlock, to - 9999)`
+   to `to`.
+3. If `from == createdAtBlock`, stop. Otherwise set `to` to the `prevActivityBlock` of the
+   earliest log returned, and repeat step 2.
+
+Each call returns at least one event, so the number of calls is at most the number of active
+blocks, and usually far fewer. `CampaignCreated` is emitted by the factory, not the campaign,
+so read it from the factory at `createdAtBlock`.

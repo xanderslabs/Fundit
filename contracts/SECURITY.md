@@ -54,6 +54,11 @@ when the new owner calls `acceptOwnership`. The owner can:
 - **Reentrancy.** `donate`, `settle`, `withdraw`, `claimFees` and `sweep` are `nonReentrant`
   (OpenZeppelin `ReentrancyGuardTransient`). Tests cover re-entry from the messenger and from a
   swept token.
+- **Metadata links.** `imageUrl` (when set) and every entry in `links` must start with
+  `https://`, so a page never renders a `javascript:` or plain `http://` link from storage.
+- **Activity pointers.** Every campaign event ends with `prevActivityBlock`, which points to the
+  previous block with campaign events. Only calls that emit an event move `lastActivityBlock`,
+  so the pointer chain always lands on blocks with logs. The README describes the walk.
 - **CCTP payouts.** `withdraw` approves exactly the net amount to the messenger with
   `forceApprove`, and passes a zero `destinationCaller`. It rejects a zero recipient and a
   `maxFee` that is not below the net amount.
@@ -84,8 +89,11 @@ when the new owner calls `acceptOwnership`. The owner can:
 - USDC and EURC are used only through the ERC-20 interface, with 6 decimals. No code reads
   native balances.
 - No function is `payable`. There is no `receive` or `fallback`, and no code uses `msg.value`.
-- No path transfers to `address(0)`. Arc payouts reject a zero recipient and a recipient with
-  non-zero upper bytes.
+- No path transfers to `address(0)`. Arc payouts reject a zero recipient, a recipient with
+  non-zero upper bytes, and the campaign itself. A payout to the campaign would come back as an
+  unaccounted inflow and pay the donation fee a second time.
+- Arc mainnet runs the opcodes this bytecode needs (`PUSH0`, `MCOPY`, `TSTORE`, `TLOAD`). This
+  was checked on 2026-10-16 with `eth_call` state overrides against `https://rpc.mainnet.arc.io`.
 
 ## Accepted Slither findings
 

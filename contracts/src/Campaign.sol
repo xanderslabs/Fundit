@@ -26,13 +26,24 @@ contract Campaign is ReentrancyGuardTransient {
     error InvalidGoal();
     error UnsupportedPayoutDomain();
 
-    event Donated(address indexed donor, uint256 amount, uint256 fee, uint256 tip, string message);
-    event ExternalDonationSettled(uint256 gross, uint256 fee);
-    event Withdrawn(uint32 indexed destDomain, bytes32 indexed recipient, uint256 amount, uint256 fee, uint256 net);
-    event Closed();
-    event FeesClaimed(address indexed treasury, uint256 amount);
-    event Swept(address indexed token, address indexed to, uint256 amount);
-    event Edited(uint256 goal);
+    // Each event's last field, prevActivityBlock, is the block of the previous activity.
+    // See lastActivityBlock for how to walk the history with it.
+    event Donated(
+        address indexed donor, uint256 amount, uint256 fee, uint256 tip, string message, uint64 prevActivityBlock
+    );
+    event ExternalDonationSettled(uint256 gross, uint256 fee, uint64 prevActivityBlock);
+    event Withdrawn(
+        uint32 indexed destDomain,
+        bytes32 indexed recipient,
+        uint256 amount,
+        uint256 fee,
+        uint256 net,
+        uint64 prevActivityBlock
+    );
+    event Closed(uint64 prevActivityBlock);
+    event FeesClaimed(address indexed treasury, uint256 amount, uint64 prevActivityBlock);
+    event Swept(address indexed token, address indexed to, uint256 amount, uint64 prevActivityBlock);
+    event Edited(uint256 goal, uint64 prevActivityBlock);
 
     uint256 public constant BPS = 10_000;
     /// @notice CCTP domain of Arc. Withdrawals to this domain are plain transfers.
@@ -48,6 +59,20 @@ contract Campaign is ReentrancyGuardTransient {
     uint16 public withdrawFeeBps;
     uint64 public createdAt;
     bool public closed;
+    /// @notice Block of the latest call that emitted a Campaign event. Set to createdAtBlock at creation.
+    /// @dev Every Campaign event carries prevActivityBlock: the latest activity block before the
+    /// block it was emitted in, or createdAtBlock for events in the creation block. All events in
+    /// one block carry the same value. To read the whole history with eth_getLogs:
+    /// 1. Set `to = lastActivityBlock`.
+    /// 2. Fetch the campaign's logs from `from = max(createdAtBlock, to - 9999)` to `to`.
+    /// 3. If `from == createdAtBlock`, stop. Otherwise set `to` to the prevActivityBlock of the
+    ///    earliest log returned and go to step 2.
+    /// Blocks with no activity are skipped, so each call returns at least one event.
+    uint64 public lastActivityBlock;
+    /// @dev prevActivityBlock for events emitted in lastActivityBlock.
+    uint64 private activityPrevBlock;
+    /// @notice Block in which the campaign was created.
+    uint64 public createdAtBlock;
     Metadata private meta;
 
     /// @notice Donation amounts before fees, tips excluded. Settled inflows are added here.
@@ -87,6 +112,11 @@ contract Campaign is ReentrancyGuardTransient {
         withdrawFeeBps = withdrawFeeBps_;
         // forge-lint: disable-next-line(unsafe-typecast)
         createdAt = uint64(block.timestamp);
+        // forge-lint: disable-next-line(unsafe-typecast)
+        uint64 blockNumber = uint64(block.number);
+        createdAtBlock = blockNumber;
+        lastActivityBlock = blockNumber;
+        activityPrevBlock = blockNumber;
         _setMeta(meta_);
     }
 
@@ -107,7 +137,7 @@ contract Campaign is ReentrancyGuardTransient {
         grossDonated += amount;
         creatorBalance += amount - fee;
         feesAccrued += fee + tip;
-        emit Donated(msg.sender, amount, fee, tip, message);
+        emit Donated(msg.sender, amount, fee, tip, message, _activity());
 
         token.safeTransferFrom(msg.sender, address(this), amount + tip);
     }
@@ -127,7 +157,7 @@ contract Campaign is ReentrancyGuardTransient {
         grossDonated += gross;
         creatorBalance += gross - fee;
         feesAccrued += fee;
-        emit ExternalDonationSettled(gross, fee);
+        emit ExternalDonationSettled(gross, fee, _activity());
     }
 
     /// @notice Pays `amount` of the creator balance, less the withdrawal fee, to `recipient`.
@@ -155,6 +185,7 @@ contract Campaign is ReentrancyGuardTransient {
 
         if (destDomain == ARC_DOMAIN) {
             if (uint256(recipient) >> 160 != 0 || recipient == bytes32(0)) revert InvalidRecipient();
+            if (address(uint160(uint256(recipient))) == address(this)) revert InvalidRecipient();
         } else {
             if (recipient == bytes32(0)) revert InvalidRecipient();
             if (maxFee >= net) revert FeeTooHighForAmount();
@@ -163,7 +194,7 @@ contract Campaign is ReentrancyGuardTransient {
         creatorBalance -= amount;
         feesAccrued += fee;
         withdrawn += amount;
-        emit Withdrawn(destDomain, recipient, amount, fee, net);
+        emit Withdrawn(destDomain, recipient, amount, fee, net, _activity());
 
         if (destDomain == ARC_DOMAIN) {
             token.safeTransfer(address(uint160(uint256(recipient))), net);
@@ -190,7 +221,7 @@ contract Campaign is ReentrancyGuardTransient {
         if (amount == 0) return 0;
         address treasury = factory.treasury();
         feesAccrued = 0;
-        emit FeesClaimed(treasury, amount);
+        emit FeesClaimed(treasury, amount, _activity());
         token.safeTransfer(treasury, amount);
     }
 
@@ -202,7 +233,7 @@ contract Campaign is ReentrancyGuardTransient {
         if (to == address(0)) revert ZeroAddress();
         uint256 before = token.balanceOf(address(this));
         uint256 amount = other.balanceOf(address(this));
-        emit Swept(address(other), to, amount);
+        emit Swept(address(other), to, amount, _activity());
         other.safeTransfer(to, amount);
         if (token.balanceOf(address(this)) < before) revert CannotSweepCampaignToken();
     }
@@ -214,14 +245,14 @@ contract Campaign is ReentrancyGuardTransient {
         MetadataLib.validate(meta_);
         goal = goal_;
         _setMeta(meta_);
-        emit Edited(goal_);
+        emit Edited(goal_, _activity());
     }
 
     /// @notice Ends the campaign for new donate() calls. One-way. Withdrawals stay open.
     function close() external onlyCreator {
         if (closed) revert CampaignClosed();
         closed = true;
-        emit Closed();
+        emit Closed(_activity());
     }
 
     /// @notice Campaign tokens held but not yet booked (plain transfers, CCTP or Gateway mints).
@@ -263,8 +294,21 @@ contract Campaign is ReentrancyGuardTransient {
             donationFeeBps: donationFeeBps,
             withdrawFeeBps: withdrawFeeBps,
             createdAt: createdAt,
+            createdAtBlock: createdAtBlock,
             meta: meta
         });
+    }
+
+    /// @dev Moves lastActivityBlock to this block and returns the prevActivityBlock for its
+    /// events. Only the first call in a block changes storage. Call it only next to an emit.
+    function _activity() internal returns (uint64) {
+        // forge-lint: disable-next-line(unsafe-typecast)
+        uint64 current = uint64(block.number);
+        if (lastActivityBlock != current) {
+            activityPrevBlock = lastActivityBlock;
+            lastActivityBlock = current;
+        }
+        return activityPrevBlock;
     }
 
     function _checkCreator() internal view {

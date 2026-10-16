@@ -127,8 +127,19 @@ contract CampaignFactoryTest is Base {
         _expectInvalid(m);
 
         m = _meta();
-        m.links[0] = string(_bytesOf(201));
+        m.links[0] = string.concat("https://", string(_bytesOf(193)));
         _expectInvalid(m);
+    }
+
+    // Links are rendered as clickable anchors, so only https links are stored. A
+    // javascript: link would run script in the viewer's page.
+    function test_Create_RevertsNonHttpsLinks() public {
+        string[4] memory bad = ["javascript:alert(1)", "http://example.com", "", "https:/"];
+        Metadata memory m = _meta();
+        for (uint256 i = 0; i < bad.length; i++) {
+            m.links[0] = bad[i];
+            _expectInvalid(m);
+        }
     }
 
     // The limits are inclusive: values exactly at each cap are accepted.
@@ -139,7 +150,7 @@ contract CampaignFactoryTest is Base {
         m.imageUrl = string.concat("https://", string(_bytesOf(492)));
         m.links = new string[](5);
         for (uint256 i = 0; i < 5; i++) {
-            m.links[i] = string(_bytesOf(200));
+            m.links[i] = string.concat("https://", string(_bytesOf(192)));
         }
         vm.prank(alice);
         address c = factory.createCampaign(usdcToken, 1e6, m);

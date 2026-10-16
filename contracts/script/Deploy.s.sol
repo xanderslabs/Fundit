@@ -7,8 +7,10 @@ import {CampaignFactory} from "../src/CampaignFactory.sol";
 import {ITokenMessengerV2} from "../src/interfaces/ITokenMessengerV2.sol";
 
 /// @notice Deploys CampaignFactory on Arc mainnet with the fixed token and CCTP addresses.
-/// @dev Env: DEPLOYER_PRIVATE_KEY, OWNER, TREASURY, DONATION_FEE_BPS, WITHDRAW_FEE_BPS and
-/// EURC_PAYOUT_DOMAINS (comma-separated CCTP domains, may be empty). See .env.example.
+/// @dev Env: OWNER, TREASURY, DONATION_FEE_BPS, WITHDRAW_FEE_BPS, EURC_PAYOUT_DOMAINS
+/// (comma-separated CCTP domains, may be empty) and optional DEPLOYER_PRIVATE_KEY. With no key
+/// the script broadcasts from the forge signer, so `--account <keystore>` or `--ledger` works.
+/// See .env.example.
 contract Deploy is Script {
     uint256 internal constant ARC_CHAIN_ID = 5042;
     uint32 internal constant ARC_DOMAIN = 26;
@@ -18,7 +20,7 @@ contract Deploy is Script {
 
     function run() external returns (CampaignFactory factory) {
         require(block.chainid == ARC_CHAIN_ID, "Deploy: not Arc mainnet");
-        uint256 deployerKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
+        string memory deployerKey = vm.trim(vm.envOr("DEPLOYER_PRIVATE_KEY", string("")));
         address owner = vm.envAddress("OWNER");
         address treasury = vm.envAddress("TREASURY");
         uint256 donationFeeBps = vm.envUint("DONATION_FEE_BPS");
@@ -28,7 +30,11 @@ contract Deploy is Script {
         require(donationFeeBps <= 500 && withdrawFeeBps <= 500, "Deploy: fee above 500");
         uint32[] memory domains = parseDomains(vm.envOr("EURC_PAYOUT_DOMAINS", string("")));
 
-        vm.startBroadcast(deployerKey);
+        if (bytes(deployerKey).length == 0) {
+            vm.startBroadcast();
+        } else {
+            vm.startBroadcast(vm.parseUint(deployerKey));
+        }
         factory = new CampaignFactory(
             owner,
             treasury,

@@ -157,13 +157,13 @@ contract CampaignHandler is CommonBase, StdCheats, StdUtils {
             if (logs[i].emitter != address(campaign)) continue;
             bytes32 sig = logs[i].topics[0];
             if (sig == Campaign.Donated.selector) {
-                (, uint256 fee,,) = abi.decode(logs[i].data, (uint256, uint256, uint256, string));
+                (, uint256 fee,,,) = abi.decode(logs[i].data, (uint256, uint256, uint256, string, uint64));
                 ghostDonationFees += fee;
             } else if (sig == Campaign.ExternalDonationSettled.selector) {
-                (, uint256 fee) = abi.decode(logs[i].data, (uint256, uint256));
+                (, uint256 fee,) = abi.decode(logs[i].data, (uint256, uint256, uint64));
                 ghostDonationFees += fee;
             } else if (sig == Campaign.Withdrawn.selector) {
-                (, uint256 fee,) = abi.decode(logs[i].data, (uint256, uint256, uint256));
+                (, uint256 fee,,) = abi.decode(logs[i].data, (uint256, uint256, uint256, uint64));
                 ghostWithdrawFees += fee;
             }
         }

@@ -30,7 +30,7 @@ contract CampaignDonateTest is Base {
         vm.startPrank(bob);
         usdc.approve(address(campaign), 105e6);
         vm.expectEmit(true, true, true, true, address(campaign));
-        emit Campaign.Donated(bob, 100e6, 2.5e6, 5e6, "good luck");
+        emit Campaign.Donated(bob, 100e6, 2.5e6, 5e6, "good luck", campaign.createdAtBlock());
         campaign.donate(100e6, 5e6, "good luck");
         vm.stopPrank();
 
@@ -107,7 +107,7 @@ contract CampaignDonateTest is Base {
         assertEq(campaign.available(), 39e6);
 
         vm.expectEmit(true, true, true, true, address(campaign));
-        emit Campaign.ExternalDonationSettled(40e6, 1e6);
+        emit Campaign.ExternalDonationSettled(40e6, 1e6, campaign.createdAtBlock());
         assertEq(campaign.settle(), 40e6);
 
         assertEq(campaign.creatorBalance(), 39e6);

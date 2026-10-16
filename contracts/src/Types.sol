@@ -21,5 +21,6 @@ struct Summary {
     uint16 donationFeeBps;
     uint16 withdrawFeeBps;
     uint64 createdAt;
+    uint64 createdAtBlock;
     Metadata meta;
 }

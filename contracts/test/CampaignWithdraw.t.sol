@@ -42,7 +42,7 @@ contract CampaignWithdrawTest is Base {
         _donate(100e6);
 
         vm.expectEmit(true, true, true, true, address(campaign));
-        emit Campaign.Withdrawn(ARC, aliceB32, 97.5e6, 0.975e6, 97.5e6 - 0.975e6);
+        emit Campaign.Withdrawn(ARC, aliceB32, 97.5e6, 0.975e6, 97.5e6 - 0.975e6, campaign.createdAtBlock());
         vm.prank(alice);
         campaign.withdraw(97.5e6, ARC, aliceB32, 0, 0, "");
 
@@ -103,6 +103,17 @@ contract CampaignWithdrawTest is Base {
         vm.stopPrank();
     }
 
+    // Paying the campaign itself would turn creator balance into unaccounted tokens, which
+    // the next settle books as a new donation and charges the donation fee again.
+    function test_Withdraw_Arc_RevertsSelfRecipient() public {
+        _donate(10e6);
+        bytes32 self = bytes32(uint256(uint160(address(campaign))));
+        vm.prank(alice);
+        vm.expectRevert(Campaign.InvalidRecipient.selector);
+        campaign.withdraw(1e6, ARC, self, 0, 0, "");
+        assertEq(campaign.creatorBalance(), 9.75e6);
+    }
+
     // Bridged donations can land after the creator closes, and must not be stuck.
     function test_Withdraw_Allowed_AfterClose() public {
         _donate(10e6);
@@ -127,7 +138,7 @@ contract CampaignWithdrawTest is Base {
 
         vm.startPrank(alice);
         vm.expectEmit(true, true, true, true, address(campaign));
-        emit Campaign.Closed();
+        emit Campaign.Closed(campaign.createdAtBlock());
         campaign.close();
         vm.expectRevert(Campaign.CampaignClosed.selector);
         campaign.close();
@@ -141,7 +152,7 @@ contract CampaignWithdrawTest is Base {
         uint256 net = 50e6 - 0.5e6;
 
         vm.expectEmit(true, true, true, true, address(campaign));
-        emit Campaign.Withdrawn(BASE_DOMAIN, recipient, 50e6, 0.5e6, net);
+        emit Campaign.Withdrawn(BASE_DOMAIN, recipient, 50e6, 0.5e6, net, campaign.createdAtBlock());
         vm.prank(alice);
         campaign.withdraw(50e6, BASE_DOMAIN, recipient, 1e6, 1000, "");
 

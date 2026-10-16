@@ -51,7 +51,7 @@ contract CampaignAdminTest is Base {
 
         uint256 expected = 2.5e6 + 1e6 + 0.25e6;
         vm.expectEmit(true, true, true, true, address(campaign));
-        emit Campaign.FeesClaimed(newTreasury, expected);
+        emit Campaign.FeesClaimed(newTreasury, expected, campaign.createdAtBlock());
         vm.prank(bob);
         uint256 amount = campaign.claimFees();
 
@@ -103,7 +103,7 @@ contract CampaignAdminTest is Base {
         uint256 balance = campaign.creatorBalance();
 
         vm.expectEmit(true, true, true, true, address(campaign));
-        emit Campaign.Swept(address(eurc), alice, 5e6);
+        emit Campaign.Swept(address(eurc), alice, 5e6, campaign.createdAtBlock());
         vm.prank(alice);
         campaign.sweep(IERC20(address(eurc)), alice);
 
@@ -167,7 +167,7 @@ contract CampaignAdminTest is Base {
     // The creator can fix typos and move the goal; the stored metadata is fully replaced.
     function test_Edit_UpdatesMetadataAndGoal() public {
         vm.expectEmit(true, true, true, true, address(campaign));
-        emit Campaign.Edited(2_000e6);
+        emit Campaign.Edited(2_000e6, campaign.createdAtBlock());
         vm.prank(alice);
         campaign.edit(2_000e6, _newMeta());
 
@@ -187,6 +187,20 @@ contract CampaignAdminTest is Base {
         campaign.edit(0, _newMeta());
         Metadata memory bad = _newMeta();
         bad.title = "";
+        vm.expectRevert(MetadataLib.InvalidMetadata.selector);
+        campaign.edit(1e6, bad);
+        vm.stopPrank();
+    }
+
+    // Edits apply the https rule for links too, so a creator cannot swap in a script link
+    // after donors have seen a safe page.
+    function test_Edit_RevertsNonHttpsLinks() public {
+        Metadata memory bad = _newMeta();
+        vm.startPrank(alice);
+        bad.links[1] = "javascript:alert(1)";
+        vm.expectRevert(MetadataLib.InvalidMetadata.selector);
+        campaign.edit(1e6, bad);
+        bad.links[1] = "http://b.example";
         vm.expectRevert(MetadataLib.InvalidMetadata.selector);
         campaign.edit(1e6, bad);
         vm.stopPrank();
