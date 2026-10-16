@@ -1,0 +1,45 @@
+@font-face {
+  font-family: 'Outfit';
+  src: url('/fonts/Outfit-VariableFont_wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light dark;
+
+  /* Brand, from the legacy CSS */
+  --primary: #586283;
+  --ink: #101928;
+  --surface: #eceff1;
+  --accent: #ff7c0a;
+  --success: #19b820;
+  --error: #ff3b30;
+
+  --bg: #ffffff;
+  --text: var(--ink);
+  --muted: var(--primary);
+  --card: var(--surface);
+  --border: #d5dade;
+
+  --font: 'Outfit', system-ui, sans-serif;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-bold: 700;
+  --weight-display: 800;
+  --weight-display-heavy: 900;
+
+  --radius: 16px;
+  --radius-pill: 999px;
+  --page-width: 1200px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b111c;
+    --text: #eceff1;
+    --muted: #a3abc4;
+    --card: #172131;
+    --border: #2a3547;
+  }
+}
