@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { CampaignGrid, LoadError } from '../components/CampaignGrid'
 import { campaignsQuery, PAGE_SIZE } from '../hooks/useCampaigns'
-import type { CampaignView } from '../lib/campaigns'
+import { type CampaignView, uniqueByAddress } from '../lib/campaigns'
 
 type Sort = 'newest' | 'raised' | 'closest'
 
@@ -43,7 +43,7 @@ export function Explore() {
   const results = useQueries({
     queries: Array.from({ length: pages }, (_, i) => campaignsQuery(BigInt(i) * PAGE_SIZE)),
   })
-  const loaded = results.flatMap((r) => r.data ?? [])
+  const loaded = uniqueByAddress(results.flatMap((r) => r.data ?? []))
   const firstPending = results[0]?.isPending ?? true
   const failed = results.find((r) => r.isError)
   const last = results[results.length - 1]

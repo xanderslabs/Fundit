@@ -16,6 +16,11 @@ vi.mock('../hooks/useCampaigns', () => ({
   useCampaign: () => ({ ...hookState.current, refetch: () => {} }),
 }))
 
+// The activity walk hits the network; it has its own tests in lib/activity.test.ts.
+vi.mock('../hooks/useActivity', () => ({
+  useActivity: () => ({ isPending: true, isError: false, isSuccess: false, hasNextPage: false }),
+}))
+
 function view(meta: Partial<CampaignView['summary']['meta']>): CampaignView {
   return {
     address: ADDRESS,

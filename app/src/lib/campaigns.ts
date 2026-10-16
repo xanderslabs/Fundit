@@ -39,6 +39,17 @@ export async function fetchCampaignPage(client: ReadClient, offset: bigint, limi
   return newestFirst.map((address, i) => toView(address, summaries[i] as Summary))
 }
 
+// Pages can shift when a campaign is created between loads, so the same campaign can come back twice.
+export function uniqueByAddress(views: CampaignView[]): CampaignView[] {
+  const seen = new Set<string>()
+  return views.filter((v) => {
+    const key = v.address.toLowerCase()
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 // Any address in a URL is untrusted. Only the factory's own campaigns are read.
 export async function fetchCampaign(client: ReadClient, address: Address): Promise<CampaignView | 'not-a-campaign'> {
   const known = await client.readContract({

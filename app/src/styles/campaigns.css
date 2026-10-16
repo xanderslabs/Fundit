@@ -498,3 +498,35 @@
     flex: 1 1 auto;
   }
 }
+
+/* Activity */
+.activity {
+  margin-top: 32px;
+}
+
+.activity-list {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+}
+
+.activity-list li {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.activity-list p {
+  margin: 0;
+}
+
+.activity-message {
+  margin-top: 4px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.activity-time {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 13px;
+}

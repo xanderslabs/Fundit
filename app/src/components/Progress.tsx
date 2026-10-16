@@ -14,6 +14,7 @@ export function Progress({ raised, goal, size = 'sm' }: Props) {
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={bar}
+        aria-valuetext={label}
         aria-label="Raised toward goal"
       >
         <div className={bar >= 100 ? 'progress-fill progress-done' : 'progress-fill'} style={{ width: `${bar}%` }} />

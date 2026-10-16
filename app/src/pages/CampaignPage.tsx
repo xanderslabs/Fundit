@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router'
 import { type Address, isAddress } from 'viem'
 import { arc } from 'viem/chains'
+import { ActivityList } from '../components/ActivityList'
 import { CampaignImage } from '../components/CampaignImage'
 import { Progress } from '../components/Progress'
 import { StatusBadge } from '../components/StatusBadge'
@@ -138,6 +139,7 @@ function CampaignBody({ view }: { view: CampaignView }) {
           </section>
           <CampaignLinks links={summary.meta.links} />
           <CreatorLine creator={summary.creator} address={view.address} />
+          <ActivityList campaign={view.address} createdAtBlock={summary.createdAtBlock} symbol={view.symbol} />
         </div>
       </div>
     </article>

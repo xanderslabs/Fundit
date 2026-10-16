@@ -1,7 +1,15 @@
 import type { Address } from 'viem'
 import { describe, expect, it } from 'vitest'
 import { TOKENS } from '../config'
-import { fetchCampaign, fetchCampaignPage, fetchFeatured, type ReadClient, type Summary } from './campaigns'
+import {
+  type CampaignView,
+  fetchCampaign,
+  fetchCampaignPage,
+  fetchFeatured,
+  type ReadClient,
+  type Summary,
+  uniqueByAddress,
+} from './campaigns'
 
 const A = '0x00000000000000000000000000000000000000a1' as Address
 const B = '0x00000000000000000000000000000000000000b2' as Address
@@ -39,7 +47,11 @@ function fakeClient(opts: { campaigns: Address[]; summaries: Record<string, Summ
       }
       if (functionName === 'isCampaign') return real.has((args![0] as string).toLowerCase())
       if (functionName === 'featuredCampaign') return opts.featured ?? ZERO
-      if (functionName === 'summary') return opts.summaries[address]
+      // Reading summary before isCampaign would trust a hostile clone, so the fake refuses it.
+      if (functionName === 'summary') {
+        if (!real.has(address.toLowerCase())) throw new Error(`summary read on non-campaign ${address}`)
+        return opts.summaries[address]
+      }
       throw new Error(`unexpected ${functionName}`)
     },
     async multicall({ contracts }: { contracts: readonly { address: Address; functionName: string }[] }) {
@@ -71,6 +83,15 @@ describe('fetchCampaignPage', () => {
     expect((await fetchCampaignPage(client, 2n, 2n)).map((v) => v.address)).toEqual([A])
     expect(await fetchCampaignPage(client, 3n, 2n)).toEqual([])
   })
+
+  it('returns nothing when the factory has no campaigns', async () => {
+    expect(await fetchCampaignPage(fakeClient({ campaigns: [], summaries: {} }), 0n, 10n)).toEqual([])
+  })
+
+  it('returns nothing for a limit of zero or less', async () => {
+    expect(await fetchCampaignPage(client, 0n, 0n)).toEqual([])
+    expect(await fetchCampaignPage(client, 0n, -1n)).toEqual([])
+  })
 })
 
 describe('fetchCampaign', () => {
@@ -101,5 +122,16 @@ describe('fetchFeatured', () => {
   it('ignores a featured address the factory does not know', async () => {
     const client = fakeClient({ campaigns: [A], summaries: { [B]: summary('x') }, featured: B, real: [A] })
     expect(await fetchFeatured(client)).toBeNull()
+  })
+})
+
+describe('uniqueByAddress', () => {
+  // A campaign created between two page loads shifts every page by one, so the same campaign can
+  // arrive twice. Showing it twice would also break React keys.
+  it('keeps the first copy of each address, case-insensitively', () => {
+    const v = (address: Address, title: string): CampaignView => ({ address, summary: summary(title), symbol: 'USDC' })
+    const upper = A.toUpperCase().replace('0X', '0x') as Address
+    const out = uniqueByAddress([v(C, 'c'), v(B, 'b'), v(B, 'b again'), v(A, 'a'), v(upper, 'a again')])
+    expect(out.map((x) => x.summary.meta.title)).toEqual(['c', 'b', 'a'])
   })
 })
