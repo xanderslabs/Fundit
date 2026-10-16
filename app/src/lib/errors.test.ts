@@ -124,4 +124,17 @@ describe('explainError', () => {
     const avax = Object.assign(new Error('Insufficient native token on Avalanche to cover gas fees'), { name: 'BALANCE_INSUFFICIENT_GAS' })
     expect(explainError(avax)).toBe('You do not have enough AVAX on Avalanche to pay the network fee.')
   })
+  // Closing the browser's passkey prompt throws a DOMException named NotAllowedError. It is a cancel.
+  it('reads a closed passkey prompt as a cancel', () => {
+    const cancel = Object.assign(new Error('The operation either timed out or was not allowed.'), { name: 'NotAllowedError' })
+    expect(explainError(new Error('Signing failed', { cause: cancel }))).toBe('You cancelled the request.')
+  })
+
+  // Bridge Kit names the chain Optimism. People know it as OP Mainnet, the name shown everywhere else.
+  it('names Optimism as OP Mainnet in Bridge Kit messages', () => {
+    const token = Object.assign(new Error('Insufficient USDC balance on Optimism'), { name: 'BALANCE_INSUFFICIENT_TOKEN' })
+    expect(explainError(token)).toBe('You do not have enough USDC on OP Mainnet.')
+    const gas = Object.assign(new Error('Insufficient native token on Optimism to cover gas fees'), { name: 'BALANCE_INSUFFICIENT_GAS' })
+    expect(explainError(gas)).toBe('You do not have enough ETH on OP Mainnet to pay the network fee.')
+  })
 })

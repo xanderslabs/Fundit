@@ -49,6 +49,17 @@ export const CCTP_CHAINS: readonly CctpChain[] = [
   { key: 'Polygon', chainId: 137, domain: 7, usdc: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', viemChain: polygon, rpcUrl: 'https://polygon.drpc.org', fast: false },
 ]
 
+// The names people see for each chain. Optimism's own name for its chain is OP Mainnet.
+export const CHAIN_LABELS: Record<'Arc' | CctpChainKey, string> = {
+  Arc: 'Arc',
+  Ethereum: 'Ethereum',
+  Avalanche: 'Avalanche',
+  Optimism: 'OP Mainnet',
+  Arbitrum: 'Arbitrum',
+  Base: 'Base',
+  Polygon: 'Polygon',
+}
+
 const deploy = loadConfig(env)
 
 // Zero in dev and test until the factory is deployed and the env vars are set.

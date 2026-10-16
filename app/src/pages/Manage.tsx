@@ -5,12 +5,13 @@ import { Link, Navigate, useParams } from 'react-router'
 import { type Address, encodeFunctionData, formatUnits, isAddress, isAddressEqual, zeroAddress } from 'viem'
 import { campaignAbi } from '../abi/campaign'
 import { TxStatus, useTx } from '../components/TxStatus'
-import { ARC_DOMAIN } from '../config'
+import { ARC_DOMAIN, CHAIN_LABELS } from '../config'
 import { useCampaign } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
 import { chainByKey } from '../lib/bridge'
 import type { CampaignView } from '../lib/campaigns'
 import { arcClient } from '../lib/clients'
+import { PlainError } from '../lib/errors'
 import { bpsToPercent, formatAmount, parseAmount } from '../lib/format'
 import { fetchForwardFee } from '../lib/iris'
 import { buildWithdrawCall, destDomain, netAfterWithdrawFee, type PayoutDest, payoutOptions } from '../lib/payout'
@@ -20,6 +21,8 @@ import { byteLength, MAX_DESCRIPTION, MAX_LINKS, MAX_TITLE, validateCampaign } f
 const CLOSE_TEXT = 'Closing is permanent. Funds that arrive later can still be withdrawn.'
 const PASSKEY_WARNING = 'Your passkey wallet may not exist on that chain. Send to an address you control there.'
 const CROSS_CHAIN_NOTE = 'Cross-chain payouts are new. Try a small amount first.'
+const FEE_CHANGED = 'The transfer fee changed. Check the new amount and confirm again.'
+const TOO_SMALL = 'This amount is too small to cover the transfer fee.'
 const RETRY_WARNING = 'The earlier transaction may still go through. Try again anyway?'
 const QUOTE_DEBOUNCE_MS = 400
 
@@ -140,6 +143,7 @@ function EditSection({ view, sender }: { view: CampaignView; sender: Sender }) {
 
 function WithdrawSection({ view, sender }: { view: CampaignView; sender: Sender }) {
   const { address: campaign, summary, symbol } = view
+  const queryClient = useQueryClient()
   const refresh = useRefresh(campaign)
   const [amountText, setAmountText] = useState('')
   const tx = useTx(() => {
@@ -208,7 +212,12 @@ function WithdrawSection({ view, sender }: { view: CampaignView; sender: Sender 
       async () => {
         // A fresh quote at send time, so the fee cap matches what Circle charges now.
         const fresh = crossChain ? await fetchForwardFee(ARC_DOMAIN, destDomain(dest), net, fast) : undefined
-        if (fresh && fresh.maxFee >= net) throw new Error('This amount is too small to cover the transfer fee.')
+        if (fresh && quote && fresh.maxFee > quote.maxFee) {
+          // Show the new fee in the breakdown, so the organiser confirms what will really be charged.
+          queryClient.setQueryData(['payout-fee', dest, fast, net.toString()], fresh)
+          throw new PlainError(fresh.maxFee >= net ? TOO_SMALL : FEE_CHANGED)
+        }
+        if (fresh && fresh.maxFee >= net) throw new PlainError(TOO_SMALL)
         return buildWithdrawCall({ campaign, amount, dest, recipient, fee: fresh, fast })
       },
       'Withdraw',
@@ -263,7 +272,7 @@ function WithdrawSection({ view, sender }: { view: CampaignView; sender: Sender 
             <select id="withdraw-dest" className="manage-select" value={dest} onChange={(e) => setDest(e.target.value as PayoutDest)}>
               {destinations.map((d) => (
                 <option key={d} value={d}>
-                  {d}
+                  {CHAIN_LABELS[d]}
                 </option>
               ))}
             </select>
@@ -308,7 +317,7 @@ function WithdrawSection({ view, sender }: { view: CampaignView; sender: Sender 
               aria-describedby="withdraw-recipient-hint withdraw-recipient-error"
             />
             <p id="withdraw-recipient-hint" className="hint">
-              {crossChain ? `The address that gets the USDC on ${dest}.` : 'The address that gets the funds on Arc.'}
+              {crossChain ? `The address that gets the USDC on ${CHAIN_LABELS[dest]}.` : 'The address that gets the funds on Arc.'}
             </p>
             <FieldError id="withdraw-recipient-error" message={recipientError} />
           </div>
@@ -327,7 +336,7 @@ function WithdrawSection({ view, sender }: { view: CampaignView; sender: Sender 
                   <dd>{quote ? formatAmount(quote.maxFee, symbol) : fee.isError ? 'Not available' : 'Loading...'}</dd>
                 </div>
                 <div className="donate-total">
-                  <dt>Arrives on {dest}</dt>
+                  <dt>Arrives on {CHAIN_LABELS[dest]}</dt>
                   <dd>{arrives !== null && !tooSmall ? `At least ${formatAmount(arrives, symbol)}` : '-'}</dd>
                 </div>
               </>
@@ -339,7 +348,7 @@ function WithdrawSection({ view, sender }: { view: CampaignView; sender: Sender 
             )}
           </dl>
         )}
-        {tooSmall && <p className="field-error">This amount is too small to cover the transfer fee.</p>}
+        {tooSmall && <p className="field-error">{TOO_SMALL}</p>}
         {crossChain && fee.isError && <p className="field-error">Could not get a fee quote from Circle. Try again in a moment.</p>}
 
         <TxStatus

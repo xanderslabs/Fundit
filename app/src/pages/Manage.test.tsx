@@ -70,6 +70,21 @@ function renderPage(client = new QueryClient()) {
   return client
 }
 
+// Iris fee quotes with no protocol fee, so maxFee is forwardFee.high. Change high to move the quote.
+function stubFees(high: number) {
+  const fees = { high }
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      Response.json([
+        { finalityThreshold: 1000, minimumFee: 0, forwardFee: { low: 1, med: 1, high: fees.high } },
+        { finalityThreshold: 2000, minimumFee: 0, forwardFee: { low: 1, med: 1, high: fees.high } },
+      ]),
+    ),
+  )
+  return fees
+}
+
 const button = (name: string | RegExp) => screen.getByRole('button', { name }) as HTMLButtonElement
 const decode = (data: Hex) => decodeFunctionData({ abi: campaignAbi, data })
 
@@ -78,6 +93,7 @@ afterEach(() => {
   state.view = undefined
   state.sender = null
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 describe('Manage', () => {
@@ -139,7 +155,6 @@ describe('Manage', () => {
     await userEvent.setup().selectOptions(screen.getByLabelText('Send to'), 'Base')
     expect(screen.getByText(warning)).toBeTruthy()
     expect(screen.getByText('Cross-chain payouts are new. Try a small amount first.')).toBeTruthy()
-    vi.unstubAllGlobals()
   })
 
   it('does not warn an ordinary wallet about Base', async () => {
@@ -150,7 +165,49 @@ describe('Manage', () => {
     await screen.findByRole('option', { name: 'Base' })
     await userEvent.setup().selectOptions(screen.getByLabelText('Send to'), 'Base')
     expect(screen.queryByText(/passkey wallet may not exist/)).toBeNull()
-    vi.unstubAllGlobals()
+  })
+
+  // Optimism's own name for its chain is OP Mainnet. Every chain label in the app uses it.
+  it('labels the Optimism destination OP Mainnet', async () => {
+    state.view = view()
+    fakeSender()
+    renderPage()
+    expect(await screen.findByRole('option', { name: 'OP Mainnet' })).toBeTruthy()
+    expect(screen.queryByRole('option', { name: 'Optimism' })).toBeNull()
+  })
+
+  // The organiser approved the fee shown. A higher fee at send time would take more than they agreed to.
+  it('does not send when the fee rose since the preview, and shows the new fee', async () => {
+    const fees = stubFees(200000)
+    state.view = view()
+    const send = fakeSender()
+    renderPage()
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText('Amount'), '10')
+    await user.selectOptions(screen.getByLabelText('Send to'), 'Base')
+    expect(await screen.findByText('0.20 USDC')).toBeTruthy()
+    fees.high = 300000
+    await user.click(button('Withdraw'))
+    expect(await screen.findByText('The transfer fee changed. Check the new amount and confirm again.')).toBeTruthy()
+    expect(send).not.toHaveBeenCalled()
+    expect(screen.getByText('0.30 USDC')).toBeTruthy()
+  })
+
+  // This refusal is the organiser's to fix, so it reads as plain advice, not as an unexpected failure.
+  it('refuses an amount that no longer covers the fee with a plain message', async () => {
+    const fees = stubFees(200000)
+    state.view = view()
+    const send = fakeSender()
+    renderPage()
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText('Amount'), '10')
+    await user.selectOptions(screen.getByLabelText('Send to'), 'Base')
+    expect(await screen.findByText('0.20 USDC')).toBeTruthy()
+    fees.high = 20_000000
+    await user.click(button('Withdraw'))
+    const alert = await screen.findByText('This amount is too small to cover the transfer fee.', { selector: '.status-box p' })
+    expect(alert.textContent).not.toMatch(/Something went wrong/)
+    expect(send).not.toHaveBeenCalled()
   })
 
   // A withdrawal that timed out may still be mined. Sending again could pay out twice.

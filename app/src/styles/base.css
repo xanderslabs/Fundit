@@ -139,3 +139,32 @@ button {
     gap: 16px;
   }
 }
+
+.header-connect {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.passkey-menu {
+  position: relative;
+  display: flex;
+  gap: 8px;
+}
+
+.passkey-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 10;
+  width: min(360px, calc(100vw - 32px));
+}
+
+.passkey-login,
+.passkey-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}

@@ -80,8 +80,9 @@ describe('payoutOptions', () => {
     expect(await payoutOptions(view('EURC'), async () => false)).toEqual(['Arc'])
   })
 
+  // USDC pays out over CCTP to every chain whatever the factory's EURC list says, so the answer must not matter.
   it('returns Arc and every CCTP chain for USDC', async () => {
-    expect(await payoutOptions(view('USDC'), async () => true)).toEqual([
+    expect(await payoutOptions(view('USDC'), async () => false)).toEqual([
       'Arc',
       'Ethereum',
       'Avalanche',

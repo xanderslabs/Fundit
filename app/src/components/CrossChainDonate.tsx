@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { type Address, type EIP1193Provider, formatUnits, type Hex } from 'viem'
 import { useConnection } from 'wagmi'
-import { ARC_DOMAIN, CCTP_CHAINS, type CctpChainKey } from '../config'
+import { ARC_DOMAIN, CCTP_CHAINS, CHAIN_LABELS, type CctpChainKey } from '../config'
 import {
   chainByKey,
   clearBridge,
@@ -26,15 +26,6 @@ const POLL_MS = 10_000
 const QUOTE_DEBOUNCE_MS = 400
 // After this the transfer is overdue. Stop polling and point the donor to the explorer.
 const MAX_TRACK_MS = 2 * 60 * 60 * 1000
-
-const CHAIN_NAMES: Record<CctpChainKey, string> = {
-  Ethereum: 'Ethereum',
-  Avalanche: 'Avalanche',
-  Optimism: 'OP Mainnet',
-  Arbitrum: 'Arbitrum',
-  Base: 'Base',
-  Polygon: 'Polygon',
-}
 
 function expectedTime(fast: boolean, chainFast: boolean): string {
   if (fast) return 'About a minute.'
@@ -127,7 +118,7 @@ export function CrossChainDonate({ view, onBusyChange }: { view: CampaignView; o
           <select id="xchain-source" value={sourceKey} onChange={(e) => setSourceKey(e.target.value as CctpChainKey)}>
             {CCTP_CHAINS.map((c) => (
               <option key={c.key} value={c.key}>
-                {CHAIN_NAMES[c.key]}
+                {CHAIN_LABELS[c.key]}
               </option>
             ))}
           </select>
@@ -188,7 +179,7 @@ export function CrossChainDonate({ view, onBusyChange }: { view: CampaignView; o
       {fee.isError && <p className="field-error">Could not get a fee quote. Try again in a moment.</p>}
       {tooSmall && <p className="field-error">This amount does not cover the transfer fees. Try a larger amount.</p>}
       <p className="hint">
-        The transfer fees come out of the amount. You also pay network gas on {CHAIN_NAMES[sourceKey]}. Fundit's
+        The transfer fees come out of the amount. You also pay network gas on {CHAIN_LABELS[sourceKey]}. Fundit's
         platform fee ({bpsToPercent(summary.donationFeeBps)}) applies once the donation is counted.
       </p>
       <p className="hint">
@@ -201,7 +192,7 @@ export function CrossChainDonate({ view, onBusyChange }: { view: CampaignView; o
         {phase.kind === 'sent' && (
           <div className="status-box status-success">
             <p>
-              <strong>Your USDC left {CHAIN_NAMES[phase.chain]}.</strong> Follow it on its way to the campaign below.
+              <strong>Your USDC left {CHAIN_LABELS[phase.chain]}.</strong> Follow it on its way to the campaign below.
             </p>
           </div>
         )}
@@ -229,9 +220,9 @@ function forCampaign(campaign: Address): PendingCrossChain[] {
   return pendingCrossChain().filter((b) => b.campaign.toLowerCase() === campaign.toLowerCase())
 }
 
-// Cross-chain donations to this campaign that have not reached it yet. Read from localStorage, so they
-// survive a reload and keep showing until the donor dismisses them.
-export function PendingBridgeTracker({ campaign }: { campaign: Address }) {
+// Cross-chain transfers to this address that have not reached it yet. Read from localStorage, so they
+// survive a reload and keep showing until the donor dismisses them. destination names the address in the text.
+export function PendingBridgeTracker({ campaign, destination = 'the campaign' }: { campaign: Address; destination?: string }) {
   const [entries, setEntries] = useState(() => forCampaign(campaign))
 
   useEffect(() => {
@@ -243,9 +234,9 @@ export function PendingBridgeTracker({ campaign }: { campaign: Address }) {
 
   if (entries.length === 0) return null
   return (
-    <section className="bridge-tracker" aria-label="Cross-chain donations on the way">
+    <section className="bridge-tracker" aria-label="Cross-chain transfers on the way">
       {entries.map((e) => (
-        e.kind === 'bridge' ? <BridgeRow key={e.burnTx} entry={e} /> : <SubmittedRow key={e.id} entry={e} />
+        e.kind === 'bridge' ? <BridgeRow key={e.burnTx} entry={e} destination={destination} /> : <SubmittedRow key={e.id} entry={e} />
       ))}
     </section>
   )
@@ -253,7 +244,7 @@ export function PendingBridgeTracker({ campaign }: { campaign: Address }) {
 
 type RowStatus = TransferStatus | 'expired'
 
-function BridgeRow({ entry }: { entry: PendingBridge }) {
+function BridgeRow({ entry, destination }: { entry: PendingBridge; destination: string }) {
   const { campaign, burnTx, srcDomain, createdAt } = entry
   const chain = CCTP_CHAINS.find((c) => c.domain === srcDomain)!
   const queryClient = useQueryClient()
@@ -293,12 +284,12 @@ function BridgeRow({ entry }: { entry: PendingBridge }) {
     }
   }, [done, campaign, burnTx, srcDomain, createdAt, queryClient])
 
-  const what = `${entry.amount} USDC from ${CHAIN_NAMES[chain.key]}`
+  const what = `${entry.amount} USDC from ${CHAIN_LABELS[chain.key]}`
   return (
     <div className={status === 'minted' ? 'status-box status-success' : 'status-box'}>
       {status === 'minted' ? (
         <p>
-          <strong>{what} reached the campaign.</strong> Thank you.
+          <strong>{what} reached {destination}.</strong>{destination === 'the campaign' ? ' Thank you.' : null}
         </p>
       ) : status === 'expired' ? (
         <>
@@ -316,7 +307,7 @@ function BridgeRow({ entry }: { entry: PendingBridge }) {
             ? 'Circle confirmed it. Arriving on Arc now.'
             : status === 'unknown'
               ? 'Could not reach Circle to check. Trying again.'
-              : `Waiting for ${CHAIN_NAMES[chain.key]} to confirm it.`}
+              : `Waiting for ${CHAIN_LABELS[chain.key]} to confirm it.`}
         </p>
       )}
       {done && (
@@ -333,7 +324,7 @@ function BridgeRow({ entry }: { entry: PendingBridge }) {
 // The wallet sent, but no burn hash was recorded (the tab closed first). Nothing to poll; it expires like the rest.
 function SubmittedRow({ entry }: { entry: PendingSubmitted }) {
   const chain = CCTP_CHAINS.find((c) => c.domain === entry.srcDomain)!
-  const what = `${entry.amount} USDC from ${CHAIN_NAMES[chain.key]}`
+  const what = `${entry.amount} USDC from ${CHAIN_LABELS[chain.key]}`
   const [overdue, setOverdue] = useState(() => Date.now() - entry.createdAt > MAX_TRACK_MS)
   useEffect(() => {
     if (overdue) return
@@ -344,7 +335,7 @@ function SubmittedRow({ entry }: { entry: PendingSubmitted }) {
     <div className="status-box">
       {overdue ? (
         <p>
-          <strong>{what} was not confirmed.</strong> Check your wallet's activity on {CHAIN_NAMES[chain.key]}.
+          <strong>{what} was not confirmed.</strong> Check your wallet's activity on {CHAIN_LABELS[chain.key]}.
         </p>
       ) : (
         <p>

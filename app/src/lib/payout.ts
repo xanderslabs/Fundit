@@ -1,6 +1,6 @@
 import { type Address, encodeFunctionData, isAddressEqual, pad, zeroAddress } from 'viem'
 import { campaignAbi } from '../abi/campaign'
-import { ARC_DOMAIN, CCTP_CHAINS, type CctpChainKey, FORWARD_HOOK_DATA } from '../config'
+import { ARC_DOMAIN, CCTP_CHAINS, CHAIN_LABELS, type CctpChainKey, FORWARD_HOOK_DATA } from '../config'
 import type { CampaignView } from './campaigns'
 import type { Call } from './sender'
 
@@ -41,7 +41,7 @@ export function buildWithdrawCall(p: {
   } else {
     if (!p.fee) throw new Error('A fee quote is needed for a payout to another chain.')
     const chain = CCTP_CHAINS.find((c) => c.key === p.dest)!
-    if (p.fast && !chain.fast) throw new Error(`Fast transfers are not available to ${chain.key}.`)
+    if (p.fast && !chain.fast) throw new Error(`Fast transfers are not available to ${CHAIN_LABELS[chain.key]}.`)
     args = [p.amount, chain.domain, recipient, p.fee.maxFee, p.fast ? FAST_THRESHOLD : STANDARD_THRESHOLD, FORWARD_HOOK_DATA]
   }
   return { to: p.campaign, data: encodeFunctionData({ abi: campaignAbi, functionName: 'withdraw', args }) }

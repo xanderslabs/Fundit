@@ -1,7 +1,7 @@
 import { BaseError, decodeErrorResult, type Hex, UserRejectedRequestError } from 'viem'
 import { campaignAbi } from '../abi/campaign'
 import { factoryAbi } from '../abi/factory'
-import { CCTP_CHAINS } from '../config'
+import { CCTP_CHAINS, CHAIN_LABELS, type CctpChainKey } from '../config'
 
 // Plain text for every custom error in Campaign and CampaignFactory. errors.test.ts checks none is missing.
 const ERROR_TEXT: Record<string, string> = {
@@ -67,6 +67,11 @@ function nativeSymbol(chainName: string): string {
   return CCTP_CHAINS.find((c) => c.key === chainName)?.viemChain.nativeCurrency.symbol ?? 'native token'
 }
 
+// The name people know, for a Bridge Kit chain name (OP Mainnet for Optimism).
+function chainLabel(chainName: string): string {
+  return CHAIN_LABELS[chainName as CctpChainKey] ?? chainName
+}
+
 // Plain text for Circle Bridge Kit errors, by KitError name. The messages name the token and chain.
 function kitText(e: unknown): string | null {
   for (const x of chain(e)) {
@@ -75,25 +80,33 @@ function kitText(e: unknown): string | null {
     if (name === 'BALANCE_INSUFFICIENT_TOKEN') {
       const m = /^Insufficient (\S+) balance on (.+)$/.exec(message)
       // Only USDC moves on this path, so the 'token' placeholder means USDC.
-      if (m) return `You do not have enough ${m[1] === 'token' ? 'USDC' : m[1]} on ${m[2]}.`
+      if (m) return `You do not have enough ${m[1] === 'token' ? 'USDC' : m[1]} on ${chainLabel(m[2]!)}.`
     }
     if (name === 'BALANCE_INSUFFICIENT_GAS') {
       const m = /^Insufficient (.+) on (.+) to cover gas fees$/.exec(message)
-      if (m) return `You do not have enough ${m[1] === 'native token' ? nativeSymbol(m[2]!) : m[1]} on ${m[2]} to pay the network fee.`
+      if (m) return `You do not have enough ${m[1] === 'native token' ? nativeSymbol(m[2]!) : m[1]} on ${chainLabel(m[2]!)} to pay the network fee.`
     }
     if (isKitRpcError(x)) {
       const traced = (x as { cause?: { trace?: { chain?: unknown } } }).cause?.trace?.chain
-      const name = typeof traced === 'string' && traced !== '' ? traced : / on (.+)$/.exec(message)?.[1]
-      return name ? `The ${name} network did not answer. Try again in a moment.` : 'The network did not answer. Try again in a moment.'
+      const chainName = typeof traced === 'string' && traced !== '' ? traced : / on (.+)$/.exec(message)?.[1]
+      return chainName
+        ? `The ${chainLabel(chainName)} network did not answer. Try again in a moment.`
+        : 'The network did not answer. Try again in a moment.'
     }
   }
   return null
 }
 
+// A message written for the person, shown as it is. explainError adds no generic prefix to it.
+export class PlainError extends Error {}
+
+// NotAllowedError is what the browser throws when someone closes the passkey prompt.
 export function isUserRejection(e: unknown): boolean {
   return chain(e).some(
     (x) =>
-      x instanceof UserRejectedRequestError || (!isKitRpcError(x) && (x as { code?: unknown }).code === UserRejectedRequestError.code),
+      x instanceof UserRejectedRequestError ||
+      (x as { name?: unknown }).name === 'NotAllowedError' ||
+      (!isKitRpcError(x) && (x as { code?: unknown }).code === UserRejectedRequestError.code),
   )
 }
 
@@ -124,6 +137,7 @@ function detail(e: unknown): string {
 
 export function explainError(e: unknown): string {
   if (isUserRejection(e)) return 'You cancelled the request.'
+  if (e instanceof PlainError) return e.message
   const kit = kitText(e)
   if (kit) return kit
   const name = revertName(e)

@@ -1,5 +1,5 @@
 import { type Address, type Chain, createPublicClient, type EIP1193Provider, getAddress, type Hex, http, isAddress, isHex, parseUnits, UserRejectedRequestError } from 'viem'
-import { ARC_RPC_URL, CCTP_CHAINS, type CctpChain, type CctpChainKey } from '../config'
+import { ARC_RPC_URL, CCTP_CHAINS, CHAIN_LABELS, type CctpChain, type CctpChainKey } from '../config'
 import { isUserRejection } from './errors'
 
 // One localStorage key holds everything that must survive a reload: cross-chain transfers on their way
@@ -160,7 +160,7 @@ async function currentAccount(provider: EIP1193Provider, known?: Address): Promi
 
 async function setup(p: CrossChainParams) {
   const chain = chainByKey(p.sourceKey)
-  if (p.fast && !chain.fast) throw new Error(`Fast transfers are not available from ${chain.key}.`)
+  if (p.fast && !chain.fast) throw new Error(`Fast transfers are not available from ${CHAIN_LABELS[chain.key]}.`)
   const account = await currentAccount(p.provider, p.account)
   let byAccount = kits.get(p.provider)
   if (!byAccount) {

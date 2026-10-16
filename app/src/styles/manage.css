@@ -77,3 +77,20 @@
   flex: 1;
   min-width: 0;
 }
+
+/* Passkey wallet page */
+.fund-address {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.fund-address code {
+  overflow-wrap: anywhere;
+}
+
+.fund-qr {
+  width: 200px;
+  height: 200px;
+}

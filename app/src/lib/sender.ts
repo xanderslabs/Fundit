@@ -37,11 +37,11 @@ export const arcReceipts: ReceiptClient = {
   call: (args) => arcClient.call(args),
 }
 
-const REVERTED = 'The transaction failed on chain. Nothing changed, but the network fee was spent.'
+export const REVERTED = 'The transaction failed on chain. Nothing changed, but the network fee was spent.'
 const GENERIC_PREFIX = 'Something went wrong.'
 const REASON_TIMEOUT_MS = 10_000
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | 'timeout'> {
+export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | 'timeout'> {
   let timer: ReturnType<typeof setTimeout> | undefined
   const timedOut = new Promise<'timeout'>((resolve) => {
     timer = setTimeout(() => resolve('timeout'), ms)

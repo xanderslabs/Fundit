@@ -1,5 +1,7 @@
 import { useAppKit, useAppKitAccount } from '@reown/appkit/react'
 import { Link, NavLink, Outlet } from 'react-router'
+import { PASSKEYS_ENABLED } from '../config'
+import { PasskeyMenu } from './PasskeyLogin'
 
 function shortAddress(address: string) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`
@@ -30,7 +32,10 @@ export function Layout() {
           <NavLink to="/create">Start a fundraiser</NavLink>
           <NavLink to="/me">My page</NavLink>
         </nav>
-        <ConnectButton />
+        <div className="header-connect">
+          {PASSKEYS_ENABLED && <PasskeyMenu />}
+          <ConnectButton />
+        </div>
       </header>
       <main className="main">
         <Outlet />
