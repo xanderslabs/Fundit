@@ -13,7 +13,17 @@ const CAMPAIGN = getAddress('0x00000000000000000000000000000000000000a1')
 const BURN = `0x${'cd'.repeat(32)}` as Hex
 const KEY = 'fundit.pendingBridges'
 
-vi.mock('wagmi', () => ({ useConnection: () => ({ isConnected: false, address: undefined, connector: undefined }) }))
+type Conn = { isConnected: boolean; address?: string; connector?: { getProvider: () => Promise<unknown> } }
+const conn: { current: Conn } = { current: { isConnected: false } }
+vi.mock('wagmi', () => ({ useConnection: () => conn.current }))
+const estimate = vi.hoisted(() => ({ fn: (async () => 0n) as (p: { amount: string }) => Promise<bigint>, calls: [] as string[] }))
+vi.mock('../lib/bridge', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/bridge')>()),
+  estimateCrossChain: (p: { amount: string }) => {
+    estimate.calls.push(p.amount)
+    return estimate.fn(p)
+  },
+}))
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: () => {} }) }))
 vi.mock('../hooks/useSender', () => ({ useSender: () => null }))
 
@@ -70,7 +80,14 @@ afterEach(() => {
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
   setVisibility('visible')
+  conn.current = { isConnected: false }
+  estimate.fn = async () => 0n
+  estimate.calls.length = 0
 })
+
+const connectWallet = () => {
+  conn.current = { isConnected: true, address: '0x1111111111111111111111111111111111111111', connector: { getProvider: async () => ({}) } }
+}
 
 describe('CrossChainDonate', () => {
   // CCTP has no Fast transfer from Polygon or Avalanche. Offering it would quote a fee and a time that are wrong.
@@ -107,14 +124,61 @@ describe('CrossChainDonate', () => {
     await user.selectOptions(screen.getByLabelText('From'), 'Base')
     await user.type(screen.getByLabelText('Amount'), '25')
     // 25 - (16217 + 825) units = 24.982958, shown truncated.
-    expect(await screen.findByText('24.98 USDC')).toBeTruthy()
+    // The real fee can be lower than the quote, so the landed amount is a floor.
+    expect(await screen.findByText('At least 24.98 USDC')).toBeTruthy()
     expect(screen.getByText('Reaches the campaign')).toBeTruthy()
     expect(screen.getByText(/about a minute/i)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Connect wallet to donate' })).toBeTruthy()
   })
 })
 
+describe('CrossChainDonate fees with a wallet', () => {
+  // One estimate per settled amount, not one SDK round trip per keystroke.
+  it('estimates once for the settled amount', async () => {
+    connectWallet()
+    stubFetch(() => FEE_SAMPLE)
+    estimate.fn = async () => 17042n
+    wrap(<CrossChainDonate view={view('USDC')} />)
+    await userEvent.setup().type(screen.getByLabelText('Amount'), '25')
+    expect(await screen.findByText('At least 24.98 USDC')).toBeTruthy()
+    expect(estimate.calls).toEqual(['25'])
+    expect(screen.getByText('Transfer fees')).toBeTruthy()
+  })
+
+  // A wallet RPC hiccup must not stop a donation when Circle's own quote is available.
+  it("falls back to Circle's quote when the wallet estimate fails, and still allows Donate", async () => {
+    connectWallet()
+    stubFetch(() => FEE_SAMPLE)
+    estimate.fn = async () => {
+      throw new Error('rpc down')
+    }
+    wrap(<CrossChainDonate view={view('USDC')} />)
+    await userEvent.setup().type(screen.getByLabelText('Amount'), '25')
+    expect(await screen.findByText("Estimated fee (could not reach your wallet's network)")).toBeTruthy()
+    expect(screen.getByText('At least 24.98 USDC')).toBeTruthy()
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Donate' }) as HTMLButtonElement).disabled).toBe(false))
+  })
+
+  // Nothing is being sent while quoting, so the error must not talk about sending.
+  it('says plainly when no quote is available', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })))
+    wrap(<CrossChainDonate view={view('USDC')} />)
+    await userEvent.setup().type(screen.getByLabelText('Amount'), '25')
+    const msg = await screen.findByText(/Could not get a fee quote/, {}, { timeout: 3000 })
+    expect(msg.textContent).not.toMatch(/Nothing was sent/)
+  })
+})
+
 describe('PendingBridgeTracker', () => {
+  // Saved when the wallet sent, before any hash: the donor still learns something is in flight after a reload.
+  it('shows a submitted transfer that has no hash yet, without polling', async () => {
+    localStorage.setItem(KEY, JSON.stringify([{ kind: 'submitted', id: 'a', campaign: CAMPAIGN, srcDomain: 6, amount: '25', createdAt: Date.now() }]))
+    const fetchFn = stubFetch(() => ({ messages: [] }))
+    wrap(<PendingBridgeTracker campaign={CAMPAIGN} />)
+    expect(await screen.findByText(/Submitted, waiting for confirmation/)).toBeTruthy()
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
   // The mint happens even if the tab closed. After a reload the donor still sees it, and the total refreshes.
   it('picks up a saved transfer after reload and refreshes the campaign once minted', async () => {
     savePending(Date.now())

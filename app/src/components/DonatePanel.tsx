@@ -18,6 +18,7 @@ import { CrossChainDonate, PendingBridgeTracker } from './CrossChainDonate'
 const EXPLORER_URL = arc.blockExplorers.default.url
 const QUICK_AMOUNTS = ['10', '25', '50', '100'] as const
 const TIP_PERCENTS = [0, 5, 10, 15] as const
+const DAY_MS = 24 * 60 * 60 * 1000
 
 // Where the money comes from. Later tasks add sources here (passkey, Gateway).
 type PaySourceId = 'arc' | 'crosschain'
@@ -76,7 +77,9 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   // An unconfirmed donation saved before a reload still blocks a new one until it is settled.
   const [phase, setPhase] = useState<Phase>(() => {
     const saved = pendingArc(campaign)
-    return saved ? { kind: 'timeout', hash: saved.hash, approve: saved.approve } : { kind: 'idle' }
+    if (!saved) return { kind: 'idle' }
+    const note = Date.now() - saved.createdAt > DAY_MS ? 'This was more than a day ago. Check the explorer before donating again.' : undefined
+    return { kind: 'timeout', hash: saved.hash, approve: saved.approve, note }
   })
   const [crossChainBusy, setCrossChainBusy] = useState(false)
   // Set synchronously, so a second click before React re-renders cannot start a second send or check.

@@ -41,15 +41,34 @@ const ABI = [...campaignAbi, ...factoryAbi]
 const GENERIC = 'Something went wrong. Nothing was sent.'
 const MAX_DETAIL = 160
 
-// Every link in the error's cause chain, outermost first.
+// Every link in the error's cause chain, outermost first. Circle's kits wrap the original error as
+// cause: { trace: { rawError } }, so a link with no cause continues at its trace.rawError.
 function chain(e: unknown): unknown[] {
   const out: unknown[] = []
   let cur = e
   while (cur && typeof cur === 'object' && out.length < 20) {
     out.push(cur)
-    cur = (cur as { cause?: unknown }).cause
+    const x = cur as { cause?: unknown; trace?: { rawError?: unknown } }
+    cur = x.cause ?? x.trace?.rawError
   }
   return out
+}
+
+// Balance errors from Circle's Bridge Kit, by their KitError name. The messages name the token and chain.
+function kitBalanceText(e: unknown): string | null {
+  for (const x of chain(e)) {
+    const { name, message } = x as { name?: unknown; message?: unknown }
+    if (typeof message !== 'string') continue
+    if (name === 'BALANCE_INSUFFICIENT_TOKEN') {
+      const m = /^Insufficient (\S+) balance on (.+)$/.exec(message)
+      if (m) return `You do not have enough ${m[1]} on ${m[2]}.`
+    }
+    if (name === 'BALANCE_INSUFFICIENT_GAS') {
+      const m = /^Insufficient (.+) on (.+) to cover gas fees$/.exec(message)
+      if (m) return `You do not have enough ${m[1]} on ${m[2]} to pay the network fee.`
+    }
+  }
+  return null
 }
 
 export function isUserRejection(e: unknown): boolean {
@@ -85,6 +104,8 @@ function detail(e: unknown): string {
 
 export function explainError(e: unknown): string {
   if (isUserRejection(e)) return 'You cancelled the request.'
+  const balance = kitBalanceText(e)
+  if (balance) return balance
   const name = revertName(e)
   if (name && ERROR_TEXT[name]) return ERROR_TEXT[name]
   const d = detail(e)

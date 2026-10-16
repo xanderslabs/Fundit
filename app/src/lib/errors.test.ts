@@ -58,4 +58,28 @@ describe('explainError', () => {
     expect(text).toContain('network down')
     expect(explainError(new Error('x'.repeat(1000))).length).toBeLessThan(250)
   })
+  // Bridge Kit wraps wallet errors in a KitError whose cause is { trace: { rawError } }, not an Error chain.
+  it('finds a wallet rejection under a KitError trace.rawError', () => {
+    const kitError = Object.assign(new Error('Unknown blockchain error on Base: User rejected the request.'), {
+      name: 'ONCHAIN_UNKNOWN_BLOCKCHAIN_ERROR',
+      cause: { trace: { chain: 'Base', rawError: new UserRejectedRequestError(new Error('x')) } },
+    })
+    expect(explainError(kitError)).toBe('You cancelled the request.')
+  })
+
+  // A balance problem is the donor's to fix. It needs plain words, not the generic "Nothing was sent." text.
+  it('explains a Bridge Kit insufficient balance error in plain words', () => {
+    const token = Object.assign(new Error('Insufficient USDC balance on Base'), {
+      name: 'BALANCE_INSUFFICIENT_TOKEN',
+      cause: { trace: { chain: 'Base', token: 'USDC' } },
+    })
+    expect(explainError(token)).toBe('You do not have enough USDC on Base.')
+    const gas = Object.assign(new Error('Insufficient ETH on Base to cover gas fees'), {
+      name: 'BALANCE_INSUFFICIENT_GAS',
+      cause: { trace: { chain: 'Base' } },
+    })
+    expect(explainError(gas)).toBe('You do not have enough ETH on Base to pay the network fee.')
+    // Wrapped one level down, as a failed bridge step carries it.
+    expect(explainError(new Error('Transfer failed', { cause: token }))).toBe('You do not have enough USDC on Base.')
+  })
 })

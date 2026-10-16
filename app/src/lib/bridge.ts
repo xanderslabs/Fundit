@@ -1,16 +1,22 @@
 import { type Address, type Chain, createPublicClient, type EIP1193Provider, getAddress, type Hex, http, isAddress, isHex, parseUnits, UserRejectedRequestError } from 'viem'
 import { ARC_RPC_URL, CCTP_CHAINS, type CctpChain, type CctpChainKey } from '../config'
+import { isUserRejection } from './errors'
 
 // One localStorage key holds everything that must survive a reload: cross-chain transfers on their way
-// to Arc, and at most one unconfirmed Arc donation per campaign. Storage can throw (private windows,
+// to Arc (with a burn hash, or only 'submitted' when the wallet has sent but no burn hash is known yet),
+// and at most one unconfirmed Arc donation per campaign. Storage can throw (private windows,
 // blocked site data), so every access is wrapped and a failure only loses the reminder, never money.
 const KEY = 'fundit.pendingBridges'
 // Fired on window after every change, so open trackers re-read the store.
 export const PENDING_EVENT = 'fundit:pending'
+// Entries older than this are dropped on read, so stale reminders do not pile up.
+const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
 export type PendingBridge = { kind: 'bridge'; campaign: Address; burnTx: Hex; srcDomain: number; amount: string; createdAt: number }
+export type PendingSubmitted = { kind: 'submitted'; id: string; campaign: Address; srcDomain: number; amount: string; createdAt: number }
 export type PendingArc = { kind: 'arc'; campaign: Address; hash: Hex; approve: boolean; createdAt: number }
-type Entry = PendingBridge | PendingArc
+export type PendingCrossChain = PendingBridge | PendingSubmitted
+type Entry = PendingBridge | PendingSubmitted | PendingArc
 
 const isTxHash = (v: unknown): v is Hex => typeof v === 'string' && isHex(v) && v.length === 66
 
@@ -18,9 +24,9 @@ function isEntry(e: unknown): e is Entry {
   if (!e || typeof e !== 'object') return false
   const x = e as Record<string, unknown>
   if (typeof x.campaign !== 'string' || !isAddress(x.campaign) || typeof x.createdAt !== 'number') return false
-  if (x.kind === 'bridge') {
-    return isTxHash(x.burnTx) && CCTP_CHAINS.some((c) => c.domain === x.srcDomain) && typeof x.amount === 'string'
-  }
+  const knownDomain = CCTP_CHAINS.some((c) => c.domain === x.srcDomain)
+  if (x.kind === 'bridge') return isTxHash(x.burnTx) && knownDomain && typeof x.amount === 'string'
+  if (x.kind === 'submitted') return typeof x.id === 'string' && knownDomain && typeof x.amount === 'string'
   if (x.kind === 'arc') return isTxHash(x.hash) && typeof x.approve === 'boolean'
   return false
 }
@@ -28,7 +34,8 @@ function isEntry(e: unknown): e is Entry {
 function readAll(): Entry[] {
   try {
     const parsed: unknown = JSON.parse(localStorage.getItem(KEY) ?? '[]')
-    return Array.isArray(parsed) ? parsed.filter(isEntry) : []
+    const oldest = Date.now() - MAX_AGE_MS
+    return Array.isArray(parsed) ? parsed.filter((e): e is Entry => isEntry(e) && e.createdAt > oldest) : []
   } catch {
     return []
   }
@@ -54,17 +61,33 @@ export function clearBridge(burnTx: Hex) {
   writeAll(readAll().filter((e) => !(e.kind === 'bridge' && same(e.burnTx, burnTx))))
 }
 
-function saveBridge(entry: Omit<PendingBridge, 'kind' | 'createdAt'>) {
-  writeAll([...readAll(), { kind: 'bridge', ...entry, createdAt: Date.now() }])
+// Bridges and submitted transfers, for the tracker.
+export function pendingCrossChain(): PendingCrossChain[] {
+  return readAll().filter((e): e is PendingCrossChain => e.kind === 'bridge' || e.kind === 'submitted')
+}
+
+export function clearSubmitted(id: string) {
+  writeAll(readAll().filter((e) => !(e.kind === 'submitted' && e.id === id)))
+}
+
+// Replaces the submitted record (if any) with the burn, keeping its createdAt for the 2-hour window.
+function saveBridge(entry: Omit<PendingBridge, 'kind' | 'createdAt'>, submittedId: string) {
+  const all = readAll()
+  const submitted = all.find((e) => e.kind === 'submitted' && e.id === submittedId)
+  const rest = all.filter((e) => e !== submitted)
+  writeAll([...rest, { kind: 'bridge', ...entry, createdAt: submitted?.createdAt ?? Date.now() }])
 }
 
 export function pendingArc(campaign: Address): PendingArc | null {
   return readAll().find((e): e is PendingArc => e.kind === 'arc' && same(e.campaign, campaign)) ?? null
 }
 
+// Saving the same transaction again keeps its first createdAt, so its age stays true after a reload.
 export function savePendingArc(p: { campaign: Address; hash: Hex; approve: boolean }) {
-  const others = readAll().filter((e) => !(e.kind === 'arc' && same(e.campaign, p.campaign)))
-  writeAll([...others, { kind: 'arc', ...p, createdAt: Date.now() }])
+  const all = readAll()
+  const prev = all.find((e): e is PendingArc => e.kind === 'arc' && same(e.campaign, p.campaign))
+  const createdAt = prev && same(prev.hash, p.hash) ? prev.createdAt : Date.now()
+  writeAll([...all.filter((e) => e !== prev), { kind: 'arc', ...p, createdAt }])
 }
 
 export function clearPendingArc(campaign: Address) {
@@ -79,22 +102,56 @@ export function chainByKey(key: CctpChainKey): CctpChain {
 
 export type CrossChainParams = { provider: EIP1193Provider; sourceKey: CctpChainKey; campaign: Address; amount: string; fast: boolean }
 
+const SEND_METHODS = new Set(['eth_sendTransaction', 'wallet_sendCalls'])
+
+// Passes every call to the wallet, and reports each successful send to whoever is listening.
+function watchSends(provider: EIP1193Provider, watcher: { onSend: (() => void) | null }): EIP1193Provider {
+  const request = (async (args: { method: string }) => {
+    const result = await provider.request(args as never)
+    if (SEND_METHODS.has(args.method)) watcher.onSend?.()
+    return result
+  }) as EIP1193Provider['request']
+  return new Proxy(provider, {
+    get(target, key) {
+      if (key === 'request') return request
+      const value: unknown = Reflect.get(target, key, target)
+      return typeof value === 'function' ? value.bind(target) : value
+    },
+  })
+}
+
 // The SDK is large, so it loads only when someone donates from another chain.
-async function setup(p: CrossChainParams) {
-  const chain = chainByKey(p.sourceKey)
-  if (p.fast && !chain.fast) throw new Error(`Fast transfers are not available from ${chain.key}.`)
+async function createKit(provider: EIP1193Provider) {
   const [{ BridgeKit }, { createViemAdapterFromProvider }] = await Promise.all([
     import('@circle-fin/bridge-kit'),
     import('@circle-fin/adapter-viem-v2'),
   ])
+  const watcher: { onSend: (() => void) | null } = { onSend: null }
   // Error reporting off: the SDK would otherwise POST error details to Circle.
   const kit = new BridgeKit({ disableErrorReporting: true })
   const adapter = await createViemAdapterFromProvider({
-    provider: p.provider,
+    provider: watchSends(provider, watcher),
     // Reads go through our own RPCs, which are the hosts the CSP allows, not the SDK's defaults.
     getPublicClient: ({ chain: c }: { chain: Chain }) => createPublicClient({ chain: c, transport: http(rpcFor(c.id)) }),
     capabilities: { addressContext: 'user-controlled' },
   })
+  return { kit, adapter, watcher }
+}
+
+// One kit and adapter per wallet provider. The adapter picks the chain per call, so one serves every source chain.
+const kits = new WeakMap<EIP1193Provider, ReturnType<typeof createKit>>()
+
+async function setup(p: CrossChainParams) {
+  const chain = chainByKey(p.sourceKey)
+  if (p.fast && !chain.fast) throw new Error(`Fast transfers are not available from ${chain.key}.`)
+  let entry = kits.get(p.provider)
+  if (!entry) {
+    entry = createKit(p.provider)
+    kits.set(p.provider, entry)
+    // A failed load must not stick for this wallet.
+    entry.catch(() => kits.delete(p.provider))
+  }
+  const { kit, adapter, watcher } = await entry
   const params = {
     from: { adapter, chain: chain.key },
     // The forwarder mints straight to the campaign contract on Arc. No donate() call follows.
@@ -102,7 +159,7 @@ async function setup(p: CrossChainParams) {
     amount: p.amount,
     config: { transferSpeed: p.fast ? ('FAST' as const) : ('SLOW' as const) },
   }
-  return { kit, params, chain }
+  return { kit, params, chain, watcher }
 }
 
 function rpcFor(chainId: number): string | undefined {
@@ -133,7 +190,10 @@ function burnMayBeOnChain(step: Step): step is Step & { txHash: string } {
 }
 
 function stepError(step: Step | undefined): Error {
-  if (step?.errorCategory === 'user_rejected') return new UserRejectedRequestError(new Error(step.errorMessage ?? 'User rejected'))
+  // Sequential wallets: the adapter wraps the rejection, so the category is only 'unknown'.
+  if (step?.errorCategory === 'user_rejected' || isUserRejection(step?.error)) {
+    return new UserRejectedRequestError(new Error(step?.errorMessage ?? 'User rejected'))
+  }
   const err = new Error(step?.errorMessage ?? 'The transfer did not start.')
   if (step?.error !== undefined) err.cause = step.error
   return err
@@ -142,16 +202,34 @@ function stepError(step: Step | undefined): Error {
 // Burns USDC on the source chain and returns as soon as the burn has a hash. Circle's forwarder then
 // mints it to the campaign on Arc; the tracker follows that through Iris, even after a reload.
 export async function donateCrossChain(p: CrossChainParams): Promise<{ burnTx: Hex; srcDomain: number }> {
-  const { kit, params, chain } = await setup(p)
+  const { kit, params, chain, watcher } = await setup(p)
+  const campaign = getAddress(p.campaign)
+  // Saved on the wallet's first send, before any burn hash, in case the tab closes before the burn event.
+  const submittedId = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  let submitted = false
+  watcher.onSend = () => {
+    if (submitted) return
+    submitted = true
+    writeAll([...readAll(), { kind: 'submitted', id: submittedId, campaign, srcDomain: chain.domain, amount: p.amount, createdAt: Date.now() }])
+  }
   return new Promise((resolve, reject) => {
     let settled = false
+    const finish = () => {
+      settled = true
+      watcher.onSend = null
+      kit.off('burn', onBurn)
+    }
+    const fail = (err: unknown) => {
+      finish()
+      if (submitted) clearSubmitted(submittedId)
+      reject(err)
+    }
     const onBurn = (payload: { values: Step }) => {
       const step = payload.values
       if (settled || !burnMayBeOnChain(step)) return
-      settled = true
-      kit.off('burn', onBurn)
+      finish()
       const burnTx = step.txHash as Hex
-      saveBridge({ campaign: getAddress(p.campaign), burnTx, srcDomain: chain.domain, amount: p.amount })
+      saveBridge({ campaign, burnTx, srcDomain: chain.domain, amount: p.amount }, submittedId)
       resolve({ burnTx, srcDomain: chain.domain })
     }
     kit.on('burn', onBurn)
@@ -164,15 +242,10 @@ export async function donateCrossChain(p: CrossChainParams): Promise<{ burnTx: H
         const burn = steps.find((s) => s.name === 'burn')
         if (burn) onBurn({ values: burn })
         if (settled) return
-        settled = true
-        kit.off('burn', onBurn)
-        reject(stepError(steps.find((s) => s.state === 'error')))
+        fail(stepError(steps.find((s) => s.state === 'error')))
       },
       (err: unknown) => {
-        if (settled) return
-        settled = true
-        kit.off('burn', onBurn)
-        reject(err)
+        if (!settled) fail(err)
       },
     )
   })

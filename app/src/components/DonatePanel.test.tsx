@@ -322,6 +322,21 @@ describe('DonatePanel', () => {
     expectBlocked()
   })
 
+  // A day-old unknown transaction is probably settled one way or the other. Say so, and keep Start over open.
+  it('restores a day-old block with a check-the-explorer note', async () => {
+    localStorage.setItem(
+      'fundit.pendingBridges',
+      JSON.stringify([{ kind: 'arc', campaign: CAMPAIGN, hash: HASH, approve: false, createdAt: Date.now() - 25 * 60 * 60 * 1000 }]),
+    )
+    fakeSender()
+    renderPanel(view('USDC'))
+    expect(screen.getByText('This was more than a day ago. Check the explorer before donating again.')).toBeTruthy()
+    expectBlocked()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Start over' }))
+    expect(donateButton()).toBeTruthy()
+  })
+
   it('does not restore the block on another campaign', () => {
     localStorage.setItem(
       'fundit.pendingBridges',

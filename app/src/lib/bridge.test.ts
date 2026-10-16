@@ -1,6 +1,6 @@
-import { type Address, type EIP1193Provider, getAddress, type Hex } from 'viem'
+import { type Address, type EIP1193Provider, getAddress, type Hex, UserRejectedRequestError } from 'viem'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { clearBridge, clearPendingArc, donateCrossChain, pendingArc, pendingBridges, savePendingArc } from './bridge'
+import { clearBridge, clearPendingArc, donateCrossChain, pendingArc, pendingBridges, pendingCrossChain, savePendingArc } from './bridge'
 import { explainError } from './errors'
 
 const CAMPAIGN = getAddress('0x00000000000000000000000000000000000000a1')
@@ -33,17 +33,27 @@ vi.mock('@circle-fin/bridge-kit', () => ({
     }
   },
 }))
+const adapterCalls: { provider: EIP1193Provider }[] = []
 vi.mock('@circle-fin/adapter-viem-v2', () => ({
-  createViemAdapterFromProvider: async (p: unknown) => ({ fake: 'adapter', params: p }),
+  createViemAdapterFromProvider: async (p: { provider: EIP1193Provider }) => {
+    adapterCalls.push(p)
+    return { fake: 'adapter', params: p }
+  },
 }))
 
-const provider = { request: async () => null } as unknown as EIP1193Provider
+// What the wallet would do: the adapter sends through the wrapped provider it was given.
+const walletSend = (method = 'eth_sendTransaction') =>
+  adapterCalls.at(-1)!.provider.request({ method, params: [] } as never)
+
+const newProvider = () => ({ request: async () => `0x${'aa'.repeat(32)}` }) as unknown as EIP1193Provider
+let provider = newProvider()
 
 afterEach(() => {
   localStorage.clear()
   vi.restoreAllMocks()
   kit.bridge = () => new Promise(() => {})
   kit.params = undefined
+  provider = newProvider()
 })
 
 describe('pending store', () => {
@@ -68,6 +78,29 @@ describe('pending store', () => {
   })
 
   // An unconfirmed Arc donation must still block a second donation after a reload.
+  // Old reminders must not pile up forever.
+  it('prunes entries older than 7 days on read', () => {
+    const old = Date.now() - 7 * 24 * 60 * 60 * 1000 - 1
+    localStorage.setItem(
+      KEY,
+      JSON.stringify([
+        { kind: 'bridge', campaign: CAMPAIGN, burnTx: BURN, srcDomain: 6, amount: '1', createdAt: old },
+        { kind: 'arc', campaign: CAMPAIGN, hash: BURN, approve: false, createdAt: old },
+        { kind: 'bridge', campaign: OTHER, burnTx: BURN, srcDomain: 6, amount: '1', createdAt: Date.now() },
+      ]),
+    )
+    expect(pendingArc(CAMPAIGN)).toBeNull()
+    expect(pendingBridges().map((b) => b.campaign)).toEqual([OTHER])
+  })
+
+  it('keeps the first createdAt when the same Arc transaction is saved again', () => {
+    // The age decides the "more than a day ago" warning, so a re-save on mount must not reset it.
+    const t = Date.now() - 5000
+    localStorage.setItem(KEY, JSON.stringify([{ kind: 'arc', campaign: CAMPAIGN, hash: BURN, approve: false, createdAt: t }]))
+    savePendingArc({ campaign: CAMPAIGN, hash: BURN, approve: false })
+    expect(pendingArc(CAMPAIGN)!.createdAt).toBe(t)
+  })
+
   it('keeps one unconfirmed Arc donation per campaign, apart from bridges', () => {
     savePendingArc({ campaign: CAMPAIGN, hash: BURN, approve: false })
     expect(pendingArc(CAMPAIGN)).toMatchObject({ kind: 'arc', campaign: CAMPAIGN, hash: BURN, approve: false })
@@ -140,6 +173,63 @@ describe('donateCrossChain', () => {
     expect(pendingBridges()).toEqual([])
   })
 
+  // Sequential wallets: the adapter wraps the rejection in a KitError, and the step category is only 'unknown'.
+  it('reads a rejection wrapped in a KitError trace as a cancel', async () => {
+    kit.bridge = async () => ({
+      state: 'error',
+      steps: [
+        {
+          name: 'approve',
+          state: 'error',
+          errorCategory: 'unknown',
+          errorMessage: 'Unknown blockchain error on Base',
+          error: { name: 'KitError', cause: { trace: { rawError: new UserRejectedRequestError(new Error('x')) } } },
+        },
+      ],
+    })
+    const err = await run().catch((e: unknown) => e)
+    expect(explainError(err)).toBe('You cancelled the request.')
+  })
+
+  // If the tab closes between the wallet sending and the burn event, the donor must still see something.
+  it('saves a submitted record on the first wallet send, then upgrades it with the burn hash', async () => {
+    let emitBurn: () => void = () => {}
+    kit.bridge = (_p, emit) => {
+      emitBurn = () => emit('burn', { name: 'burn', state: 'success', txHash: BURN })
+      return walletSend().then(() => new Promise(() => {}))
+    }
+    const pending = run()
+    await vi.waitFor(() => expect(pendingCrossChain()).toHaveLength(1))
+    const submitted = pendingCrossChain()[0]!
+    expect(submitted).toMatchObject({ kind: 'submitted', campaign: CAMPAIGN, srcDomain: 6 })
+    emitBurn()
+    await pending
+    expect(pendingCrossChain()).toEqual([
+      expect.objectContaining({ kind: 'bridge', burnTx: BURN, createdAt: submitted.createdAt }),
+    ])
+  })
+
+  it('clears the submitted record when the flow fails before the burn', async () => {
+    kit.bridge = async () => {
+      await walletSend()
+      expect(pendingCrossChain()).toHaveLength(1)
+      return { state: 'error', steps: [{ name: 'burn', state: 'error', errorCategory: 'user_rejected', errorMessage: 'rejected' }] }
+    }
+    await expect(run()).rejects.toThrow()
+    expect(pendingCrossChain()).toEqual([])
+  })
+
+  it('creates the kit and adapter once per wallet', async () => {
+    kit.bridge = (_p, emit) => {
+      emit('burn', { name: 'burn', state: 'success', txHash: BURN })
+      return new Promise(() => {})
+    }
+    const before = adapterCalls.length
+    await run()
+    await run({ sourceKey: 'Ethereum' })
+    expect(adapterCalls.length - before).toBe(1)
+  })
+
   // A burn whose receipt wait timed out may still be mined. Track it rather than invite a second donation.
   it('tracks a burn whose confirmation timed out', async () => {
     kit.bridge = async (_p, emit) => {
@@ -166,8 +256,8 @@ describe('donateCrossChain', () => {
     localStorage.setItem(
       KEY,
       JSON.stringify([
-        { kind: 'bridge', campaign: CAMPAIGN, burnTx: BURN, srcDomain: 6, amount: '1', createdAt: 1 },
-        { kind: 'bridge', campaign: OTHER, burnTx: `0x${'ee'.repeat(32)}`, srcDomain: 0, amount: '2', createdAt: 2 },
+        { kind: 'bridge', campaign: CAMPAIGN, burnTx: BURN, srcDomain: 6, amount: '1', createdAt: Date.now() },
+        { kind: 'bridge', campaign: OTHER, burnTx: `0x${'ee'.repeat(32)}`, srcDomain: 0, amount: '2', createdAt: Date.now() },
       ]),
     )
     clearBridge(BURN)

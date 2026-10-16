@@ -4,13 +4,26 @@ import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { type Address, type EIP1193Provider, formatUnits, type Hex } from 'viem'
 import { useConnection } from 'wagmi'
 import { ARC_DOMAIN, CCTP_CHAINS, type CctpChainKey } from '../config'
-import { chainByKey, clearBridge, donateCrossChain, estimateCrossChain, PENDING_EVENT, type PendingBridge, pendingBridges } from '../lib/bridge'
+import {
+  chainByKey,
+  clearBridge,
+  clearSubmitted,
+  donateCrossChain,
+  estimateCrossChain,
+  PENDING_EVENT,
+  type PendingBridge,
+  type PendingCrossChain,
+  pendingCrossChain,
+  type PendingSubmitted,
+} from '../lib/bridge'
 import type { CampaignView } from '../lib/campaigns'
 import { explainError } from '../lib/errors'
 import { bpsToPercent, formatAmount, parseAmount } from '../lib/format'
 import { fetchForwardFee, fetchTransferStatus, type TransferStatus } from '../lib/iris'
 
 const POLL_MS = 10_000
+// Wait for typing to pause before asking for a fee quote.
+const QUOTE_DEBOUNCE_MS = 400
 // After this the transfer is overdue. Stop polling and point the donor to the explorer.
 const MAX_TRACK_MS = 2 * 60 * 60 * 1000
 
@@ -50,20 +63,35 @@ export function CrossChainDonate({ view, onBusyChange }: { view: CampaignView; o
   const amountArg = amount === null ? '' : formatUnits(amount, 6)
   const wallet = isConnected && connector ? connector : null
 
-  // With a wallet, Bridge Kit's own estimate is the fee it will charge. Before that, Circle's public quote.
+  const [quoteAmount, setQuoteAmount] = useState<bigint | null>(null)
+  useEffect(() => {
+    const timer = setTimeout(() => setQuoteAmount(amount), QUOTE_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
+  }, [amount])
+
+  // With a wallet, Bridge Kit's own estimate is the fee it will charge. Before that, or if the wallet's
+  // network cannot be reached, Circle's public quote.
   const fee = useQuery({
-    queryKey: ['xchain-fee', sourceKey, fast, amount?.toString(), wallet ? address : null],
-    queryFn: async () => {
-      if (!wallet) return (await fetchForwardFee(chain.domain, ARC_DOMAIN, amount!, fast)).maxFee
-      const provider = (await wallet.getProvider()) as EIP1193Provider
-      return estimateCrossChain({ provider, sourceKey, campaign, amount: amountArg, fast })
+    queryKey: ['xchain-fee', sourceKey, fast, quoteAmount?.toString(), wallet ? address : null],
+    queryFn: async (): Promise<{ fee: bigint; source: 'wallet' | 'circle' | 'fallback' }> => {
+      const circle = async () => (await fetchForwardFee(chain.domain, ARC_DOMAIN, quoteAmount!, fast)).maxFee
+      if (!wallet) return { fee: await circle(), source: 'circle' }
+      try {
+        const provider = (await wallet.getProvider()) as EIP1193Provider
+        const total = await estimateCrossChain({ provider, sourceKey, campaign, amount: formatUnits(quoteAmount!, 6), fast })
+        return { fee: total, source: 'wallet' }
+      } catch {
+        return { fee: await circle(), source: 'fallback' }
+      }
     },
-    enabled: amount !== null && !summary.closed,
+    enabled: quoteAmount !== null && !summary.closed,
     staleTime: 30_000,
     retry: 1,
   })
 
-  const reaches = amount !== null && fee.data !== undefined ? amount - fee.data : null
+  // Only a quote for the amount now in the field counts.
+  const quote = amount !== null && quoteAmount === amount ? fee.data : undefined
+  const reaches = amount !== null && quote !== undefined ? amount - quote.fee : null
   const tooSmall = reaches !== null && reaches <= 0n
   const busy = phase.kind === 'sending'
   const canSubmit = !summary.closed && wallet !== null && amount !== null && reaches !== null && !tooSmall && !busy
@@ -147,16 +175,17 @@ export function CrossChainDonate({ view, onBusyChange }: { view: CampaignView; o
       {amount !== null && (
         <dl className="donate-breakdown" aria-label="Breakdown">
           <div>
-            <dt>Transfer fees</dt>
-            <dd>{fee.data !== undefined ? formatAmount(fee.data, 'USDC') : fee.isError ? 'Not available' : 'Checking...'}</dd>
+            <dt>{quote?.source === 'fallback' ? "Estimated fee (could not reach your wallet's network)" : 'Transfer fees'}</dt>
+            <dd>{quote !== undefined ? formatAmount(quote.fee, 'USDC') : fee.isError ? 'Not available' : 'Checking...'}</dd>
           </div>
           <div className="donate-total">
             <dt>Reaches the campaign</dt>
-            <dd>{reaches !== null && !tooSmall ? formatAmount(reaches, 'USDC') : '-'}</dd>
+            {/* Bridge Kit's estimate is the most it will charge, so this is a floor. */}
+            <dd>{reaches !== null && !tooSmall ? `At least ${formatAmount(reaches, 'USDC')}` : '-'}</dd>
           </div>
         </dl>
       )}
-      {fee.isError && <p className="field-error">Could not get a fee quote. {explainError(fee.error)}</p>}
+      {fee.isError && <p className="field-error">Could not get a fee quote. Try again in a moment.</p>}
       {tooSmall && <p className="field-error">This amount does not cover the transfer fees. Try a larger amount.</p>}
       <p className="hint">
         The transfer fees come out of the amount. You also pay network gas on {CHAIN_NAMES[sourceKey]}. Fundit's
@@ -196,8 +225,8 @@ export function CrossChainDonate({ view, onBusyChange }: { view: CampaignView; o
   )
 }
 
-function forCampaign(campaign: Address): PendingBridge[] {
-  return pendingBridges().filter((b) => b.campaign.toLowerCase() === campaign.toLowerCase())
+function forCampaign(campaign: Address): PendingCrossChain[] {
+  return pendingCrossChain().filter((b) => b.campaign.toLowerCase() === campaign.toLowerCase())
 }
 
 // Cross-chain donations to this campaign that have not reached it yet. Read from localStorage, so they
@@ -216,7 +245,7 @@ export function PendingBridgeTracker({ campaign }: { campaign: Address }) {
   return (
     <section className="bridge-tracker" aria-label="Cross-chain donations on the way">
       {entries.map((e) => (
-        <BridgeRow key={e.burnTx} entry={e} />
+        e.kind === 'bridge' ? <BridgeRow key={e.burnTx} entry={e} /> : <SubmittedRow key={e.id} entry={e} />
       ))}
     </section>
   )
@@ -293,6 +322,38 @@ function BridgeRow({ entry }: { entry: PendingBridge }) {
       {done && (
         <div className="donate-actions">
           <button type="button" className="btn btn-outline" onClick={() => clearBridge(burnTx)}>
+            Dismiss
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// The wallet sent, but no burn hash was recorded (the tab closed first). Nothing to poll; it expires like the rest.
+function SubmittedRow({ entry }: { entry: PendingSubmitted }) {
+  const chain = CCTP_CHAINS.find((c) => c.domain === entry.srcDomain)!
+  const what = `${entry.amount} USDC from ${CHAIN_NAMES[chain.key]}`
+  const [overdue, setOverdue] = useState(() => Date.now() - entry.createdAt > MAX_TRACK_MS)
+  useEffect(() => {
+    if (overdue) return
+    const timer = setTimeout(() => setOverdue(true), entry.createdAt + MAX_TRACK_MS - Date.now())
+    return () => clearTimeout(timer)
+  }, [overdue, entry.createdAt])
+  return (
+    <div className="status-box">
+      {overdue ? (
+        <p>
+          <strong>{what} was not confirmed.</strong> Check your wallet's activity on {CHAIN_NAMES[chain.key]}.
+        </p>
+      ) : (
+        <p>
+          <strong>{what}: Submitted, waiting for confirmation.</strong>
+        </p>
+      )}
+      {overdue && (
+        <div className="donate-actions">
+          <button type="button" className="btn btn-outline" onClick={() => clearSubmitted(entry.id)}>
             Dismiss
           </button>
         </div>
