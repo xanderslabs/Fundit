@@ -6,6 +6,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Base} from "./helpers/Base.t.sol";
 import {Campaign} from "../src/Campaign.sol";
 import {CampaignFactory} from "../src/CampaignFactory.sol";
+import {ITokenMessengerV2} from "../src/interfaces/ITokenMessengerV2.sol";
 import {MetadataLib} from "../src/MetadataLib.sol";
 import {Metadata, Summary} from "../src/Types.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
@@ -220,6 +221,36 @@ contract CampaignFactoryTest is Base {
         vm.prank(bob);
         factory.acceptOwnership();
         assertEq(factory.owner(), bob);
+    }
+
+    // The factory is immutable, so a zero address or a fee above the cap at deploy time
+    // could never be corrected.
+    function test_Constructor_RevertsBadConfig() public {
+        vm.expectRevert(CampaignFactory.ZeroAddress.selector);
+        new CampaignFactory(owner, address(0), usdcToken, eurcToken, messenger, 0, 0);
+        vm.expectRevert(CampaignFactory.ZeroAddress.selector);
+        new CampaignFactory(owner, treasury, IERC20(address(0)), eurcToken, messenger, 0, 0);
+        vm.expectRevert(CampaignFactory.ZeroAddress.selector);
+        new CampaignFactory(owner, treasury, usdcToken, IERC20(address(0)), messenger, 0, 0);
+        vm.expectRevert(CampaignFactory.ZeroAddress.selector);
+        new CampaignFactory(owner, treasury, usdcToken, eurcToken, ITokenMessengerV2(address(0)), 0, 0);
+        vm.expectRevert(CampaignFactory.FeeTooHigh.selector);
+        new CampaignFactory(owner, treasury, usdcToken, eurcToken, messenger, 501, 0);
+        vm.expectRevert(CampaignFactory.FeeTooHigh.selector);
+        new CampaignFactory(owner, treasury, usdcToken, eurcToken, messenger, 0, 501);
+    }
+
+    // Only the pending owner can complete a transfer, so a typo'd or hostile address
+    // cannot take the factory by calling acceptOwnership itself.
+    function test_AcceptOwnership_RevertsForNonPending() public {
+        address carol = makeAddr("carol");
+        vm.prank(owner);
+        factory.transferOwnership(bob);
+        vm.prank(carol);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, carol));
+        factory.acceptOwnership();
+        assertEq(factory.owner(), owner);
+        assertEq(factory.pendingOwner(), bob);
     }
 
     // Renouncing would leave fees and the treasury frozen forever with no way to rotate a

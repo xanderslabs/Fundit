@@ -174,6 +174,19 @@ contract CampaignWithdrawTest is Base {
         _assertBooked();
     }
 
+    // An EURC campaign must burn EURC, never the USDC the factory also knows about.
+    function test_Withdraw_CCTP_EurcBurnsEurc() public {
+        Campaign ec = Campaign(_create(IERC20(address(eurc)), 1_000e6));
+        eurc.mint(address(ec), 100e6);
+        vm.prank(alice);
+        ec.withdraw(50e6, BASE_DOMAIN, bytes32(uint256(0xBEEF)), 1e6, 1000, "");
+
+        assertEq(messenger.lastBurnToken(), address(eurc));
+        assertEq(messenger.lastAmount(), 50e6 - 0.5e6);
+        assertEq(eurc.balanceOf(address(messenger)), 50e6 - 0.5e6);
+        assertEq(usdc.balanceOf(address(messenger)), 0);
+    }
+
     // A zero CCTP recipient would burn funds with no one able to mint them.
     function test_Withdraw_CCTP_RevertsZeroRecipient() public {
         _donate(100e6);
