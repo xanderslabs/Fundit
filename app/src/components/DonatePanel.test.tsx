@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { type Address, decodeFunctionData, getAddress, type Hex, type TransactionReceipt } from 'viem'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -18,7 +18,14 @@ const state: { sender: Sender | null; balance: bigint; allowance: bigint } = { s
 const open = vi.fn()
 const reads: { address: Address; functionName: string; args: readonly unknown[] }[] = []
 
+// What "Check again" gets back. Each test sets it; the default throws so an unplanned re-check is loud.
+const recheck: { next: () => Promise<TxResult> } = { next: async () => { throw new Error('no re-check planned') } }
+
 vi.mock('../hooks/useSender', () => ({ useSender: () => state.sender }))
+vi.mock('../lib/sender', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/sender')>()),
+  waitForResult: () => recheck.next(),
+}))
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open }) }))
 vi.mock('../lib/clients', () => ({
   arcClient: {
@@ -80,7 +87,27 @@ afterEach(() => {
   state.allowance = 0n
   reads.length = 0
   open.mockClear()
+  recheck.next = async () => {
+    throw new Error('no re-check planned')
+  }
+  vi.restoreAllMocks()
 })
+
+async function fillAndDonate(amount = '10') {
+  const user = userEvent.setup()
+  await user.type(screen.getByLabelText('Amount'), amount)
+  await waitFor(() => expect(donateButton().disabled).toBe(false))
+  await user.click(donateButton())
+  return user
+}
+
+// Nothing in the panel may start a second donation while one may still be mined.
+function expectBlocked() {
+  expect(screen.queryByRole('button', { name: 'Donate' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Finish donation' })).toBeNull()
+  expect(screen.getByLabelText('Amount').matches(':disabled')).toBe(true)
+  expect(screen.getByRole('link', { name: /explorer/i }).getAttribute('href')).toBe(`https://explorer.arc.io/tx/${HASH}`)
+}
 
 describe('DonatePanel', () => {
   // The transfer would revert on chain, after the donor already paid gas for an approval.
@@ -197,5 +224,103 @@ describe('DonatePanel', () => {
     await user.click(donateButton())
     expect(await screen.findByText(/not confirmed yet/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Finish donation' })).toBeNull()
+  })
+
+  it('blocks a new donation after the donate call times out', async () => {
+    fakeSender({ status: 'timeout', hash: HASH, completed: 1 })
+    state.balance = 1000_000000n
+    renderPanel(view('USDC'))
+    await fillAndDonate()
+    expect(await screen.findByText(/donation is not confirmed yet/)).toBeTruthy()
+    expectBlocked()
+  })
+
+  it('blocks a new donation after the approval times out', async () => {
+    fakeSender({ status: 'timeout', hash: HASH, completed: 0 })
+    state.balance = 1000_000000n
+    renderPanel(view('USDC'))
+    await fillAndDonate()
+    expect(await screen.findByText(/approval is not confirmed yet/)).toBeTruthy()
+    expectBlocked()
+  })
+
+  it('stays blocked when Check again still cannot confirm', async () => {
+    fakeSender({ status: 'timeout', hash: HASH, completed: 1 })
+    state.balance = 1000_000000n
+    renderPanel(view('USDC'))
+    const user = await fillAndDonate()
+    recheck.next = async () => ({ status: 'timeout', hash: HASH, completed: 0 })
+    await user.click(await screen.findByRole('button', { name: 'Check again' }))
+    expect(await screen.findByRole('button', { name: 'Check again' })).toBeTruthy()
+    expectBlocked()
+  })
+
+  // A failed check is not an answer. It must never leave the panel stuck in "Checking" or unblock it.
+  it('stays blocked, not stuck checking, when the re-check throws', async () => {
+    fakeSender({ status: 'timeout', hash: HASH, completed: 1 })
+    state.balance = 1000_000000n
+    renderPanel(view('USDC'))
+    const user = await fillAndDonate()
+    recheck.next = async () => {
+      throw new Error('rpc down')
+    }
+    await user.click(await screen.findByRole('button', { name: 'Check again' }))
+    expect(await screen.findByText(/We could not check it/)).toBeTruthy()
+    expect(screen.queryByText(/Checking the transaction again/)).toBeNull()
+    expectBlocked()
+  })
+
+  // A reverted transaction moved nothing, so donating again is safe.
+  it('allows a new donation once Check again finds the donation reverted', async () => {
+    fakeSender({ status: 'timeout', hash: HASH, completed: 1 })
+    state.balance = 1000_000000n
+    renderPanel(view('USDC'))
+    const user = await fillAndDonate()
+    recheck.next = async () => ({ status: 'reverted', hash: HASH, error: 'The transaction failed on chain.', completed: 0 })
+    await user.click(await screen.findByRole('button', { name: 'Check again' }))
+    expect(await screen.findByText('The transaction failed on chain.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Donate' })).toBeTruthy()
+  })
+
+  it('moves to Finish donation once Check again finds the approval mined', async () => {
+    fakeSender({ status: 'timeout', hash: HASH, completed: 0 })
+    state.balance = 1000_000000n
+    renderPanel(view('USDC'))
+    const user = await fillAndDonate()
+    recheck.next = async () => success
+    await user.click(await screen.findByRole('button', { name: 'Check again' }))
+    expect(await screen.findByRole('button', { name: 'Finish donation' })).toBeTruthy()
+  })
+
+  // Start over is the donor's own choice, and only after they confirm the risk of giving twice.
+  it('Start over needs a confirm, then clears the form', async () => {
+    fakeSender({ status: 'timeout', hash: HASH, completed: 1 })
+    state.balance = 1000_000000n
+    renderPanel(view('USDC'))
+    const user = await fillAndDonate()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+    await user.click(await screen.findByRole('button', { name: 'Start over' }))
+    expect(confirm.mock.calls[0]![0]).toMatch(/may still go through/)
+    expectBlocked()
+    await user.click(screen.getByRole('button', { name: 'Start over' }))
+    expect(donateButton()).toBeTruthy()
+    expect((screen.getByLabelText('Amount') as HTMLInputElement).value).toBe('')
+  })
+
+  it('sends only once on a double submit', async () => {
+    const send = fakeSender(success)
+    state.balance = 1000_000000n
+    renderPanel(view('USDC'))
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText('Amount'), '10')
+    await waitFor(() => expect(donateButton().disabled).toBe(false))
+    const form = donateButton().closest('form')!
+    // One act, so both submits run against the same render, before the busy state can disable anything.
+    act(() => {
+      fireEvent.submit(form)
+      fireEvent.submit(form)
+    })
+    expect(await screen.findByText(/Thank you/)).toBeTruthy()
+    expect(send).toHaveBeenCalledTimes(1)
   })
 })

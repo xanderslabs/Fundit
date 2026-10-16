@@ -1,6 +1,6 @@
 import { useAppKit } from '@reown/appkit/react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useRef, useState } from 'react'
 import type { Hex } from 'viem'
 import { arc } from 'viem/chains'
 import { MAX_MESSAGE_BYTES, TX_TIMEOUT_MS } from '../config'
@@ -28,7 +28,8 @@ type Phase =
   | { kind: 'checking' }
   | { kind: 'success'; hash: Hex }
   // approve is true when the transaction that timed out is the approval, not the donation.
-  | { kind: 'timeout'; hash: Hex; approve: boolean }
+  // note explains a re-check that failed to answer. The outcome is still unknown, so this phase still blocks.
+  | { kind: 'timeout'; hash: Hex; approve: boolean; note?: string }
   // The approval is mined but the donation was not sent (cancelled or failed).
   | { kind: 'partial'; error?: string }
   | { kind: 'error'; message: string; hash?: Hex }
@@ -62,6 +63,8 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   const [message, setMessage] = useState('')
   const [source, setSource] = useState<PaySourceId>('arc')
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' })
+  // Set synchronously, so a second click before React re-renders cannot start a second send or check.
+  const inFlight = useRef(false)
 
   const fundsKey = ['donor-funds', token.toLowerCase(), sender?.address.toLowerCase(), campaign.toLowerCase()]
   const funds = useQuery({
@@ -81,7 +84,11 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   const overBalance = breakdown !== null && balance !== undefined && breakdown.total > balance
 
   const busy = phase.kind === 'sending' || phase.kind === 'checking'
-  const canSubmit = !closed && sender !== null && amount !== null && !messageTooLong && balance !== undefined && !overBalance && !busy
+  // An unconfirmed transaction may still be mined. Until a check settles it, no new donation can start.
+  const unconfirmed = phase.kind === 'timeout'
+  const locked = busy || unconfirmed
+  const canSubmit =
+    !closed && sender !== null && amount !== null && !messageTooLong && balance !== undefined && !overBalance && !locked
 
   function refreshAfterDonation() {
     void queryClient.invalidateQueries({ queryKey: ['campaign', campaign.toLowerCase()] })
@@ -113,7 +120,8 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   }
 
   async function donate() {
-    if (!canSubmit || !sender || amount === null) return
+    if (inFlight.current || !canSubmit || !sender || amount === null) return
+    inFlight.current = true
     setPhase({ kind: 'sending' })
     try {
       // Read the balance and allowance again right before building, so a finished approval is not repeated.
@@ -127,6 +135,8 @@ export function DonatePanel({ view }: { view: CampaignView }) {
       handle(await sender.send(calls, { label: 'Donate' }), calls.length > 1)
     } catch (err) {
       setPhase({ kind: 'error', message: explainError(err) })
+    } finally {
+      inFlight.current = false
     }
   }
 
@@ -137,14 +147,45 @@ export function DonatePanel({ view }: { view: CampaignView }) {
 
   // Checks the same transaction again. It never sends a new one, which could donate twice.
   async function checkAgain(hash: Hex, approve: boolean) {
+    if (inFlight.current) return
+    inFlight.current = true
     setPhase({ kind: 'checking' })
-    const res = await waitForResult(arcReceipts, hash, TX_TIMEOUT_MS)
-    if (!approve) return handle(res, false)
-    if (res.status === 'success') {
-      void queryClient.invalidateQueries({ queryKey: ['donor-funds'] })
-      setPhase({ kind: 'partial' })
-    } else if (res.status === 'timeout') setPhase({ kind: 'timeout', hash, approve: true })
-    else if (res.status === 'reverted') setPhase({ kind: 'error', message: res.error, hash })
+    try {
+      const res = await waitForResult(arcReceipts, hash, TX_TIMEOUT_MS)
+      if (!approve) return handle(res, false)
+      switch (res.status) {
+        case 'success':
+          void queryClient.invalidateQueries({ queryKey: ['donor-funds'] })
+          setPhase({ kind: 'partial' })
+          return
+        case 'timeout':
+          setPhase({ kind: 'timeout', hash, approve: true })
+          return
+        case 'reverted':
+          setPhase({ kind: 'error', message: res.error, hash })
+          return
+        case 'rejected':
+          // waitForResult never returns this, but the approval is not known to be mined, so start clean.
+          setPhase({ kind: 'error', message: 'The approval was not confirmed.', hash })
+      }
+    } catch (err) {
+      // The check itself failed, so the transaction is still unknown. Stay blocked rather than invite a second send.
+      setPhase({ kind: 'timeout', hash, approve, note: `We could not check it. ${explainError(err)}` })
+    } finally {
+      inFlight.current = false
+    }
+  }
+
+  // The donor chooses to stop waiting. They confirm that the earlier transaction may still go through.
+  function startOver() {
+    const ok = window.confirm(
+      'The earlier transaction may still go through. If it does and you donate again, you will give twice. Start a new donation anyway?',
+    )
+    if (!ok) return
+    setAmountText('')
+    setMessage('')
+    setTipPercent(0)
+    setPhase({ kind: 'idle' })
   }
 
   let balanceNote: string | null = null
@@ -160,7 +201,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
       {closed && <p className="field-error">This campaign is closed.</p>}
 
       <form className="donate-form" onSubmit={submit} noValidate>
-        <fieldset className="donate-fields" disabled={closed || busy}>
+        <fieldset className="donate-fields" disabled={closed || locked}>
           <div className="form-field">
             <label htmlFor="donate-amount">Amount</label>
             <div className="donate-amount">
@@ -286,9 +327,15 @@ export function DonatePanel({ view }: { view: CampaignView }) {
               <p>
                 <ExplorerLink hash={phase.hash} />
               </p>
-              <button type="button" className="btn btn-outline" onClick={() => checkAgain(phase.hash, phase.approve)}>
-                Check again
-              </button>
+              {phase.note && <p className="field-error">{phase.note}</p>}
+              <div className="donate-actions">
+                <button type="button" className="btn btn-outline" onClick={() => checkAgain(phase.hash, phase.approve)}>
+                  Check again
+                </button>
+                <button type="button" className="btn btn-outline" onClick={startOver}>
+                  Start over
+                </button>
+              </div>
             </div>
           )}
           {phase.kind === 'partial' && (
@@ -309,7 +356,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
           )}
         </div>
 
-        {!sender && !closed ? (
+        {unconfirmed ? null : !sender && !closed ? (
           <ConnectPrompt />
         ) : phase.kind === 'partial' ? (
           <button type="submit" className="btn btn-lg donate-submit" disabled={!canSubmit}>

@@ -130,3 +130,9 @@
 .donate-submit {
   align-self: stretch;
 }
+
+.donate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
