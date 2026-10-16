@@ -1,0 +1,105 @@
+import type { Address } from 'viem'
+import { describe, expect, it } from 'vitest'
+import { TOKENS } from '../config'
+import { fetchCampaign, fetchCampaignPage, fetchFeatured, type ReadClient, type Summary } from './campaigns'
+
+const A = '0x00000000000000000000000000000000000000a1' as Address
+const B = '0x00000000000000000000000000000000000000b2' as Address
+const C = '0x00000000000000000000000000000000000000c3' as Address
+const ZERO = '0x0000000000000000000000000000000000000000' as Address
+
+function summary(title: string, token: Address = TOKENS.USDC.address): Summary {
+  return {
+    creator: '0x1111111111111111111111111111111111111111',
+    token,
+    goal: 1000000000n,
+    raised: 0n,
+    available: 0n,
+    withdrawn: 0n,
+    closed: false,
+    donationFeeBps: 0,
+    withdrawFeeBps: 250,
+    createdAt: 0n,
+    createdAtBlock: 1n,
+    backup: ZERO,
+    recoveryReadyAt: 0n,
+    meta: { title, description: '', imageUrl: '', links: [] },
+  }
+}
+
+// A fake Arc client: the factory stores campaigns oldest first, like CampaignFactory.campaigns.
+function fakeClient(opts: { campaigns: Address[]; summaries: Record<string, Summary>; featured?: Address; real?: Address[] }) {
+  const real = new Set((opts.real ?? opts.campaigns).map((a) => a.toLowerCase()))
+  const client = {
+    async readContract({ address, functionName, args }: { address: Address; functionName: string; args?: readonly unknown[] }) {
+      if (functionName === 'campaignCount') return BigInt(opts.campaigns.length)
+      if (functionName === 'getCampaigns') {
+        const [offset, limit] = args as [bigint, bigint]
+        return opts.campaigns.slice(Number(offset), Number(offset + limit))
+      }
+      if (functionName === 'isCampaign') return real.has((args![0] as string).toLowerCase())
+      if (functionName === 'featuredCampaign') return opts.featured ?? ZERO
+      if (functionName === 'summary') return opts.summaries[address]
+      throw new Error(`unexpected ${functionName}`)
+    },
+    async multicall({ contracts }: { contracts: readonly { address: Address; functionName: string }[] }) {
+      return contracts.map((c) => {
+        if (c.functionName !== 'summary') throw new Error(`unexpected ${c.functionName}`)
+        return opts.summaries[c.address]
+      })
+    },
+  }
+  return client as unknown as ReadClient
+}
+
+describe('fetchCampaignPage', () => {
+  const client = fakeClient({
+    campaigns: [A, B, C],
+    summaries: { [A]: summary('first'), [B]: summary('second', TOKENS.EURC.address), [C]: summary('third') },
+  })
+
+  it('returns campaigns newest first with the token symbol', async () => {
+    const page = await fetchCampaignPage(client, 0n, 10n)
+    expect(page.map((v) => v.summary.meta.title)).toEqual(['third', 'second', 'first'])
+    expect(page.map((v) => v.address)).toEqual([C, B, A])
+    expect(page[1]!.symbol).toBe('EURC')
+    expect(page[0]!.symbol).toBe('USDC')
+  })
+
+  it('pages from the newest end', async () => {
+    expect((await fetchCampaignPage(client, 0n, 2n)).map((v) => v.address)).toEqual([C, B])
+    expect((await fetchCampaignPage(client, 2n, 2n)).map((v) => v.address)).toEqual([A])
+    expect(await fetchCampaignPage(client, 3n, 2n)).toEqual([])
+  })
+})
+
+describe('fetchCampaign', () => {
+  // Anyone can clone the campaign implementation, so an address the factory does not know is never trusted.
+  it("returns 'not-a-campaign' when isCampaign is false", async () => {
+    const client = fakeClient({ campaigns: [A], summaries: { [B]: summary('fake') }, real: [A] })
+    expect(await fetchCampaign(client, B)).toBe('not-a-campaign')
+  })
+
+  it('returns the view for a factory campaign', async () => {
+    const client = fakeClient({ campaigns: [A], summaries: { [A]: summary('real') } })
+    const view = await fetchCampaign(client, A)
+    expect(view).not.toBe('not-a-campaign')
+    if (view !== 'not-a-campaign') expect(view.summary.meta.title).toBe('real')
+  })
+})
+
+describe('fetchFeatured', () => {
+  it('returns null when nothing is featured', async () => {
+    expect(await fetchFeatured(fakeClient({ campaigns: [A], summaries: {} }))).toBeNull()
+  })
+
+  it('returns the featured campaign', async () => {
+    const client = fakeClient({ campaigns: [A], summaries: { [A]: summary('star') }, featured: A })
+    expect((await fetchFeatured(client))?.summary.meta.title).toBe('star')
+  })
+
+  it('ignores a featured address the factory does not know', async () => {
+    const client = fakeClient({ campaigns: [A], summaries: { [B]: summary('x') }, featured: B, real: [A] })
+    expect(await fetchFeatured(client)).toBeNull()
+  })
+})
