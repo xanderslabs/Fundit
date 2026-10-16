@@ -507,6 +507,35 @@ describe('DonatePanel', () => {
       expect(radio(/Arc wallet/).disabled).toBe(false)
     })
 
+    // Another tab wrote the entry after this form loaded and this tab heard nothing. Submit reads the store again.
+    it('re-reads the store at Arc wallet submit and sends nothing while another donation is unconfirmed', async () => {
+      const send = fakeSender()
+      state.balance = 1000_000000n
+      renderPanel(view('USDC'))
+      const user = userEvent.setup()
+      await user.type(screen.getByLabelText('Amount'), '10')
+      await waitFor(() => expect(donateButton().disabled).toBe(false))
+      localStorage.setItem(KEY, JSON.stringify([{ kind: 'unified', campaign: CAMPAIGN, amount: '5', createdAt: Date.now() }]))
+      await user.click(donateButton())
+      expect(await screen.findByText(/unified balance donation is not confirmed yet/)).toBeTruthy()
+      expect(send).not.toHaveBeenCalled()
+      expect(radio(/Arc wallet/).disabled).toBe(true)
+    })
+
+    // The browser tells other tabs of a localStorage change with a storage event.
+    it('picks up an Arc donation another tab left unconfirmed, on the storage event', async () => {
+      fakeSender()
+      state.balance = 1000_000000n
+      renderPanel(view('USDC'))
+      expect(screen.queryByText(/not confirmed yet/)).toBeNull()
+      localStorage.setItem(KEY, JSON.stringify([{ kind: 'arc', campaign: CAMPAIGN, hash: HASH, approve: false, createdAt: Date.now() }]))
+      act(() => {
+        window.dispatchEvent(new StorageEvent('storage', { key: KEY }))
+      })
+      expect(await screen.findByText(/Arc wallet donation is not confirmed yet/)).toBeTruthy()
+      unsubmittable()
+    })
+
     it('a submitted cross-chain entry with no burn hash yet also blocks', () => {
       store({ kind: 'submitted', id: 's-1', srcDomain: 6, amount: '25' })
       fakeSender()

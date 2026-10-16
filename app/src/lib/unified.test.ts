@@ -2,6 +2,7 @@ import { type EIP1193Provider, getAddress, type Hex } from 'viem'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   donateFromUnified,
+  estimateReserves,
   fetchGatewayTransfer,
   fetchUnifiedBalance,
   isSafeToRetry,
@@ -148,6 +149,31 @@ describe('fee reserves', () => {
     await expect(planSpend({ provider, campaign: CAMPAIGN, byChain: ARB_BASE, amount: 40_000000n })).rejects.toThrow(
       'Not enough unified balance',
     )
+  })
+})
+
+describe('estimateReserves', () => {
+  it('asks Circle for each funded chain when the wallet has already granted an account', async () => {
+    const reserves = await estimateReserves({ provider, campaign: CAMPAIGN, byChain: ARB_BASE })
+    expect(reserves.get('Arbitrum')).toBe(50_000n)
+    expect(reserves.get('Base')).toBe(50_000n)
+    expect(kit.estimates).toBe(2)
+  })
+
+  // With no account granted, the adapter would fall back to eth_requestAccounts, which opens the wallet.
+  // A fee preview must never do that, so it keeps the static table.
+  it('never estimates when eth_accounts is empty, so the wallet cannot prompt', async () => {
+    const methods: string[] = []
+    const locked = {
+      request: async ({ method }: { method: string }) => {
+        methods.push(method)
+        return []
+      },
+    } as unknown as EIP1193Provider
+    const reserves = await estimateReserves({ provider: locked, campaign: CAMPAIGN, byChain: ARB_BASE })
+    expect(kit.estimates).toBe(0)
+    expect(methods).toEqual(['eth_accounts'])
+    expect(reserves.get('Base')).toBe(staticReserve('Base', 10_000000n))
   })
 })
 

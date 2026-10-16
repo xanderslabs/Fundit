@@ -11,9 +11,11 @@ import {
   blockingEntry,
   clearCrossChain,
   clearPendingArc,
-  PENDING_EVENT,
+  notifyPending,
+  type PendingArc,
   pendingArc,
   savePendingArc,
+  subscribePending,
 } from '../lib/bridge'
 import type { CampaignView } from '../lib/campaigns'
 import { arcClient } from '../lib/clients'
@@ -68,6 +70,11 @@ type Phase =
   | { kind: 'partial'; error?: string }
   | { kind: 'error'; message: string; hash?: Hex }
 
+function arcTimeout(saved: PendingArc): Phase {
+  const note = Date.now() - saved.createdAt > DAY_MS ? 'This was more than a day ago. Check the explorer before donating again.' : undefined
+  return { kind: 'timeout', hash: saved.hash, approve: saved.approve, userop: saved.hashKind === 'userop', note }
+}
+
 function ExplorerLink({ hash }: { hash: Hex }) {
   return (
     <a href={`${EXPLORER_URL}/tx/${hash}`} target="_blank" rel="noopener noreferrer">
@@ -100,11 +107,16 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   // The unconfirmed donation to this campaign, from any source, read from the shared pending store. While
   // there is one, every source is blocked and only its own status shows.
   const [blocker, setBlocker] = useState<BlockingEntry | null>(() => blockingEntry(campaign))
+  // Re-read on every change, from this tab or another. An Arc donation another tab left unconfirmed also
+  // puts this form into its not-confirmed state, unless this tab is sending or checking its own.
   useEffect(() => {
-    const reload = () => setBlocker(blockingEntry(campaign))
+    const reload = () => {
+      setBlocker(blockingEntry(campaign))
+      const saved = pendingArc(campaign)
+      if (saved) setPhase((p) => (p.kind === 'sending' || p.kind === 'checking' || p.kind === 'timeout' ? p : arcTimeout(saved)))
+    }
     reload()
-    window.addEventListener(PENDING_EVENT, reload)
-    return () => window.removeEventListener(PENDING_EVENT, reload)
+    return subscribePending(reload)
   }, [campaign])
   const blockedSource: PaySourceId | null = !blocker
     ? null
@@ -116,9 +128,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   // An unconfirmed donation saved before a reload still blocks a new one until it is settled.
   const [phase, setPhase] = useState<Phase>(() => {
     const saved = pendingArc(campaign)
-    if (!saved) return { kind: 'idle' }
-    const note = Date.now() - saved.createdAt > DAY_MS ? 'This was more than a day ago. Check the explorer before donating again.' : undefined
-    return { kind: 'timeout', hash: saved.hash, approve: saved.approve, userop: saved.hashKind === 'userop', note }
+    return saved ? arcTimeout(saved) : { kind: 'idle' }
   })
   const [crossChainBusy, setCrossChainBusy] = useState(false)
   const sources = PAY_SOURCES.filter(
@@ -202,6 +212,12 @@ export function DonatePanel({ view }: { view: CampaignView }) {
 
   async function donate() {
     if (inFlight.current || !canSubmit || !sender || amount === null) return
+    // Another tab may have started a donation to this campaign since this form loaded. Read the store again
+    // before anything is sent; the listeners then show that donation's blocked state.
+    if (blockingEntry(campaign)) {
+      notifyPending()
+      return
+    }
     inFlight.current = true
     setPhase({ kind: 'sending' })
     try {

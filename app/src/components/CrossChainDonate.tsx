@@ -7,15 +7,18 @@ import { ARC_DOMAIN, CCTP_CHAINS, CHAIN_LABELS, type CctpChainKey } from '../con
 import {
   chainByKey,
   clearBridge,
+  ANOTHER_PENDING,
+  blockingEntry,
   clearSubmitted,
   donateCrossChain,
   markBridgeMinted,
   estimateCrossChain,
-  PENDING_EVENT,
+  notifyPending,
   type PendingBridge,
   type PendingCrossChain,
   pendingCrossChain,
   type PendingSubmitted,
+  subscribePending,
 } from '../lib/bridge'
 import type { CampaignView } from '../lib/campaigns'
 import { explainError } from '../lib/errors'
@@ -99,6 +102,13 @@ export function CrossChainDonate({
 
   async function donate() {
     if (inFlight.current || !canSubmit || !wallet) return
+    // Another tab may have started a donation to this campaign since this form loaded. Read the store again
+    // before anything is sent, and let every listener in this tab catch up.
+    if (blockingEntry(campaign)) {
+      setPhase({ kind: 'error', message: ANOTHER_PENDING })
+      notifyPending()
+      return
+    }
     inFlight.current = true
     setPhase({ kind: 'sending' })
     onBusyChange?.(true)
@@ -238,8 +248,7 @@ export function PendingBridgeTracker({ campaign, destination = 'the campaign' }:
   useEffect(() => {
     const reload = () => setEntries(forCampaign(campaign))
     reload()
-    window.addEventListener(PENDING_EVENT, reload)
-    return () => window.removeEventListener(PENDING_EVENT, reload)
+    return subscribePending(reload)
   }, [campaign])
 
   if (entries.length === 0) return null
@@ -262,7 +271,9 @@ function BridgeRow({ entry, destination }: { entry: PendingBridge; destination: 
   const chain = CCTP_CHAINS.find((c) => c.domain === srcDomain)!
   const queryClient = useQueryClient()
   const overdue = () => Date.now() - createdAt > MAX_TRACK_MS
-  const [status, setStatus] = useState<RowStatus>(() => (entry.minted ? 'minted' : overdue() ? 'expired' : 'pending'))
+  // An overdue entry still gets one last look at Iris before it shows as expired: it may have arrived while
+  // the tab was closed.
+  const [status, setStatus] = useState<RowStatus>(() => (entry.minted ? 'minted' : 'pending'))
   const done = status === 'minted' || status === 'expired'
 
   useEffect(() => {
@@ -271,15 +282,12 @@ function BridgeRow({ entry, destination }: { entry: PendingBridge; destination: 
     let polling = false
     async function poll() {
       if (stopped || polling || document.visibilityState !== 'visible') return
-      if (Date.now() - createdAt > MAX_TRACK_MS) {
-        setStatus('expired')
-        return
-      }
+      const last = overdue()
       polling = true
       const next = await fetchTransferStatus(srcDomain, burnTx)
       polling = false
       if (stopped) return
-      setStatus(next)
+      setStatus(next !== 'minted' && last ? 'expired' : next)
       if (next === 'minted') {
         // Recorded, so this transfer stops blocking a new donation.
         markBridgeMinted(burnTx)

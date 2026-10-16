@@ -64,6 +64,29 @@ function writeAll(entries: Entry[]) {
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
 
+// Calls back on every change to the store: from this tab (PENDING_EVENT) and from other tabs (the browser's
+// storage event, which never fires in the tab that wrote). Returns the unsubscribe function.
+export function subscribePending(callback: () => void): () => void {
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === KEY || e.key === null) callback()
+  }
+  window.addEventListener(PENDING_EVENT, callback)
+  window.addEventListener('storage', onStorage)
+  return () => {
+    window.removeEventListener(PENDING_EVENT, callback)
+    window.removeEventListener('storage', onStorage)
+  }
+}
+
+// Tells every listener in this tab to read the store again, for example after a submit found a donation
+// that another tab saved without this tab hearing of it.
+export function notifyPending() {
+  window.dispatchEvent(new Event(PENDING_EVENT))
+}
+
+// Shown when a submit finds that another donation to this campaign is still unconfirmed.
+export const ANOTHER_PENDING = 'Another donation to this campaign is not confirmed yet. Wait for it before you donate again.'
+
 export function pendingBridges(): PendingBridge[] {
   return readAll().filter((e): e is PendingBridge => e.kind === 'bridge')
 }

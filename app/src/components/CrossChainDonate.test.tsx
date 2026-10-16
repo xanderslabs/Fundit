@@ -20,6 +20,7 @@ const estimate = vi.hoisted(() => ({
   fn: (async () => 0n) as (p: { amount: string }) => Promise<bigint>,
   calls: [] as string[],
   accounts: [] as (string | undefined)[],
+  donations: 0,
 }))
 vi.mock('../lib/bridge', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/bridge')>()),
@@ -27,6 +28,10 @@ vi.mock('../lib/bridge', async (importOriginal) => ({
     estimate.calls.push(p.amount)
     estimate.accounts.push(p.account)
     return estimate.fn(p)
+  },
+  donateCrossChain: async () => {
+    estimate.donations++
+    return new Promise(() => {})
   },
 }))
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: () => {} }) }))
@@ -89,6 +94,7 @@ afterEach(() => {
   estimate.fn = async () => 0n
   estimate.calls.length = 0
   estimate.accounts.length = 0
+  estimate.donations = 0
 })
 
 const connectWallet = () => {
@@ -177,6 +183,21 @@ describe('CrossChainDonate fees with a wallet', () => {
     await waitFor(() => expect((screen.getByRole('button', { name: 'Donate' }) as HTMLButtonElement).disabled).toBe(false))
   })
 
+  // Another tab may have started a donation to this campaign after this form loaded, without this tab hearing
+  // of it. The store is read again at submit, and nothing is sent while that donation is unconfirmed.
+  it('re-reads the pending store at submit and sends nothing while another donation is unconfirmed', async () => {
+    connectWallet()
+    stubFetch(() => FEE_SAMPLE)
+    wrap(<CrossChainDonate view={view('USDC')} />)
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText('Amount'), '25')
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Donate' }) as HTMLButtonElement).disabled).toBe(false))
+    localStorage.setItem(KEY, JSON.stringify([{ kind: 'unified', campaign: CAMPAIGN, amount: '5', createdAt: Date.now() }]))
+    await user.click(screen.getByRole('button', { name: 'Donate' }))
+    expect(await screen.findByText(/Another donation to this campaign is not confirmed yet/)).toBeTruthy()
+    expect(estimate.donations).toBe(0)
+  })
+
   // Nothing is being sent while quoting, so the error must not talk about sending.
   it('says plainly when no quote is available', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })))
@@ -231,13 +252,34 @@ describe('PendingBridgeTracker', () => {
     await waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1))
   })
 
-  // After 2 hours something is wrong. Stop polling and send the donor to the source-chain explorer.
-  it('stops after 2 hours and links the burn on the source-chain explorer', async () => {
+  // After 2 hours something is wrong. One last look at Iris, then stop and send the donor to the explorer.
+  it('asks Iris once more after 2 hours, then stops and links the burn on the source-chain explorer', async () => {
     savePending(Date.now() - 2 * 60 * 60 * 1000 - 1)
     const fetchFn = stubFetch(() => ({ messages: [] }))
     wrap(<PendingBridgeTracker campaign={CAMPAIGN} />)
     const link = await screen.findByRole('link', { name: /Check the explorer/ })
     expect(link.getAttribute('href')).toBe(`https://basescan.org/tx/${BURN}`)
-    expect(fetchFn).not.toHaveBeenCalled()
+    await new Promise((r) => setTimeout(r, 20))
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+  })
+
+  // A transfer that arrived while the tab was closed must not show as overdue, nor keep blocking donations.
+  it('marks an overdue transfer minted when the last Iris check finds the mint', async () => {
+    savePending(Date.now() - 2 * 60 * 60 * 1000 - 1)
+    stubFetch(() => ({ messages: [{ status: 'complete', forwardTxHash: `0x${'ef'.repeat(32)}` }] }))
+    wrap(<PendingBridgeTracker campaign={CAMPAIGN} />)
+    expect(await screen.findByText(/reached the campaign/)).toBeTruthy()
+    expect(screen.queryByRole('link', { name: /Check the explorer/ })).toBeNull()
+    expect(JSON.parse(localStorage.getItem(KEY)!)[0]).toMatchObject({ burnTx: BURN, minted: true })
+  })
+
+  // Another tab saved a transfer. The browser tells this tab through a storage event.
+  it('shows a transfer another tab saved, on the storage event', async () => {
+    stubFetch(() => ({ messages: [] }))
+    wrap(<PendingBridgeTracker campaign={CAMPAIGN} />)
+    expect(screen.queryByText(/on its way/)).toBeNull()
+    savePending(Date.now())
+    window.dispatchEvent(new StorageEvent('storage', { key: KEY }))
+    expect(await screen.findByText(/on its way/)).toBeTruthy()
   })
 })

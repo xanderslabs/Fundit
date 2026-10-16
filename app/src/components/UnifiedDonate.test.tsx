@@ -17,6 +17,7 @@ const m = vi.hoisted(() => ({
   balance: { total: 0n, byChain: [] as { chain: string; amount: bigint }[] },
   // Circle's fee on every chain, as the estimate would report it.
   fee: 50_000n,
+  estimates: 0,
   donate: vi.fn(),
   transfer: vi.fn(),
   receipt: async (): Promise<TxResult> => {
@@ -30,7 +31,10 @@ vi.mock('wagmi', () => ({
 vi.mock('../lib/unified', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/unified')>()),
   fetchUnifiedBalance: async () => m.balance,
-  estimateReserves: async (p: { byChain: { chain: string }[] }) => new Map(p.byChain.map((c) => [c.chain, m.fee])),
+  estimateReserves: async (p: { byChain: { chain: string }[] }) => {
+    m.estimates++
+    return new Map(p.byChain.map((c) => [c.chain, m.fee]))
+  },
   // The real allocation logic, with the estimated reserves standing in for Circle's per-allocation estimate.
   planSpend: async (p: { byChain: { chain: string; amount: bigint }[]; amount: bigint; reserves: Map<string, bigint> }) => {
     const { pickAllocations } = await importOriginal<typeof import('../lib/unified')>()
@@ -90,6 +94,7 @@ afterEach(() => {
   localStorage.clear()
   vi.restoreAllMocks()
   m.fee = 50_000n
+  m.estimates = 0
   m.balance = { total: 0n, byChain: [] }
   m.donate.mockReset()
   m.transfer.mockReset()
@@ -138,11 +143,14 @@ describe('UnifiedDonate', () => {
   it('blocks an amount the fees would push over the balance, and says how much can be sent', async () => {
     m.balance = { total: 40_000000n, byChain: [{ chain: 'Base', amount: 40_000000n }] }
     renderIt()
-    expect(await screen.findByText(/Up to 39\.95 USDC can be sent after fees/)).toBeTruthy()
+    // Before an amount, the static fee table sets the limit (Base: 0.01 gas, 0.201 forwarder, 0.5 bps).
+    expect(await screen.findByText(/Up to 39\.78 USDC can be sent after fees/)).toBeTruthy()
     const user = userEvent.setup()
     const input = screen.getByLabelText('Amount')
     await waitFor(() => expect(input.matches(':disabled')).toBe(false))
     await user.type(input, '40')
+    // Once an amount is typed, Circle's estimate (0.05 here) replaces it.
+    expect(await screen.findByText(/Up to 39\.95 USDC can be sent after fees/)).toBeTruthy()
     expect(screen.getByText(/more than can be sent from your unified balance after Circle's fees/)).toBeTruthy()
     expect(donateButton().disabled).toBe(true)
     await user.clear(input)
@@ -187,6 +195,65 @@ describe('UnifiedDonate', () => {
     expect(screen.queryByRole('button', { name: 'Check again' })).toBeNull()
     expect(screen.getByText(/raised amount and your unified balance/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Start over' })).toBeTruthy()
+  })
+
+  // estimateSpend can make the wallet ask for account access, so Circle's fee estimate waits until the donor
+  // has opened this option and typed an amount. The static fee table covers the limit until then.
+  it('does not ask Circle for fees on balance load, only once an amount is entered', async () => {
+    m.balance = { total: 40_000000n, byChain: [{ chain: 'Base', amount: 40_000000n }] }
+    renderIt()
+    expect(await screen.findByText(/can be sent after fees/)).toBeTruthy()
+    await new Promise((r) => setTimeout(r, 20))
+    expect(m.estimates).toBe(0)
+    const user = userEvent.setup()
+    const input = screen.getByLabelText('Amount')
+    await waitFor(() => expect(input.matches(':disabled')).toBe(false))
+    await user.type(input, '5')
+    await waitFor(() => expect(m.estimates).toBe(1))
+  })
+
+  describe('a donation started in another tab', () => {
+    const silently = (entry: Record<string, unknown>) =>
+      localStorage.setItem('fundit.pendingBridges', JSON.stringify([{ campaign: CAMPAIGN, createdAt: Date.now(), ...entry }]))
+
+    it('blocks at submit when another tab left a unified spend unconfirmed, and sends nothing', async () => {
+      m.balance = { total: 40_000000n, byChain: [{ chain: 'Base', amount: 40_000000n }] }
+      renderIt()
+      const user = userEvent.setup()
+      const input = await screen.findByLabelText('Amount')
+      await waitFor(() => expect(input.matches(':disabled')).toBe(false))
+      await user.type(input, '5')
+      await waitFor(() => expect(donateButton().disabled).toBe(false))
+      silently({ kind: 'unified', amount: '9', transferId: 't-7' })
+      await user.click(donateButton())
+      expect(await screen.findByText(/unified balance donation is not confirmed yet/)).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Check again' })).toBeTruthy()
+      expect(m.donate).not.toHaveBeenCalled()
+    })
+
+    it('blocks at submit when another source is unconfirmed, and sends nothing', async () => {
+      m.balance = { total: 40_000000n, byChain: [{ chain: 'Base', amount: 40_000000n }] }
+      renderIt()
+      const user = userEvent.setup()
+      const input = await screen.findByLabelText('Amount')
+      await waitFor(() => expect(input.matches(':disabled')).toBe(false))
+      await user.type(input, '5')
+      await waitFor(() => expect(donateButton().disabled).toBe(false))
+      silently({ kind: 'arc', hash: ARC_TX, approve: false })
+      await user.click(donateButton())
+      expect(await screen.findByText(/Another donation to this campaign is not confirmed yet/)).toBeTruthy()
+      expect(m.donate).not.toHaveBeenCalled()
+    })
+
+    it('shows the block live when another tab saves a unified spend', async () => {
+      m.balance = { total: 40_000000n, byChain: [{ chain: 'Base', amount: 40_000000n }] }
+      renderIt()
+      await screen.findByLabelText('Amount')
+      silently({ kind: 'unified', amount: '9', transferId: 't-7' })
+      window.dispatchEvent(new StorageEvent('storage', { key: 'fundit.pendingBridges' }))
+      expect(await screen.findByText(/unified balance donation is not confirmed yet/)).toBeTruthy()
+      expect(screen.queryByRole('button', { name: 'Donate' })).toBeNull()
+    })
   })
 
   describe('after a reload', () => {

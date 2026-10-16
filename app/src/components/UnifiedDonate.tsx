@@ -4,7 +4,16 @@ import { type EIP1193Provider, formatUnits, type Hex } from 'viem'
 import { arc } from 'viem/chains'
 import { useConnection } from 'wagmi'
 import { CHAIN_LABELS, TX_TIMEOUT_MS } from '../config'
-import { clearPendingUnified, pendingUnified, savePendingUnified } from '../lib/bridge'
+import {
+  ANOTHER_PENDING,
+  blockingEntry,
+  clearPendingUnified,
+  notifyPending,
+  type PendingUnified,
+  pendingUnified,
+  savePendingUnified,
+  subscribePending,
+} from '../lib/bridge'
 import type { CampaignView } from '../lib/campaigns'
 import { explainError } from '../lib/errors'
 import { bpsToPercent, formatAmount, parseAmount } from '../lib/format'
@@ -38,6 +47,10 @@ type Phase =
   | { kind: 'timeout'; amount: string; hash?: Hex; transferId?: string; note?: string }
   | { kind: 'error'; message: string }
 
+function unifiedTimeout(saved: PendingUnified): Phase {
+  return { kind: 'timeout', amount: saved.amount, hash: saved.hash, transferId: saved.transferId }
+}
+
 function chainName(chain: string): string {
   return CHAIN_LABELS[chain as keyof typeof CHAIN_LABELS] ?? chain
 }
@@ -59,8 +72,17 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
   // A spend started before a reload still blocks a new one until it is checked or the donor starts over.
   const [phase, setPhase] = useState<Phase>(() => {
     const saved = pendingUnified(campaign)
-    return saved ? { kind: 'timeout', amount: saved.amount, hash: saved.hash, transferId: saved.transferId } : { kind: 'idle' }
+    return saved ? unifiedTimeout(saved) : { kind: 'idle' }
   })
+  // A spend another tab saved for this campaign blocks this form too, unless this tab is mid-spend or checking.
+  useEffect(
+    () =>
+      subscribePending(() => {
+        const saved = pendingUnified(campaign)
+        if (saved) setPhase((p) => (p.kind === 'idle' || p.kind === 'success' || p.kind === 'error' ? unifiedTimeout(saved) : p))
+      }),
+    [campaign],
+  )
   // Set synchronously, so a second click before React re-renders cannot start a second spend or check.
   const inFlight = useRef(false)
   const wallet = isConnected && connector && address ? { connector, address } : null
@@ -72,6 +94,7 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
     staleTime: 30_000,
   })
 
+  const amountEntered = amountText.trim() !== '' && parseAmount(amountText.trim()).ok
   // Circle's fee per chain, so the form knows the most it can send. Until the estimate answers, and for any
   // chain it cannot estimate, the static fee table stands in.
   const byChain = balance.data?.byChain
@@ -84,7 +107,9 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
         account: wallet!.address,
         byChain: byChain!,
       }),
-    enabled: wallet !== null && byChain !== undefined && byChain.length > 0 && !summary.closed,
+    // estimateSpend can make the wallet ask for account access, so it waits until the donor has opened this
+    // option and typed an amount. Until then the static fee table sets the limit.
+    enabled: wallet !== null && byChain !== undefined && byChain.length > 0 && !summary.closed && amountEntered,
     staleTime: 60_000,
   })
   const reserves = reserveQuery.data ?? (byChain ? staticReserves(byChain) : undefined)
@@ -132,6 +157,14 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
 
   async function donate() {
     if (inFlight.current || !canSubmit || !wallet || amount === null || !byChain || !reserves) return
+    // Another tab may have started a donation to this campaign since this form loaded. Read the store again
+    // before any marker is written or anything is signed.
+    const fresh = blockingEntry(campaign)
+    if (fresh) {
+      setPhase(fresh.kind === 'unified' ? unifiedTimeout(fresh) : { kind: 'error', message: ANOTHER_PENDING })
+      notifyPending()
+      return
+    }
     inFlight.current = true
     setPhase({ kind: 'sending' })
     const amountArg = formatUnits(amount, 6)
@@ -274,7 +307,7 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
           {sendable !== undefined && total !== undefined && total > 0n && (
             <p className="hint">
               Up to {formatAmount(sendable, 'USDC')} can be sent after fees
-              {reserveQuery.isPending ? " (checking Circle's fees...)" : '.'}
+              {reserveQuery.isFetching ? " (checking Circle's fees...)" : '.'}
             </p>
           )}
         </div>

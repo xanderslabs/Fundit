@@ -171,6 +171,14 @@ export async function planSpend(
 // its static reserve. Reads only; nothing is signed.
 export async function estimateReserves(p: SpendTarget & { byChain: readonly ChainAmount[] }): Promise<Map<string, bigint>> {
   const reserves = staticReserves(p.byChain)
+  // With no account granted, the adapter falls back to eth_requestAccounts, which opens the wallet. A fee
+  // preview must never do that, so it keeps the static table. eth_accounts itself never prompts.
+  try {
+    const accounts = (await p.provider.request({ method: 'eth_accounts' })) as readonly string[] | undefined
+    if (!accounts?.length) return reserves
+  } catch {
+    return reserves
+  }
   await Promise.all(
     p.byChain.map(async (c) => {
       const probe = capped(c, reserves)
