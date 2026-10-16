@@ -1,0 +1,14 @@
+node_modules/
+.env
+.env.*
+!env.template
+!.env.example
+*.zip
+.DS_Store
+dist/
+contracts/out/
+contracts/cache/
+contracts/broadcast/*/31337/
+app/dist/
+.wrangler/
+.superpowers/sdd/
