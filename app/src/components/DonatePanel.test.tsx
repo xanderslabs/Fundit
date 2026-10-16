@@ -32,6 +32,12 @@ vi.mock('../lib/sender', async (importOriginal) => ({
   waitForResult: () => recheck.next(),
 }))
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open }) }))
+// What Iris says about a cross-chain burn. Each test sets it.
+const iris: { status: 'pending' | 'attested' | 'minted' | 'unknown' } = { status: 'pending' }
+vi.mock('../lib/iris', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/iris')>()),
+  fetchTransferStatus: async () => iris.status,
+}))
 // No test here may reach Circle. The unified balance flow itself is covered in UnifiedDonate.test.tsx.
 vi.mock('../lib/unified', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/unified')>()),
@@ -101,6 +107,7 @@ afterEach(() => {
   state.balance = 0n
   state.allowance = 0n
   state.wallet = false
+  iris.status = 'pending'
   reads.length = 0
   localStorage.clear()
   open.mockClear()
@@ -441,6 +448,92 @@ describe('DonatePanel', () => {
       renderPanel(view('USDC'))
       expect((option() as HTMLInputElement).checked).toBe(true)
       expect(screen.getByText(/not confirmed yet/)).toBeTruthy()
+    })
+  })
+
+  // Any unconfirmed donation to this campaign, from any source, blocks every source. A second donation from
+  // another source while the first may still land would make the donor give twice.
+  describe('one unconfirmed donation blocks every source', () => {
+    const KEY = 'fundit.pendingBridges'
+    const BURN = `0x${'cd'.repeat(32)}` as Hex
+    const store = (...entries: Record<string, unknown>[]) =>
+      localStorage.setItem(KEY, JSON.stringify(entries.map((e) => ({ campaign: CAMPAIGN, createdAt: Date.now(), ...e }))))
+    // A disabled fieldset disables its inputs without setting their own disabled property.
+    const radio = (name: RegExp) => {
+      const el = screen.getByRole('radio', { name }) as HTMLInputElement
+      return { disabled: el.matches(':disabled') }
+    }
+    const unsubmittable = () => expect(screen.queryByRole('button', { name: 'Donate' })).toBeNull()
+
+    // The wallet that signed the unified spend is not connected after the reload, which used to drop the
+    // panel back to an open Arc wallet form.
+    it('a pending unified entry blocks the Arc wallet form', () => {
+      store({ kind: 'unified', amount: '5', transferId: 't-1' })
+      fakeSender()
+      state.balance = 1000_000000n
+      renderPanel(view('USDC'))
+      expect(screen.getByText(/unified balance donation is not confirmed yet/)).toBeTruthy()
+      expect(radio(/Arc wallet/).disabled).toBe(true)
+      unsubmittable()
+    })
+
+    it('a pending Arc timeout blocks the unified and cross-chain options', () => {
+      store({ kind: 'arc', hash: HASH, approve: false })
+      state.wallet = true
+      fakeSender()
+      renderPanel(view('USDC'))
+      expect(screen.getByText(/Arc wallet donation is not confirmed yet/)).toBeTruthy()
+      expect(radio(/Unified USDC balance/).disabled).toBe(true)
+      expect(radio(/USDC on another chain/).disabled).toBe(true)
+      unsubmittable()
+    })
+
+    it('a cross-chain transfer on its way blocks the Arc wallet form, and Start over clears only it', async () => {
+      const OTHER_BURN = `0x${'ee'.repeat(32)}` as Hex
+      store(
+        { kind: 'bridge', burnTx: BURN, srcDomain: 6, amount: '25' },
+        { kind: 'bridge', burnTx: OTHER_BURN, srcDomain: 6, amount: '7', minted: true },
+      )
+      fakeSender()
+      state.balance = 1000_000000n
+      renderPanel(view('USDC'))
+      expect(screen.getByText(/cross-chain donation of 25 USDC is still on its way/)).toBeTruthy()
+      expect(radio(/Arc wallet/).disabled).toBe(true)
+      unsubmittable()
+      vi.spyOn(window, 'confirm').mockReturnValue(true)
+      await userEvent.setup().click(screen.getByRole('button', { name: 'Start over' }))
+      const left = JSON.parse(localStorage.getItem(KEY)!) as { burnTx: string }[]
+      expect(left.map((e) => e.burnTx)).toEqual([OTHER_BURN])
+      expect(radio(/Arc wallet/).disabled).toBe(false)
+    })
+
+    it('a submitted cross-chain entry with no burn hash yet also blocks', () => {
+      store({ kind: 'submitted', id: 's-1', srcDomain: 6, amount: '25' })
+      fakeSender()
+      renderPanel(view('USDC'))
+      expect(radio(/Arc wallet/).disabled).toBe(true)
+      unsubmittable()
+    })
+
+    it('a minted cross-chain entry does not block', async () => {
+      store({ kind: 'bridge', burnTx: BURN, srcDomain: 6, amount: '25', minted: true })
+      fakeSender()
+      state.balance = 1000_000000n
+      renderPanel(view('USDC'))
+      expect(radio(/Arc wallet/).disabled).toBe(false)
+      await fillAndDonate()
+    })
+
+    // The tracker learns of the mint from Iris. From then on the transfer is done and must stop blocking.
+    it('stops blocking once Iris reports the mint', async () => {
+      store({ kind: 'bridge', burnTx: BURN, srcDomain: 6, amount: '25' })
+      iris.status = 'minted'
+      fakeSender()
+      state.balance = 1000_000000n
+      renderPanel(view('USDC'))
+      expect(await screen.findByText(/reached the campaign/)).toBeTruthy()
+      await waitFor(() => expect(radio(/Arc wallet/).disabled).toBe(false))
+      expect(screen.getByRole('button', { name: 'Donate' })).toBeTruthy()
     })
   })
 

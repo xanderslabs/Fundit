@@ -12,7 +12,8 @@ export const PENDING_EVENT = 'fundit:pending'
 // Entries older than this are dropped on read, so stale reminders do not pile up.
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
-export type PendingBridge = { kind: 'bridge'; campaign: Address; burnTx: Hex; srcDomain: number; amount: string; createdAt: number }
+// minted is set once Iris reports the mint on Arc. The entry stays for its thank-you row but no longer blocks.
+export type PendingBridge = { kind: 'bridge'; campaign: Address; burnTx: Hex; srcDomain: number; amount: string; minted?: true; createdAt: number }
 export type PendingSubmitted = { kind: 'submitted'; id: string; campaign: Address; srcDomain: number; amount: string; createdAt: number }
 // hashKind 'userop' marks a passkey user operation hash, which only the passkey bundler can check.
 export type PendingArc = { kind: 'arc'; campaign: Address; hash: Hex; approve: boolean; hashKind?: 'userop'; createdAt: number }
@@ -28,7 +29,7 @@ function isEntry(e: unknown): e is Entry {
   const x = e as Record<string, unknown>
   if (typeof x.campaign !== 'string' || !isAddress(x.campaign) || typeof x.createdAt !== 'number') return false
   const knownDomain = CCTP_CHAINS.some((c) => c.domain === x.srcDomain)
-  if (x.kind === 'bridge') return isTxHash(x.burnTx) && knownDomain && typeof x.amount === 'string'
+  if (x.kind === 'bridge') return isTxHash(x.burnTx) && knownDomain && typeof x.amount === 'string' && (x.minted === undefined || x.minted === true)
   if (x.kind === 'submitted') return typeof x.id === 'string' && knownDomain && typeof x.amount === 'string'
   if (x.kind === 'arc') return isTxHash(x.hash) && typeof x.approve === 'boolean' && (x.hashKind === undefined || x.hashKind === 'userop')
   if (x.kind === 'unified') {
@@ -69,6 +70,32 @@ export function pendingBridges(): PendingBridge[] {
 
 export function clearBridge(burnTx: Hex) {
   writeAll(readAll().filter((e) => !(e.kind === 'bridge' && same(e.burnTx, burnTx))))
+}
+
+export function markBridgeMinted(burnTx: Hex) {
+  const all = readAll()
+  if (!all.some((e) => e.kind === 'bridge' && same(e.burnTx, burnTx) && !e.minted)) return
+  writeAll(all.map((e) => (e.kind === 'bridge' && same(e.burnTx, burnTx) ? { ...e, minted: true as const } : e)))
+}
+
+// An entry whose money may still move to this campaign. While one exists, no new donation may start from
+// any source, or the donor could give twice. Order: the Arc wallet, the unified balance, then cross-chain.
+export type BlockingEntry = PendingArc | PendingUnified | PendingSubmitted | (PendingBridge & { minted?: undefined })
+
+export function blockingEntry(campaign: Address): BlockingEntry | null {
+  const mine = readAll().filter((e) => same(e.campaign, campaign))
+  return (
+    mine.find((e): e is PendingArc => e.kind === 'arc') ??
+    mine.find((e): e is PendingUnified => e.kind === 'unified') ??
+    mine.find((e): e is BlockingEntry => (e.kind === 'bridge' && !e.minted) || e.kind === 'submitted') ??
+    null
+  )
+}
+
+// Removes exactly this cross-chain entry. The donor confirmed that the money may still arrive.
+export function clearCrossChain(entry: PendingCrossChain) {
+  if (entry.kind === 'bridge') clearBridge(entry.burnTx)
+  else clearSubmitted(entry.id)
 }
 
 // Bridges and submitted transfers, for the tracker.

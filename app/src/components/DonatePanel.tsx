@@ -6,7 +6,15 @@ import { arc } from 'viem/chains'
 import { useConnection } from 'wagmi'
 import { MAX_MESSAGE_BYTES } from '../config'
 import { useSender } from '../hooks/useSender'
-import { clearPendingArc, pendingArc, pendingUnified, savePendingArc } from '../lib/bridge'
+import {
+  type BlockingEntry,
+  blockingEntry,
+  clearCrossChain,
+  clearPendingArc,
+  PENDING_EVENT,
+  pendingArc,
+  savePendingArc,
+} from '../lib/bridge'
 import type { CampaignView } from '../lib/campaigns'
 import { arcClient } from '../lib/clients'
 import { buildDonateCalls, donationBreakdown, fetchDonorFunds } from '../lib/donate'
@@ -22,6 +30,8 @@ const EXPLORER_URL = arc.blockExplorers.default.url
 const QUICK_AMOUNTS = ['10', '25', '50', '100'] as const
 const TIP_PERCENTS = [0, 5, 10, 15] as const
 const DAY_MS = 24 * 60 * 60 * 1000
+const START_OVER_WARNING =
+  'The earlier transaction may still go through. If it does and you donate again, you will give twice. Start a new donation anyway?'
 
 // Where the money comes from.
 type PaySourceId = 'arc' | 'crosschain' | 'unified'
@@ -86,8 +96,23 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   const [amountText, setAmountText] = useState('')
   const [tipPercent, setTipPercent] = useState<(typeof TIP_PERCENTS)[number]>(0)
   const [message, setMessage] = useState('')
-  // A unified balance spend saved before a reload opens that option again, so its block shows.
-  const [source, setSource] = useState<PaySourceId>(() => (pendingUnified(campaign) ? 'unified' : 'arc'))
+  const [source, setSource] = useState<PaySourceId>('arc')
+  // The unconfirmed donation to this campaign, from any source, read from the shared pending store. While
+  // there is one, every source is blocked and only its own status shows.
+  const [blocker, setBlocker] = useState<BlockingEntry | null>(() => blockingEntry(campaign))
+  useEffect(() => {
+    const reload = () => setBlocker(blockingEntry(campaign))
+    reload()
+    window.addEventListener(PENDING_EVENT, reload)
+    return () => window.removeEventListener(PENDING_EVENT, reload)
+  }, [campaign])
+  const blockedSource: PaySourceId | null = !blocker
+    ? null
+    : blocker.kind === 'arc'
+      ? 'arc'
+      : blocker.kind === 'unified'
+        ? 'unified'
+        : 'crosschain'
   // An unconfirmed donation saved before a reload still blocks a new one until it is settled.
   const [phase, setPhase] = useState<Phase>(() => {
     const saved = pendingArc(campaign)
@@ -96,9 +121,12 @@ export function DonatePanel({ view }: { view: CampaignView }) {
     return { kind: 'timeout', hash: saved.hash, approve: saved.approve, userop: saved.hashKind === 'userop', note }
   })
   const [crossChainBusy, setCrossChainBusy] = useState(false)
-  const sources = PAY_SOURCES.filter((s) => (!s.usdcOnly || symbol === 'USDC') && (!s.needsWallet || isConnected))
-  // A source that is no longer offered (the wallet disconnected) falls back to Arc.
-  const activeSource: PaySourceId = sources.some((s) => s.id === source) ? source : 'arc'
+  const sources = PAY_SOURCES.filter(
+    (s) => s.id === blockedSource || ((!s.usdcOnly || symbol === 'USDC') && (!s.needsWallet || isConnected)),
+  )
+  // The blocked source shows its status. Otherwise a source that is no longer offered (the wallet
+  // disconnected) falls back to Arc.
+  const activeSource: PaySourceId = blockedSource ?? (sources.some((s) => s.id === source) ? source : 'arc')
   // Set synchronously, so a second click before React re-renders cannot start a second send or check.
   const inFlight = useRef(false)
 
@@ -132,7 +160,14 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   const unconfirmed = phase.kind === 'timeout'
   const locked = busy || unconfirmed
   const canSubmit =
-    !closed && sender !== null && amount !== null && !messageTooLong && balance !== undefined && !overBalance && !locked
+    !closed &&
+    sender !== null &&
+    amount !== null &&
+    !messageTooLong &&
+    balance !== undefined &&
+    !overBalance &&
+    !locked &&
+    (blocker === null || blocker.kind === 'arc')
 
   function refreshAfterDonation() {
     void queryClient.invalidateQueries({ queryKey: ['campaign', campaign.toLowerCase()] })
@@ -224,9 +259,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
 
   // The donor chooses to stop waiting. They confirm that the earlier transaction may still go through.
   function startOver() {
-    const ok = window.confirm(
-      'The earlier transaction may still go through. If it does and you donate again, you will give twice. Start a new donation anyway?',
-    )
+    const ok = window.confirm(START_OVER_WARNING)
     if (!ok) return
     setAmountText('')
     setMessage('')
@@ -247,7 +280,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
       {closed && <p className="field-error">This campaign is closed.</p>}
       <PendingBridgeTracker campaign={campaign} />
 
-      <fieldset className="form-field donate-source" disabled={closed || locked || crossChainBusy}>
+      <fieldset className="form-field donate-source" disabled={closed || locked || crossChainBusy || blocker !== null}>
         <legend>Pay with</legend>
         {sources.map((s) => (
           <label key={s.id} className="choice">
@@ -261,7 +294,32 @@ export function DonatePanel({ view }: { view: CampaignView }) {
       </fieldset>
 
       {activeSource === 'crosschain' ? (
-        <CrossChainDonate view={view} onBusyChange={setCrossChainBusy} />
+        <>
+          <CrossChainDonate view={view} onBusyChange={setCrossChainBusy} blocked={blockedSource === 'crosschain'} />
+          {blocker && (blocker.kind === 'bridge' || blocker.kind === 'submitted') && (
+            <div className="donate-status" aria-live="polite">
+              <div className="status-box">
+                <p>
+                  <strong>Your cross-chain donation of {blocker.amount} USDC is still on its way.</strong> Wait for it to
+                  reach the campaign before you donate again, so you do not give twice.
+                </p>
+                {!crossChainBusy && (
+                  <div className="donate-actions">
+                    <button
+                      type="button"
+                      className="btn btn-outline"
+                      onClick={() => {
+                        if (window.confirm(START_OVER_WARNING)) clearCrossChain(blocker)
+                      }}
+                    >
+                      Start over
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </>
       ) : activeSource === 'unified' ? (
         <UnifiedDonate view={view} onBusyChange={setCrossChainBusy} />
       ) : (
@@ -375,7 +433,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
             {phase.kind === 'timeout' && (
               <div className="status-box">
                 <p>
-                  <strong>Your {phase.approve ? 'approval' : 'donation'} is not confirmed yet.</strong> It may still go
+                  <strong>Your Arc wallet {phase.approve ? 'approval' : 'donation'} is not confirmed yet.</strong> It may still go
                   through. Check it before you try again, so you do not give twice.
                 </p>
                 <p>{phase.userop ? PASSKEY_PROCESSING : <ExplorerLink hash={phase.hash} />}</p>

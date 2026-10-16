@@ -9,6 +9,7 @@ import {
   clearBridge,
   clearSubmitted,
   donateCrossChain,
+  markBridgeMinted,
   estimateCrossChain,
   PENDING_EVENT,
   type PendingBridge,
@@ -36,7 +37,16 @@ function expectedTime(fast: boolean, chainFast: boolean): string {
 
 type Phase = { kind: 'idle' } | { kind: 'sending' } | { kind: 'sent'; chain: CctpChainKey } | { kind: 'error'; message: string }
 
-export function CrossChainDonate({ view, onBusyChange }: { view: CampaignView; onBusyChange?: (busy: boolean) => void }) {
+// blocked: another donation to this campaign is unconfirmed, so the form stays disabled and has no submit.
+export function CrossChainDonate({
+  view,
+  onBusyChange,
+  blocked = false,
+}: {
+  view: CampaignView
+  onBusyChange?: (busy: boolean) => void
+  blocked?: boolean
+}) {
   const { address: campaign, summary } = view
   const { open } = useAppKit()
   const { isConnected, address, connector } = useConnection()
@@ -85,7 +95,7 @@ export function CrossChainDonate({ view, onBusyChange }: { view: CampaignView; o
   const reaches = amount !== null && quote !== undefined ? amount - quote.fee : null
   const tooSmall = reaches !== null && reaches <= 0n
   const busy = phase.kind === 'sending'
-  const canSubmit = !summary.closed && wallet !== null && amount !== null && reaches !== null && !tooSmall && !busy
+  const canSubmit = !summary.closed && !blocked && wallet !== null && amount !== null && reaches !== null && !tooSmall && !busy
 
   async function donate() {
     if (inFlight.current || !canSubmit || !wallet) return
@@ -112,7 +122,7 @@ export function CrossChainDonate({ view, onBusyChange }: { view: CampaignView; o
 
   return (
     <form className="donate-form" onSubmit={submit} noValidate>
-      <fieldset className="donate-fields" disabled={summary.closed || busy}>
+      <fieldset className="donate-fields" disabled={summary.closed || busy || blocked}>
         <div className="form-field">
           <label htmlFor="xchain-source">From</label>
           <select id="xchain-source" value={sourceKey} onChange={(e) => setSourceKey(e.target.value as CctpChainKey)}>
@@ -203,7 +213,7 @@ export function CrossChainDonate({ view, onBusyChange }: { view: CampaignView; o
         )}
       </div>
 
-      {!wallet && !summary.closed ? (
+      {blocked && !busy ? null : !wallet && !summary.closed ? (
         <button type="button" className="btn btn-lg donate-submit" onClick={() => open()}>
           Connect wallet to donate
         </button>
@@ -244,12 +254,15 @@ export function PendingBridgeTracker({ campaign, destination = 'the campaign' }:
 
 type RowStatus = TransferStatus | 'expired'
 
+// Dismissing a transfer that has not arrived forgets money that may still move (and unblocks donating), so it asks first.
+const DISMISS_UNKNOWN = 'This transfer may still arrive. Dismiss it anyway?'
+
 function BridgeRow({ entry, destination }: { entry: PendingBridge; destination: string }) {
   const { campaign, burnTx, srcDomain, createdAt } = entry
   const chain = CCTP_CHAINS.find((c) => c.domain === srcDomain)!
   const queryClient = useQueryClient()
   const overdue = () => Date.now() - createdAt > MAX_TRACK_MS
-  const [status, setStatus] = useState<RowStatus>(() => (overdue() ? 'expired' : 'pending'))
+  const [status, setStatus] = useState<RowStatus>(() => (entry.minted ? 'minted' : overdue() ? 'expired' : 'pending'))
   const done = status === 'minted' || status === 'expired'
 
   useEffect(() => {
@@ -268,6 +281,8 @@ function BridgeRow({ entry, destination }: { entry: PendingBridge; destination: 
       if (stopped) return
       setStatus(next)
       if (next === 'minted') {
+        // Recorded, so this transfer stops blocking a new donation.
+        markBridgeMinted(burnTx)
         // raised() already counts unaccounted funds, so the campaign total is right without settle().
         void queryClient.invalidateQueries({ queryKey: ['campaign', campaign.toLowerCase()] })
         void queryClient.invalidateQueries({ queryKey: ['activity', campaign.toLowerCase()] })
@@ -312,7 +327,7 @@ function BridgeRow({ entry, destination }: { entry: PendingBridge; destination: 
       )}
       {done && (
         <div className="donate-actions">
-          <button type="button" className="btn btn-outline" onClick={() => clearBridge(burnTx)}>
+          <button type="button" className="btn btn-outline" onClick={() => (status === 'minted' || window.confirm(DISMISS_UNKNOWN)) && clearBridge(burnTx)}>
             Dismiss
           </button>
         </div>
@@ -344,7 +359,7 @@ function SubmittedRow({ entry }: { entry: PendingSubmitted }) {
       )}
       {overdue && (
         <div className="donate-actions">
-          <button type="button" className="btn btn-outline" onClick={() => clearSubmitted(entry.id)}>
+          <button type="button" className="btn btn-outline" onClick={() => window.confirm(DISMISS_UNKNOWN) && clearSubmitted(entry.id)}>
             Dismiss
           </button>
         </div>

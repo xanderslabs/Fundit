@@ -307,7 +307,7 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
         {phase.kind === 'timeout' && (
           <div className="status-box">
             <p>
-              <strong>Your donation is not confirmed yet.</strong> It may still go through. Check it before you try again,
+              <strong>Your unified balance donation is not confirmed yet.</strong> It may still go through. Check it before you try again,
               so you do not give twice.
             </p>
             {phase.hash && (
