@@ -60,9 +60,9 @@ abstract contract Base is Test {
         meta.links[0] = "https://example.com";
     }
 
-    /// @dev Alice creates a campaign for `token` with `goal` and valid metadata.
+    /// @dev Alice creates a campaign for `token` with `goal`, no backup and valid metadata.
     function _create(IERC20 token, uint256 goal) internal returns (address) {
         vm.prank(alice);
-        return factory.createCampaign(token, goal, _meta());
+        return factory.createCampaign(token, goal, address(0), _meta());
     }
 }

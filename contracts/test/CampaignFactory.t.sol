@@ -76,13 +76,13 @@ contract CampaignFactoryTest is Base {
         MockERC20 other = new MockERC20("Other", "OTH", 6);
         vm.prank(alice);
         vm.expectRevert(CampaignFactory.UnsupportedToken.selector);
-        factory.createCampaign(IERC20(address(other)), 1e6, _meta());
+        factory.createCampaign(IERC20(address(other)), 1e6, address(0), _meta());
     }
 
     function test_Create_RevertsInvalidGoal() public {
         vm.prank(alice);
         vm.expectRevert(CampaignFactory.InvalidGoal.selector);
-        factory.createCampaign(usdcToken, 0, _meta());
+        factory.createCampaign(usdcToken, 0, address(0), _meta());
     }
 
     // Pausing blocks new campaigns only, and unpausing restores creation.
@@ -95,7 +95,7 @@ contract CampaignFactoryTest is Base {
 
         vm.prank(alice);
         vm.expectRevert(CampaignFactory.CreationPaused.selector);
-        factory.createCampaign(usdcToken, 1e6, _meta());
+        factory.createCampaign(usdcToken, 1e6, address(0), _meta());
 
         vm.expectEmit(address(factory));
         emit CampaignFactory.CreationPausedSet(false);
@@ -153,12 +153,12 @@ contract CampaignFactoryTest is Base {
             m.links[i] = string.concat("https://", string(_bytesOf(192)));
         }
         vm.prank(alice);
-        address c = factory.createCampaign(usdcToken, 1e6, m);
+        address c = factory.createCampaign(usdcToken, 1e6, address(0), m);
         assertEq(Campaign(c).summary().meta.links.length, 5);
 
         m.imageUrl = "";
         vm.prank(alice);
-        factory.createCampaign(usdcToken, 1e6, m);
+        factory.createCampaign(usdcToken, 1e6, address(0), m);
     }
 
     function test_SetFees_RevertsAbove500() public {
@@ -305,7 +305,7 @@ contract CampaignFactoryTest is Base {
         address c = _create(usdcToken, 1e6);
         vm.prank(address(factory));
         vm.expectRevert(Campaign.AlreadyInitialized.selector);
-        Campaign(c).initialize(bob, usdcToken, 1, 0, 0, _meta());
+        Campaign(c).initialize(bob, address(0), usdcToken, 1, 0, 0, _meta());
         assertEq(address(Campaign(c).factory()), address(factory));
         assertEq(Campaign(c).creator(), alice);
     }
@@ -315,7 +315,7 @@ contract CampaignFactoryTest is Base {
         Campaign impl = Campaign(factory.implementation());
         vm.prank(bob);
         vm.expectRevert(Campaign.AlreadyInitialized.selector);
-        impl.initialize(bob, usdcToken, 1, 0, 0, _meta());
+        impl.initialize(bob, address(0), usdcToken, 1, 0, 0, _meta());
     }
 
     function test_GetCampaigns_Bounds() public {
@@ -357,7 +357,7 @@ contract CampaignFactoryTest is Base {
     function _expectInvalid(Metadata memory m) internal {
         vm.prank(alice);
         vm.expectRevert(MetadataLib.InvalidMetadata.selector);
-        factory.createCampaign(usdcToken, 1e6, m);
+        factory.createCampaign(usdcToken, 1e6, address(0), m);
     }
 
     function _bytesOf(uint256 n) internal pure returns (bytes memory b) {

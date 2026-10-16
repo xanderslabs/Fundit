@@ -262,7 +262,7 @@ contract ArcForkTest is Test {
         Metadata memory meta;
         meta.title = "Fork test campaign";
         vm.prank(creator);
-        return Campaign(factory.createCampaign(USDC, 1_000e6, meta));
+        return Campaign(factory.createCampaign(USDC, 1_000e6, address(0), meta));
     }
 
     /// @dev Arc USDC's ERC-20 balance is the native balance (18 decimals), so vm.deal funds it.

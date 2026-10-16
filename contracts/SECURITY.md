@@ -34,6 +34,7 @@ when the new owner calls `acceptOwnership`. The owner can:
 - Change the fees, token, creator or goal of an existing campaign.
 - Add a token, change the messenger, or upgrade any contract.
 - Add or remove an EURC payout domain.
+- Start, cancel or complete a creator recovery, or name a backup.
 
 ## Campaign rules
 
@@ -51,7 +52,7 @@ when the new owner calls `acceptOwnership`. The owner can:
 - **Sweep guard.** `sweep` moves the whole balance of a token that is not the campaign token,
   creator only, with no fee. It reverts if the campaign-token balance drops during the call, in
   case a second token address can move the same underlying asset.
-- **Reentrancy.** `donate`, `settle`, `withdraw`, `claimFees` and `sweep` are `nonReentrant`
+- **Reentrancy.** `donate`, `settle`, `withdraw`, `claimFees`, `sweep` and `completeRecovery` are `nonReentrant`
   (OpenZeppelin `ReentrancyGuardTransient`). Tests cover re-entry from the messenger and from a
   swept token.
 - **Metadata links.** `imageUrl` (when set) and every entry in `links` must start with
@@ -62,6 +63,36 @@ when the new owner calls `acceptOwnership`. The owner can:
 - **CCTP payouts.** `withdraw` approves exactly the net amount to the messenger with
   `forceApprove`, and passes a zero `destinationCaller`. It rejects a zero recipient and a
   `maxFee` that is not below the net amount.
+
+## Creator recovery
+
+A creator who loses their key would otherwise lock the campaign balance forever. Recovery hands
+the creator role to a backup address after a wait that the creator can cancel.
+
+- **Backup.** `createCampaign` takes an optional `backup`. Zero means no backup, and then no
+  address can start a recovery. The backup must not be the creator (`InvalidBackup`). The
+  creator can change or remove it at any time with `setBackup`.
+- **Flow.** The backup calls `initiateRecovery`, which sets
+  `recoveryReadyAt = block.timestamp + RECOVERY_DELAY` (7 days). A second call while one is
+  pending reverts with `RecoveryPending`, so the backup cannot reset the clock. From
+  `recoveryReadyAt` onwards (inclusive), the backup calls `completeRecovery` and becomes the
+  creator. The new creator starts with no backup.
+- **What the creator keeps during the wait.** The creator stays the creator until
+  `completeRecovery` runs. Withdraw, edit, close and sweep keep working, and the backup has no
+  creator power before that point. The creator can stop the recovery with `cancelRecovery`.
+  Calling `setBackup` while a recovery is pending also cancels it, so a replaced or removed
+  backup can never finish.
+- **Trust in the backup.** A stolen backup key can only start a recovery. It takes the
+  campaign only if the creator does not cancel within 7 days. A creator who no longer trusts
+  the backup should remove or replace it. The app should alert the creator when
+  `RecoveryInitiated` is emitted.
+- **No funds move.** None of the recovery functions transfer tokens or change fees. The owner
+  has no part in recovery.
+- **Factory index.** `completeRecovery` calls `factory.recordCreatorChange`, which only a
+  campaign created by the factory may call (`NotCampaign` otherwise). It adds the campaign to
+  `campaignsOf(newCreator)` and emits `CampaignCreatorChanged`. The old creator's list keeps the
+  entry, and a campaign can appear more than once in a list after repeated recoveries. The app
+  filters `campaignsOf` by `summary().creator` and drops duplicates.
 
 ## EURC payout domains
 
@@ -104,3 +135,5 @@ Command: `slither . --config-file slither.config.json` (excludes `lib/` and `tes
 | `incorrect-equality` | Medium | `Campaign._settle`, `gross == 0` | Early return on a computed amount; anyone who makes it non-zero only causes a normal settlement. |
 | `incorrect-equality` | Medium | `Campaign.claimFees`, `amount == 0` | Early return when no fees are owed; a non-zero value only leads to a normal claim. |
 | `missing-zero-check` | Low | `Campaign.initialize`, `creator_` | Only the factory calls it, and it passes its own `msg.sender`, which is never zero. |
+| `missing-zero-check` | Low | `Campaign.initialize`, `backup_` | Zero is a valid value that means no backup. |
+| `timestamp` | Low | `Campaign.setBackup`, `initiateRecovery`, `cancelRecovery`, `completeRecovery` | The recovery wait is measured in `block.timestamp` by design. A validator can shift it by seconds, which does not matter against 7 days. The `recoveryReadyAt == 0` and `!= 0` checks only test whether a recovery is pending. |

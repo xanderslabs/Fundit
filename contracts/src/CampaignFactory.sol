@@ -22,6 +22,7 @@ contract CampaignFactory is Ownable2Step, ICampaignFactory {
     error NotCampaign();
     error RenounceDisabled();
     error InvalidDomain();
+    error InvalidBackup();
 
     event CampaignCreated(
         address indexed campaign,
@@ -36,6 +37,7 @@ contract CampaignFactory is Ownable2Step, ICampaignFactory {
     event FeaturedUpdated(address indexed campaign);
     event CreationPausedSet(bool paused);
     event EurcPayoutDomainSet(uint32 domain);
+    event CampaignCreatorChanged(address indexed campaign, address indexed oldCreator, address indexed newCreator);
 
     uint16 public constant MAX_FEE_BPS = 500;
     /// @notice CCTP domain of Arc. EURC payouts there are plain transfers and need no list entry.
@@ -95,10 +97,15 @@ contract CampaignFactory is Ownable2Step, ICampaignFactory {
         withdrawFeeBps = withdrawFeeBps_;
     }
 
-    function createCampaign(IERC20 token, uint256 goal, Metadata calldata meta) external returns (address campaign) {
+    /// @param backup Address that can recover the campaign if the creator loses their key. Zero for none.
+    function createCampaign(IERC20 token, uint256 goal, address backup, Metadata calldata meta)
+        external
+        returns (address campaign)
+    {
         if (token != usdc && token != eurc) revert UnsupportedToken();
         if (creationPaused) revert CreationPaused();
         if (goal == 0) revert InvalidGoal();
+        if (backup == msg.sender) revert InvalidBackup();
 
         campaign = Clones.cloneDeterministic(implementation, _salt(msg.sender, creatorNonce[msg.sender]++));
         isCampaign[campaign] = true;
@@ -106,7 +113,15 @@ contract CampaignFactory is Ownable2Step, ICampaignFactory {
         byCreator[msg.sender].push(campaign);
         emit CampaignCreated(campaign, msg.sender, address(token), goal, donationFeeBps, withdrawFeeBps);
 
-        Campaign(campaign).initialize(msg.sender, token, goal, donationFeeBps, withdrawFeeBps, meta);
+        Campaign(campaign).initialize(msg.sender, backup, token, goal, donationFeeBps, withdrawFeeBps, meta);
+    }
+
+    /// @notice Adds the calling campaign to campaignsOf(newCreator) after a completed recovery.
+    /// @dev The old creator's list keeps the entry, so the app filters by summary().creator.
+    function recordCreatorChange(address oldCreator, address newCreator) external {
+        if (!isCampaign[msg.sender]) revert NotCampaign();
+        byCreator[newCreator].push(msg.sender);
+        emit CampaignCreatorChanged(msg.sender, oldCreator, newCreator);
     }
 
     function predictAddress(address creator, uint256 nonce) external view returns (address) {

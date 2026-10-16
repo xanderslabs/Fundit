@@ -102,3 +102,7 @@ per `eth_getLogs` call, so walk backwards and skip the quiet blocks:
 Each call returns at least one event, so the number of calls is at most the number of active
 blocks, and usually far fewer. `CampaignCreated` is emitted by the factory, not the campaign,
 so read it from the factory at `createdAtBlock`.
+
+The recovery events `BackupSet`, `RecoveryInitiated`, `RecoveryCancelled` and `CreatorChanged`
+are campaign events and join the same chain. The factory also emits `CampaignCreatorChanged`
+when a recovery completes. It is not part of the campaign walk.

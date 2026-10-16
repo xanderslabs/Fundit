@@ -25,6 +25,11 @@ contract Campaign is ReentrancyGuardTransient {
     error ZeroAddress();
     error InvalidGoal();
     error UnsupportedPayoutDomain();
+    error InvalidBackup();
+    error NotBackup();
+    error RecoveryPending();
+    error NoRecoveryPending();
+    error RecoveryNotReady();
 
     // Each event's last field, prevActivityBlock, is the block of the previous activity.
     // See lastActivityBlock for how to walk the history with it.
@@ -44,15 +49,25 @@ contract Campaign is ReentrancyGuardTransient {
     event FeesClaimed(address indexed treasury, uint256 amount, uint64 prevActivityBlock);
     event Swept(address indexed token, address indexed to, uint256 amount, uint64 prevActivityBlock);
     event Edited(uint256 goal, uint64 prevActivityBlock);
+    event BackupSet(address indexed backup, uint64 prevActivityBlock);
+    event RecoveryInitiated(address indexed backup, uint64 readyAt, uint64 prevActivityBlock);
+    event RecoveryCancelled(address indexed backup, uint64 prevActivityBlock);
+    event CreatorChanged(address indexed oldCreator, address indexed newCreator, uint64 prevActivityBlock);
 
     uint256 public constant BPS = 10_000;
     /// @notice CCTP domain of Arc. Withdrawals to this domain are plain transfers.
     uint32 public constant ARC_DOMAIN = 26;
     uint256 public constant MAX_MESSAGE_LENGTH = 280;
+    /// @notice Wait between initiateRecovery and completeRecovery, during which the creator can cancel.
+    uint256 public constant RECOVERY_DELAY = 7 days;
 
     bool private initialized;
     ICampaignFactory public factory;
     address public creator;
+    /// @notice Address that can take over as creator after RECOVERY_DELAY. Zero means no backup.
+    address public backup;
+    /// @notice Time from which the pending recovery can complete. Zero means none is pending.
+    uint64 public recoveryReadyAt;
     IERC20 public token;
     uint256 public goal;
     uint16 public donationFeeBps;
@@ -90,10 +105,12 @@ contract Campaign is ReentrancyGuardTransient {
     }
 
     /// @notice Called once by the factory in the same transaction that deploys the clone.
-    /// @dev creator_ is the factory's msg.sender, so it is never zero.
+    /// @dev creator_ is the factory's msg.sender, so it is never zero. The factory has already
+    /// checked that backup_ is zero or differs from creator_.
     // forge-lint: disable-next-item(missing-zero-check)
     function initialize(
         address creator_,
+        address backup_,
         IERC20 token_,
         uint256 goal_,
         uint16 donationFeeBps_,
@@ -106,6 +123,7 @@ contract Campaign is ReentrancyGuardTransient {
 
         factory = ICampaignFactory(msg.sender);
         creator = creator_;
+        backup = backup_;
         token = token_;
         goal = goal_;
         donationFeeBps = donationFeeBps_;
@@ -255,6 +273,50 @@ contract Campaign is ReentrancyGuardTransient {
         emit Closed(_activity());
     }
 
+    /// @notice Names a new backup, or removes it with zero. Creator only. Cancels any pending recovery.
+    function setBackup(address newBackup) external onlyCreator {
+        if (newBackup == creator) revert InvalidBackup();
+        if (recoveryReadyAt != 0) _cancelRecovery();
+        backup = newBackup;
+        emit BackupSet(newBackup, _activity());
+    }
+
+    /// @notice Starts the RECOVERY_DELAY wait after which the backup can become the creator. Backup only.
+    /// @dev A zero backup never matches msg.sender, so a campaign without a backup cannot be recovered.
+    function initiateRecovery() external {
+        if (msg.sender != backup) revert NotBackup();
+        if (recoveryReadyAt != 0) revert RecoveryPending();
+        // forge-lint: disable-next-line(unsafe-typecast)
+        uint64 readyAt = uint64(block.timestamp + RECOVERY_DELAY);
+        recoveryReadyAt = readyAt;
+        emit RecoveryInitiated(msg.sender, readyAt, _activity());
+    }
+
+    /// @notice Stops a pending recovery. Creator only. The backup stays named.
+    function cancelRecovery() external onlyCreator {
+        if (recoveryReadyAt == 0) revert NoRecoveryPending();
+        _cancelRecovery();
+    }
+
+    /// @notice Makes the backup the creator once the wait is over. Backup only. Moves no tokens.
+    /// @dev The new creator starts with no backup. The factory adds the campaign to campaignsOf(newCreator).
+    function completeRecovery() external nonReentrant {
+        if (msg.sender != backup) revert NotBackup();
+        uint64 readyAt = recoveryReadyAt;
+        if (readyAt == 0) revert NoRecoveryPending();
+        // A validator can shift the timestamp by seconds, which is nothing against a 7-day wait.
+        // forge-lint: disable-next-line(block-timestamp)
+        if (block.timestamp < readyAt) revert RecoveryNotReady();
+        address oldCreator = creator;
+        creator = msg.sender;
+        // CreatorChanged below also records that the backup is now zero.
+        // forge-lint: disable-next-line(missing-events-access-control)
+        backup = address(0);
+        recoveryReadyAt = 0;
+        emit CreatorChanged(oldCreator, msg.sender, _activity());
+        factory.recordCreatorChange(oldCreator, msg.sender);
+    }
+
     /// @notice Campaign tokens held but not yet booked (plain transfers, CCTP or Gateway mints).
     /// @dev Saturates at zero so settle() and the views never revert if the balance drifts below the counters.
     function unaccounted() public view returns (uint256) {
@@ -295,6 +357,8 @@ contract Campaign is ReentrancyGuardTransient {
             withdrawFeeBps: withdrawFeeBps,
             createdAt: createdAt,
             createdAtBlock: createdAtBlock,
+            backup: backup,
+            recoveryReadyAt: recoveryReadyAt,
             meta: meta
         });
     }
@@ -309,6 +373,11 @@ contract Campaign is ReentrancyGuardTransient {
             lastActivityBlock = current;
         }
         return activityPrevBlock;
+    }
+
+    function _cancelRecovery() internal {
+        recoveryReadyAt = 0;
+        emit RecoveryCancelled(backup, _activity());
     }
 
     function _checkCreator() internal view {

@@ -22,5 +22,7 @@ struct Summary {
     uint16 withdrawFeeBps;
     uint64 createdAt;
     uint64 createdAtBlock;
+    address backup;
+    uint64 recoveryReadyAt;
     Metadata meta;
 }
