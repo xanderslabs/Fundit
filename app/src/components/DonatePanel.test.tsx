@@ -14,7 +14,12 @@ const ME = '0x1111111111111111111111111111111111111111' as Address
 const CAMPAIGN = getAddress('0x00000000000000000000000000000000000000a1')
 const HASH = `0x${'ab'.repeat(32)}` as Hex
 
-const state: { sender: Sender | null; balance: bigint; allowance: bigint } = { sender: null, balance: 0n, allowance: 0n }
+const state: { sender: Sender | null; balance: bigint; allowance: bigint; wallet: boolean } = {
+  sender: null,
+  balance: 0n,
+  allowance: 0n,
+  wallet: false,
+}
 const open = vi.fn()
 const reads: { address: Address; functionName: string; args: readonly unknown[] }[] = []
 
@@ -27,6 +32,11 @@ vi.mock('../lib/sender', async (importOriginal) => ({
   waitForResult: () => recheck.next(),
 }))
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open }) }))
+// The unified balance option signs with the connected external wallet, so it reads wagmi directly.
+vi.mock('wagmi', () => ({
+  useConnection: () =>
+    state.wallet ? { isConnected: true, address: ME, connector: { getProvider: async () => ({}) } } : { isConnected: false },
+}))
 vi.mock('../lib/clients', () => ({
   arcClient: {
     readContract: async (p: { address: Address; functionName: string; args: readonly unknown[] }) => {
@@ -85,6 +95,7 @@ afterEach(() => {
   state.sender = null
   state.balance = 0n
   state.allowance = 0n
+  state.wallet = false
   reads.length = 0
   localStorage.clear()
   open.mockClear()
@@ -390,6 +401,31 @@ describe('DonatePanel', () => {
     expect(await screen.findByText(/Thank you/)).toBeTruthy()
     expect(send).toHaveBeenCalledTimes(1)
   })
+  describe('unified balance option', () => {
+    const option = () => screen.queryByRole('radio', { name: /Unified USDC balance/ })
+
+    // Gateway spends USDC only. Offering it on an EURC campaign would mint the wrong token to the campaign.
+    it('is hidden for EURC campaigns, even with a wallet connected', () => {
+      state.wallet = true
+      fakeSender()
+      renderPanel(view('EURC'))
+      expect(option()).toBeNull()
+    })
+
+    it('is offered for USDC campaigns when a wallet is connected', () => {
+      state.wallet = true
+      fakeSender()
+      renderPanel(view('USDC'))
+      expect(option()).toBeTruthy()
+    })
+
+    // The spend is signed by the external wallet. Without one there is nothing to sign with.
+    it('is hidden when no wallet is connected', () => {
+      renderPanel(view('USDC'))
+      expect(option()).toBeNull()
+    })
+  })
+
   describe('passkey wallet', () => {
     const TX = `0x${'cd'.repeat(32)}` as Hex
     const PROCESSING = 'Your passkey transaction is still processing.'

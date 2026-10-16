@@ -24,6 +24,7 @@ vi.mock('../hooks/useActivity', () => ({
 // No wallet connected: the donate panel shows its connect prompt. DonatePanel.test.tsx covers donating.
 vi.mock('../hooks/useSender', () => ({ useSender: () => null }))
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: () => {} }) }))
+vi.mock('wagmi', () => ({ useConnection: () => ({ isConnected: false }) }))
 
 function view(meta: Partial<CampaignView['summary']['meta']>, closed = false): CampaignView {
   return {

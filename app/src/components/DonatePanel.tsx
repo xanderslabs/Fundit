@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import type { Hex } from 'viem'
 import { arc } from 'viem/chains'
+import { useConnection } from 'wagmi'
 import { MAX_MESSAGE_BYTES } from '../config'
 import { useSender } from '../hooks/useSender'
 import { clearPendingArc, pendingArc, savePendingArc } from '../lib/bridge'
@@ -15,16 +16,18 @@ import type { TxResult } from '../lib/sender'
 import { byteLength } from '../lib/validate'
 import { CrossChainDonate, PendingBridgeTracker } from './CrossChainDonate'
 import { PASSKEY_LOGIN_TO_CHECK, PASSKEY_PROCESSING, recheckResult } from './TxStatus'
+import { UnifiedDonate } from './UnifiedDonate'
 
 const EXPLORER_URL = arc.blockExplorers.default.url
 const QUICK_AMOUNTS = ['10', '25', '50', '100'] as const
 const TIP_PERCENTS = [0, 5, 10, 15] as const
 const DAY_MS = 24 * 60 * 60 * 1000
 
-// Where the money comes from. Later tasks add sources here (passkey, Gateway).
-type PaySourceId = 'arc' | 'crosschain'
+// Where the money comes from.
+type PaySourceId = 'arc' | 'crosschain' | 'unified'
 // usdcOnly: bridged money arrives as USDC, so an EURC campaign cannot take it.
-type PaySource = { id: PaySourceId; label: string; hint: string; usdcOnly?: boolean }
+// needsWallet: signed by the connected external wallet, so it is offered only while one is connected.
+type PaySource = { id: PaySourceId; label: string; hint: string; usdcOnly?: boolean; needsWallet?: boolean }
 const PAY_SOURCES: readonly PaySource[] = [
   { id: 'arc', label: 'Arc wallet', hint: 'Pay from your connected wallet on Arc.' },
   {
@@ -32,6 +35,13 @@ const PAY_SOURCES: readonly PaySource[] = [
     label: 'USDC on another chain',
     hint: 'Send USDC from Ethereum, Base, Arbitrum, OP Mainnet, Polygon or Avalanche.',
     usdcOnly: true,
+  },
+  {
+    id: 'unified',
+    label: 'Unified USDC balance',
+    hint: 'Spend USDC you hold with Circle Gateway, from any chain, in one step.',
+    usdcOnly: true,
+    needsWallet: true,
   },
 ]
 
@@ -71,6 +81,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   const closed = summary.closed
   const sender = useSender()
   const queryClient = useQueryClient()
+  const { isConnected } = useConnection()
 
   const [amountText, setAmountText] = useState('')
   const [tipPercent, setTipPercent] = useState<(typeof TIP_PERCENTS)[number]>(0)
@@ -84,6 +95,9 @@ export function DonatePanel({ view }: { view: CampaignView }) {
     return { kind: 'timeout', hash: saved.hash, approve: saved.approve, userop: saved.hashKind === 'userop', note }
   })
   const [crossChainBusy, setCrossChainBusy] = useState(false)
+  const sources = PAY_SOURCES.filter((s) => (!s.usdcOnly || symbol === 'USDC') && (!s.needsWallet || isConnected))
+  // A source that is no longer offered (the wallet disconnected) falls back to Arc.
+  const activeSource: PaySourceId = sources.some((s) => s.id === source) ? source : 'arc'
   // Set synchronously, so a second click before React re-renders cannot start a second send or check.
   const inFlight = useRef(false)
 
@@ -234,9 +248,9 @@ export function DonatePanel({ view }: { view: CampaignView }) {
 
       <fieldset className="form-field donate-source" disabled={closed || locked || crossChainBusy}>
         <legend>Pay with</legend>
-        {PAY_SOURCES.filter((s) => !s.usdcOnly || symbol === 'USDC').map((s) => (
+        {sources.map((s) => (
           <label key={s.id} className="choice">
-            <input type="radio" name="donate-source" checked={source === s.id} onChange={() => setSource(s.id)} />
+            <input type="radio" name="donate-source" checked={activeSource === s.id} onChange={() => setSource(s.id)} />
             <span>
               {s.label} <span className="hint">{s.hint}</span>
             </span>
@@ -245,8 +259,10 @@ export function DonatePanel({ view }: { view: CampaignView }) {
         {symbol !== 'USDC' && <p className="hint">EURC campaigns accept donations on Arc only.</p>}
       </fieldset>
 
-      {source === 'crosschain' ? (
+      {activeSource === 'crosschain' ? (
         <CrossChainDonate view={view} onBusyChange={setCrossChainBusy} />
+      ) : activeSource === 'unified' ? (
+        <UnifiedDonate view={view} onBusyChange={setCrossChainBusy} />
       ) : (
         <form className="donate-form" onSubmit={submit} noValidate>
           <fieldset className="donate-fields" disabled={closed || locked}>

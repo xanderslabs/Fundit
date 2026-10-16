@@ -22,6 +22,12 @@ const HASH = `0x${'ab'.repeat(32)}` as Hex
 
 const state: { sender: Sender | null } = { sender: null }
 vi.mock('../hooks/useSender', () => ({ useSender: () => state.sender }))
+// What "Check again" gets back on the wallet path. The default throws so an unplanned re-check is loud.
+const recheck: { next: () => Promise<TxResult> } = { next: async () => { throw new Error('no re-check planned') } }
+vi.mock('../lib/sender', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/sender')>()),
+  waitForResult: () => recheck.next(),
+}))
 vi.mock('../hooks/useCampaigns', () => ({
   useFactoryFees: () => ({ data: { donationFeeBps: 0, withdrawFeeBps: 250 }, isPending: false, isError: false }),
 }))
@@ -76,6 +82,9 @@ const submitButton = () => screen.getByRole('button', { name: 'Create fundraiser
 afterEach(() => {
   cleanup()
   state.sender = null
+  recheck.next = async () => {
+    throw new Error('no re-check planned')
+  }
 })
 
 describe('Create', () => {
@@ -124,5 +133,72 @@ describe('Create', () => {
     const link = screen.getByRole('link', { name: /explorer/i })
     expect(link.getAttribute('href')).toBe(`https://explorer.arc.io/tx/${HASH}`)
     expect(screen.queryByText(/^Campaign /)).toBeNull()
+  })
+
+  describe('Check again', () => {
+    const PROCESSING = 'Your passkey transaction is still processing.'
+
+    function passkeySender(first: TxResult, recheckFn: (hash: Hex) => Promise<TxResult>) {
+      const recheckSpy = vi.fn(recheckFn)
+      state.sender = { kind: 'passkey', address: ME, send: vi.fn(async () => first), recheck: recheckSpy }
+      return recheckSpy
+    }
+
+    // A user operation hash is unknown to the explorer and to the Arc RPC. Only the passkey bundler can find
+    // the transaction, and the new address is still read from that transaction's receipt log.
+    it('rechecks a passkey timeout through the bundler and opens the new campaign from the receipt', async () => {
+      const recheckSpy = passkeySender({ status: 'timeout', hash: HASH, completed: 0, hashKind: 'userop' }, async () => ({
+        status: 'success',
+        hash: HASH,
+        receipt: createdReceipt(),
+      }))
+      renderCreate()
+      const user = await fillValid()
+      await user.click(submitButton())
+      expect(await screen.findByText(/not confirmed yet/)).toBeTruthy()
+      await user.click(screen.getByRole('button', { name: 'Check again' }))
+      expect(await screen.findByText(`Campaign ${NEW_CAMPAIGN}`)).toBeTruthy()
+      expect(recheckSpy).toHaveBeenCalledWith(HASH)
+    })
+
+    // The explorer would show "not found" for a user operation hash, which reads like a failure.
+    it('shows no explorer link while the hash is a user operation hash', async () => {
+      passkeySender({ status: 'timeout', hash: HASH, completed: 0, hashKind: 'userop' }, async () => {
+        throw new Error('not used')
+      })
+      renderCreate()
+      const user = await fillValid()
+      await user.click(submitButton())
+      expect(await screen.findByText(PROCESSING)).toBeTruthy()
+      expect(screen.queryByRole('link', { name: /explorer/i })).toBeNull()
+    })
+
+    it('keeps the wallet path on the Arc RPC and the explorer link', async () => {
+      fakeSender({ status: 'timeout', hash: HASH, completed: 0 })
+      recheck.next = async () => ({ status: 'success', hash: HASH, receipt: createdReceipt() })
+      renderCreate()
+      const user = await fillValid()
+      await user.click(submitButton())
+      expect(await screen.findByText(/not confirmed yet/)).toBeTruthy()
+      expect(screen.queryByText(PROCESSING)).toBeNull()
+      expect(screen.getByRole('link', { name: /explorer/i }).getAttribute('href')).toBe(`https://explorer.arc.io/tx/${HASH}`)
+      await user.click(screen.getByRole('button', { name: 'Check again' }))
+      expect(await screen.findByText(`Campaign ${NEW_CAMPAIGN}`)).toBeTruthy()
+    })
+
+    // A check that throws must not leave the page on "Checking..." forever, and must not invite a second create.
+    it('falls back to not confirmed yet with a note when the check throws', async () => {
+      fakeSender({ status: 'timeout', hash: HASH, completed: 0 })
+      recheck.next = async () => {
+        throw new Error('RPC down')
+      }
+      renderCreate()
+      const user = await fillValid()
+      await user.click(submitButton())
+      await user.click(await screen.findByRole('button', { name: 'Check again' }))
+      expect(await screen.findByText(/We could not check it/)).toBeTruthy()
+      expect(screen.getByText(/not confirmed yet/)).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Check again' })).toBeTruthy()
+    })
   })
 })

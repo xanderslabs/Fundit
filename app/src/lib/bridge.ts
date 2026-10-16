@@ -124,28 +124,26 @@ function watchSends(provider: EIP1193Provider, watcher: { onSend: (() => void) |
   return { request } as EIP1193Provider
 }
 
-// The SDK is large, so it loads only when someone donates from another chain.
-async function createKit(provider: EIP1193Provider) {
-  const [{ BridgeKit }, { createViemAdapterFromProvider }] = await Promise.all([
-    import('@circle-fin/bridge-kit'),
-    import('@circle-fin/adapter-viem-v2'),
-  ])
-  const watcher: { onSend: (() => void) | null } = { onSend: null }
-  // Error reporting off: the SDK would otherwise POST error details to Circle.
-  const kit = new BridgeKit({ disableErrorReporting: true })
+type Watcher = { onSend: (() => void) | null }
+type ViemAdapter = Awaited<ReturnType<typeof import('@circle-fin/adapter-viem-v2')['createViemAdapterFromProvider']>>
+
+// The SDKs are large, so they load only when someone donates from another chain or a unified balance.
+async function createAdapter(provider: EIP1193Provider): Promise<{ adapter: ViemAdapter; watcher: Watcher }> {
+  const { createViemAdapterFromProvider } = await import('@circle-fin/adapter-viem-v2')
+  const watcher: Watcher = { onSend: null }
   const adapter = await createViemAdapterFromProvider({
     provider: watchSends(provider, watcher),
     // Reads go through our own RPCs, which are the hosts the CSP allows, not the SDK's defaults.
     getPublicClient: ({ chain: c }: { chain: Chain }) => createPublicClient({ chain: c, transport: http(rpcFor(c.id)) }),
     capabilities: { addressContext: 'user-controlled' },
   })
-  return { kit, adapter, watcher }
+  return { adapter, watcher }
 }
 
-// One kit and adapter per wallet provider and account. The adapter caches the first account it sees, and a
+// One adapter per wallet provider and account. The adapter caches the first account it sees, and a
 // wallet keeps the same provider across account switches, so the account is part of the key. The adapter
-// picks the chain per call, so one serves every source chain.
-const kits = new WeakMap<EIP1193Provider, Map<string, ReturnType<typeof createKit>>>()
+// picks the chain per call, so one serves every chain.
+const adapters = new WeakMap<EIP1193Provider, Map<string, ReturnType<typeof createAdapter>>>()
 
 async function currentAccount(provider: EIP1193Provider, known?: Address): Promise<string> {
   if (known) return known.toLowerCase()
@@ -159,24 +157,49 @@ async function currentAccount(provider: EIP1193Provider, known?: Address): Promi
   }
 }
 
-async function setup(p: CrossChainParams) {
-  const chain = chainByKey(p.sourceKey)
-  if (p.fast && !chain.fast) throw new Error(`Fast transfers are not available from ${CHAIN_LABELS[chain.key]}.`)
-  const account = await currentAccount(p.provider, p.account)
-  let byAccount = kits.get(p.provider)
+async function cachedAdapter(provider: EIP1193Provider, known?: Address) {
+  const account = await currentAccount(provider, known)
+  let byAccount = adapters.get(provider)
   if (!byAccount) {
     byAccount = new Map()
-    kits.set(p.provider, byAccount)
+    adapters.set(provider, byAccount)
   }
   let entry = byAccount.get(account)
   if (!entry) {
-    const created = createKit(p.provider)
+    const created = createAdapter(provider)
     byAccount.set(account, created)
     // A failed load must not stick for this wallet.
     created.catch(() => byAccount.delete(account))
     entry = created
   }
-  const { kit, adapter, watcher } = await entry
+  return entry
+}
+
+// The Circle viem adapter for this wallet and account, shared by Bridge Kit and the Unified Balance Kit.
+export async function adapterFor(provider: EIP1193Provider, account?: Address): Promise<ViemAdapter> {
+  return (await cachedAdapter(provider, account)).adapter
+}
+
+let bridgeKit: Promise<import('@circle-fin/bridge-kit').BridgeKit> | null = null
+
+function loadBridgeKit() {
+  if (!bridgeKit) {
+    const loading = import('@circle-fin/bridge-kit').then(
+      // Error reporting off: the SDK would otherwise POST error details to Circle.
+      ({ BridgeKit }) => new BridgeKit({ disableErrorReporting: true }),
+    )
+    loading.catch(() => {
+      bridgeKit = null
+    })
+    bridgeKit = loading
+  }
+  return bridgeKit
+}
+
+async function setup(p: CrossChainParams) {
+  const chain = chainByKey(p.sourceKey)
+  if (p.fast && !chain.fast) throw new Error(`Fast transfers are not available from ${CHAIN_LABELS[chain.key]}.`)
+  const [kit, { adapter, watcher }] = await Promise.all([loadBridgeKit(), cachedAdapter(p.provider, p.account)])
   const params = {
     from: { adapter, chain: chain.key },
     // The forwarder mints straight to the campaign contract on Arc. No donate() call follows.

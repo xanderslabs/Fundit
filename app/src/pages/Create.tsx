@@ -1,16 +1,17 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { type Address, decodeEventLog, encodeFunctionData, type Hex, isAddressEqual, type TransactionReceipt } from 'viem'
 import { arc } from 'viem/chains'
 import { factoryAbi } from '../abi/factory'
 import { CampaignImage } from '../components/CampaignImage'
-import { FACTORY_ADDRESS, TX_TIMEOUT_MS, type TokenSymbol } from '../config'
+import { PASSKEY_PROCESSING, recheckResult } from '../components/TxStatus'
+import { FACTORY_ADDRESS, type TokenSymbol } from '../config'
 import { useFactoryFees } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
 import { explainError } from '../lib/errors'
 import { bpsToPercent } from '../lib/format'
-import { arcReceipts, type TxResult, waitForResult } from '../lib/sender'
+import type { TxResult } from '../lib/sender'
 import { byteLength, MAX_DESCRIPTION, MAX_LINKS, MAX_TITLE, validateCampaign } from '../lib/validate'
 
 const EXPLORER_URL = arc.blockExplorers.default.url
@@ -19,7 +20,9 @@ type Phase =
   | { kind: 'idle' }
   | { kind: 'sending' }
   | { kind: 'checking'; hash: Hex }
-  | { kind: 'timeout'; hash: Hex }
+  // userop marks a passkey user operation hash: no explorer link, and only the passkey bundler can check it.
+  // note explains a re-check that failed to answer. The outcome is still unknown.
+  | { kind: 'timeout'; hash: Hex; userop?: boolean; note?: string }
   | { kind: 'error'; message: string; hash?: Hex }
 
 // The new campaign's address is only known from the factory's CampaignCreated log in the receipt.
@@ -76,6 +79,8 @@ export function Create() {
   const [backup, setBackup] = useState('')
   const [touched, setTouched] = useState<Record<string, boolean>>({})
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' })
+  // Set synchronously, so a second click before React re-renders cannot start a second send or check.
+  const inFlight = useRef(false)
 
   const result = validateCampaign({ title, description, imageUrl, links, goal, token, backup, sender: sender?.address })
   const errors = result.ok ? {} : result.errors
@@ -106,7 +111,7 @@ export function Create() {
         setPhase({ kind: 'error', message: res.error, hash: res.hash })
         return
       case 'timeout':
-        setPhase({ kind: 'timeout', hash: res.hash })
+        setPhase({ kind: 'timeout', hash: res.hash, userop: res.hashKind === 'userop' })
         return
       case 'rejected':
         setPhase({ kind: 'error', message: 'You cancelled the request.' })
@@ -115,7 +120,8 @@ export function Create() {
 
   async function submit(e: FormEvent) {
     e.preventDefault()
-    if (!canSubmit || !result.ok || !sender) return
+    if (inFlight.current || !canSubmit || !result.ok || !sender) return
+    inFlight.current = true
     setPhase({ kind: 'sending' })
     try {
       const data = encodeFunctionData({
@@ -126,13 +132,24 @@ export function Create() {
       handle(await sender.send([{ to: FACTORY_ADDRESS, data }], { label: 'Create fundraiser' }))
     } catch (err) {
       setPhase({ kind: 'error', message: explainError(err) })
+    } finally {
+      inFlight.current = false
     }
   }
 
   // Checks the same transaction again. It never sends a new one, which could create the fundraiser twice.
-  async function checkAgain(hash: Hex) {
+  async function checkAgain(hash: Hex, userop: boolean) {
+    if (inFlight.current) return
+    inFlight.current = true
     setPhase({ kind: 'checking', hash })
-    handle(await waitForResult(arcReceipts, hash, TX_TIMEOUT_MS))
+    try {
+      handle(await recheckResult(sender, hash, userop))
+    } catch (err) {
+      // The check itself failed, so the transaction is still unknown. Never leave the page on "Checking...".
+      setPhase({ kind: 'timeout', hash, userop, note: `We could not check it. ${explainError(err)}` })
+    } finally {
+      inFlight.current = false
+    }
   }
 
   function setLink(i: number, value: string) {
@@ -336,10 +353,9 @@ export function Create() {
                 <strong>Your transaction is not confirmed yet.</strong> It may still go through. Check it before you try
                 again, so you do not create the fundraiser twice.
               </p>
-              <p>
-                <ExplorerLink hash={phase.hash} />
-              </p>
-              <button type="button" className="btn btn-outline" onClick={() => checkAgain(phase.hash)}>
+              <p>{phase.userop ? PASSKEY_PROCESSING : <ExplorerLink hash={phase.hash} />}</p>
+              {phase.note && <p className="field-error">{phase.note}</p>}
+              <button type="button" className="btn btn-outline" onClick={() => checkAgain(phase.hash, phase.userop === true)}>
                 Check again
               </button>
             </div>
