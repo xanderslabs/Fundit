@@ -32,6 +32,7 @@ contract CampaignInvariantsTest is Base {
 
     // Every campaign token held is either owed to the creator, owed to the treasury, or
     // waiting to be settled. Nothing can be stranded or double-counted.
+    // Because unaccounted() saturates at zero, this is a solvency check: balance >= creatorBalance + feesAccrued.
     function invariant_BalanceMatchesBooks() public view {
         assertEq(
             usdc.balanceOf(address(campaign)),
@@ -52,7 +53,6 @@ contract CampaignInvariantsTest is Base {
     // treasury claims.
     function invariant_RaisedNeverDecreases() public view {
         assertFalse(handler.raisedDecreased());
-        assertGe(campaign.raised(), handler.lastRaised());
     }
 
     // The platform never takes more than the fees snapshotted at creation, and the fees

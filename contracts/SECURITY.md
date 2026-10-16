@@ -14,7 +14,7 @@ Slither finding that is accepted instead of fixed.
 
 ## Owner powers
 
-The factory owner is one EOA. Ownership uses `Ownable2Step`, so a transfer only takes effect
+The intended deployment sets the factory owner to one EOA. The code accepts any `owner_` address. Ownership uses `Ownable2Step`, so a transfer only takes effect
 when the new owner calls `acceptOwnership`. The owner can:
 
 - Set `donationFeeBps` and `withdrawFeeBps`, each at most `MAX_FEE_BPS = 500` (5%). The
@@ -42,7 +42,7 @@ when the new owner calls `acceptOwnership`. The owner can:
   blocked or reverting treasury can only make `claimFees` revert, and the books stay intact. It
   never blocks `donate` or `withdraw`.
 - **Settlement.** Campaign tokens that arrive without a `donate` call (plain transfer, CCTP or
-  Gateway mint) are "unaccounted". `settle`, `withdraw` and `claimFees` book them as a gross
+  Gateway mint) are "unaccounted". `donate`, `settle`, `withdraw` and `claimFees` book them as a gross
   donation and charge the donation fee, so every inflow pays the same fee.
 - **Saturating `unaccounted`.** `unaccounted()` returns 0 instead of reverting when the balance
   is below `creatorBalance + feesAccrued`. The internal settle step can therefore never revert,
