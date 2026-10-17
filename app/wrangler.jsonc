@@ -1,0 +1,11 @@
+{
+	// Static site on Cloudflare Workers. There is no Worker script: Cloudflare serves the
+	// built files in ./dist/ and applies public/_headers (copied into dist by Vite).
+	"name": "fundit",
+	"compatibility_date": "2026-10-17",
+	"assets": {
+		"directory": "./dist/",
+		// Unknown paths serve /index.html with 200, so React Router handles them.
+		"not_found_handling": "single-page-application"
+	}
+}
