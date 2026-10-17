@@ -16,13 +16,18 @@ export type TxResult =
   | { status: 'timeout'; hash: Hex; completed: number; hashKind?: 'tx' | 'userop' }
   | { status: 'rejected'; completed: number }
 
+// onHash runs as soon as a hash for calls[index] is known, before its receipt, so a caller can save it and a
+// reload during the wait still knows it went out. A passkey sender reports its one user operation hash for the
+// last call.
+export type SendOptions = { label: string; onHash?: (hash: Hex, index: number) => void }
+
 // The single write path. Every action builds Calls and hands them to a Sender.
 // send() resolves to a TxResult. It throws only for a failure before anything is sent (for example a
 // gas estimate that reverts), so callers pass that to explainError.
 export interface Sender {
   kind: 'eoa' | 'passkey'
   address: Address
-  send(calls: Call[], opts?: { label: string }): Promise<TxResult>
+  send(calls: Call[], opts?: SendOptions): Promise<TxResult>
   // Checks a timed-out result again without sending anything or asking for a signature. Senders whose
   // timeouts carry a transaction hash leave it out, and callers use waitForResult.
   recheck?(hash: Hex): Promise<TxResult>
@@ -97,7 +102,7 @@ export function wagmiSender(config: Config, address: Address): Sender {
   return {
     kind: 'eoa',
     address,
-    async send(calls) {
+    async send(calls, opts) {
       if (calls.length === 0) throw new Error('No calls to send')
       if (getChainId(config) !== ARC_CHAIN_ID) {
         try {
@@ -119,6 +124,7 @@ export function wagmiSender(config: Config, address: Address): Sender {
           if (isUserRejection(err)) return { status: 'rejected', completed }
           throw err
         }
+        opts?.onHash?.(hash, completed)
         last = await waitForResult(arcReceipts, hash, TX_TIMEOUT_MS)
         if (last.status !== 'success') return { ...last, completed }
       }

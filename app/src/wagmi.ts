@@ -31,4 +31,7 @@ createAppKit({
   },
   // Email and socials are also turned off in the Reown dashboard, which overrides these flags.
   features: { analytics: false, email: false, socials: false, swaps: false, onramp: false, history: false },
+  // Both open smart contract wallets. Arc Memo reverts for a caller with code, so they are not offered.
+  enableCoinbase: false,
+  enableBaseAccount: false,
 })

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { type Address, decodeFunctionData, getAddress, type Hex, type TransactionReceipt } from 'viem'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -7,19 +7,22 @@ import { erc20Abi } from '../abi/erc20'
 import { memoAbi } from '../abi/memo'
 import { MEMO_ADDRESS, TOKENS, type TokenSymbol } from '../config'
 import type { CampaignView } from '../lib/campaigns'
-import type { Call, Sender, TxResult } from '../lib/sender'
+import type { Call, Sender, SendOptions, TxResult } from '../lib/sender'
 import { DonatePanel } from './DonatePanel'
 
 const ME = '0x1111111111111111111111111111111111111111' as Address
 const CAMPAIGN = getAddress('0x00000000000000000000000000000000000000a1')
 const HASH = `0x${'ab'.repeat(32)}` as Hex
 
-const state: { sender: Sender | null; balance: bigint; allowance: bigint; wallet: boolean } = {
+// code is what getCode returns for the donor address: undefined for an EOA, bytes for a smart wallet.
+const state: { sender: Sender | null; balance: bigint; allowance: bigint; wallet: boolean; code: Hex | undefined } = {
   sender: null,
   balance: 0n,
   allowance: 0n,
   wallet: false,
+  code: undefined,
 }
+const codeReads: Address[] = []
 const open = vi.fn()
 const reads: { address: Address; functionName: string; args: readonly unknown[] }[] = []
 
@@ -55,6 +58,10 @@ vi.mock('../lib/clients', () => ({
       if (p.functionName === 'balanceOf') return state.balance
       if (p.functionName === 'allowance') return state.allowance
       throw new Error(`unexpected read ${p.functionName}`)
+    },
+    getCode: async ({ address }: { address: Address }) => {
+      codeReads.push(address)
+      return state.code
     },
   },
 }))
@@ -107,8 +114,10 @@ afterEach(() => {
   state.balance = 0n
   state.allowance = 0n
   state.wallet = false
+  state.code = undefined
   iris.status = 'pending'
   reads.length = 0
+  codeReads.length = 0
   localStorage.clear()
   open.mockClear()
   recheck.next = async () => {
@@ -161,6 +170,84 @@ describe('DonatePanel', () => {
     expect(screen.getByText('2.50 USDC')).toBeTruthy()
     expect(screen.getByText('5.00 USDC')).toBeTruthy()
     expect(screen.getByText('105.00 USDC')).toBeTruthy()
+  })
+
+  // The donor confirms this total in the wallet. Cutting it to 2 decimals would show less than they pay.
+  it('shows exact 6-decimal amounts in the breakdown', async () => {
+    fakeSender()
+    state.balance = 1000_000000n
+    renderPanel(view('USDC'))
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText('Amount'), '10.333333')
+    await user.click(screen.getByLabelText('5%'))
+    const breakdown = within(screen.getByLabelText('Breakdown'))
+    expect(breakdown.getByText('10.075 USDC')).toBeTruthy()
+    expect(breakdown.getByText('0.258333 USDC')).toBeTruthy()
+    expect(breakdown.getByText('0.516666 USDC')).toBeTruthy()
+    expect(breakdown.getByText('10.849999 USDC')).toBeTruthy()
+  })
+
+  // Memo reverts for any caller with code. A smart wallet or an EIP-7702 delegated address connects as an
+  // ordinary wallet, so the panel reads the code on Arc before building.
+  it('donates through Memo from an address with no code', async () => {
+    const send = fakeSender()
+    state.balance = 1000_000000n
+    renderPanel(view('USDC'))
+    await fillAndDonate()
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+    expect(codeReads).toEqual([ME])
+    expect(send.mock.calls[0]![0].at(-1)!.to).toBe(MEMO_ADDRESS)
+  })
+
+  it('calls the campaign directly from an address with code', async () => {
+    const send = fakeSender()
+    state.balance = 1000_000000n
+    state.code = `0xef0100${'5a'.repeat(20)}`
+    renderPanel(view('USDC'))
+    await fillAndDonate()
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+    const calls = send.mock.calls[0]![0]
+    expect(calls[0]!.to).toBe(TOKENS.USDC.address)
+    expect(calls[1]!.to).toBe(CAMPAIGN)
+  })
+
+  // A reload while the wallet waits for the receipt must not reopen the form: the donation is already out.
+  it('restores the not-confirmed block after a reload during sending, once the donate hash is known', async () => {
+    const send = vi.fn((calls: Call[], opts?: SendOptions) => {
+      opts?.onHash?.(HASH, calls.length - 1)
+      return new Promise<TxResult>(() => {})
+    })
+    state.sender = { kind: 'eoa', address: ME, send }
+    state.balance = 1000_000000n
+    renderPanel(view('USDC'))
+    await fillAndDonate()
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+
+    cleanup()
+    renderPanel(view('USDC'))
+    expect(screen.getByText(/donation is not confirmed yet/)).toBeTruthy()
+    expectBlocked()
+  })
+
+  // The approval alone moves nothing to the campaign, so its hash does not block a new donation.
+  it('saves only the donate hash, not the approval hash, while sending', async () => {
+    const saved: unknown[] = []
+    const send = vi.fn(async (calls: Call[], opts?: SendOptions) => {
+      opts?.onHash?.(`0x${'01'.repeat(32)}`, 0)
+      saved.push(localStorage.getItem('fundit.pendingBridges'))
+      opts?.onHash?.(HASH, calls.length - 1)
+      saved.push(JSON.parse(localStorage.getItem('fundit.pendingBridges') ?? '[]'))
+      return success
+    })
+    state.sender = { kind: 'eoa', address: ME, send }
+    state.balance = 1000_000000n
+    renderPanel(view('USDC'))
+    await fillAndDonate()
+    expect(await screen.findByText(/Thank you/)).toBeTruthy()
+    expect(saved[0]).toBeNull()
+    expect(saved[1]).toMatchObject([{ kind: 'arc', campaign: CAMPAIGN, hash: HASH, approve: false }])
+    // A known outcome clears it.
+    expect(localStorage.getItem('fundit.pendingBridges')).toBeNull()
   })
 
   it('is disabled with "This campaign is closed." when the campaign is closed', () => {
@@ -595,6 +682,23 @@ describe('DonatePanel', () => {
       expect(await screen.findByText(/Thank you/)).toBeTruthy()
       expect(recheckFn).toHaveBeenCalledWith(HASH)
       expect(screen.getByRole('link', { name: /explorer/i }).getAttribute('href')).toBe(`https://explorer.arc.io/tx/${TX}`)
+    })
+
+    // A passkey wallet pays its gas in USDC from the same balance. Amount plus tip equal to the balance would
+    // leave nothing for gas, and the user operation would fail after the donor confirmed it.
+    it('keeps a gas buffer: amount plus tip must leave about 0.05 USDC', async () => {
+      passkeySender()
+      state.balance = 10_000000n
+      renderPanel(view('USDC'))
+      const user = userEvent.setup()
+      await user.type(screen.getByLabelText('Amount'), '10')
+      expect(await screen.findByText(/Keep about 0.05 USDC more for the network fee/)).toBeTruthy()
+      expect(donateButton().disabled).toBe(true)
+
+      await user.clear(screen.getByLabelText('Amount'))
+      await user.type(screen.getByLabelText('Amount'), '9.95')
+      await waitFor(() => expect(donateButton().disabled).toBe(false))
+      expect(codeReads).toEqual([])
     })
 
     // After a reload the saved entry must say which kind of hash it holds, or the wrong check runs.

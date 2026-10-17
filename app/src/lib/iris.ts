@@ -21,8 +21,9 @@ export async function fetchForwardFee(srcDomain: number, dstDomain: number, amou
   // high, as Bridge Kit budgets: the fee charged is never above it, so "at least" amounts stay true.
   // BigInt throws on a fractional or missing value, so a malformed quote fails loudly.
   const forwardFee = BigInt(tier.forwardFee.high)
-  // minimumFee is in basis points with up to two decimals: amount * bps / 10,000.
-  const protocolFee = (amount * BigInt(Math.round(tier.minimumFee * 100))) / 1_000_000n
+  // minimumFee is in basis points with up to two decimals: amount * bps / 10,000. Rounded up, so the cap is
+  // never one unit below what Circle charges.
+  const protocolFee = (amount * BigInt(Math.round(tier.minimumFee * 100)) + 999_999n) / 1_000_000n
   return { maxFee: forwardFee + protocolFee, protocolFee, forwardFee }
 }
 

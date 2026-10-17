@@ -33,6 +33,15 @@ describe('fetchForwardFee', () => {
     expect(fee.maxFee).toBe(20000n + (25_000000n * 33n) / 1_000_000n)
   })
 
+  // A fee cap one unit short of what Circle charges makes the burn fail or the transfer fall back to slow.
+  it('rounds the protocol fee up, so maxFee is never one unit short', async () => {
+    mockFetch(200, FEE_SAMPLE)
+    // 25.000001 USDC at 33 hundredths of a bp is 825.000033 units: Circle needs 826, not 825.
+    const fee = await fetchForwardFee(6, 26, 25_000001n, true)
+    expect(fee.protocolFee).toBe(826n)
+    expect(fee.maxFee).toBe(20000n + 826n)
+  })
+
   it('uses the standard tier (threshold 2000) when not fast', async () => {
     mockFetch(200, FEE_SAMPLE)
     const fee = await fetchForwardFee(0, 26, 25_000000n, false)

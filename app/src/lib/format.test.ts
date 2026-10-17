@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bpsToPercent, formatAmount, parseAmount, progressPercent } from './format'
+import { bpsToPercent, formatAmount, formatExact, parseAmount, progressPercent } from './format'
 
 describe('parseAmount', () => {
   // Amounts are 6-decimal ERC-20 units, so "0.1" must be 100000n, never an 18-decimal value.
@@ -42,5 +42,18 @@ describe('progressPercent', () => {
     expect(progressPercent(50n, 100n)).toBe(50)
     expect(progressPercent(300n, 100n)).toBe(100)
     expect(progressPercent(10n, 0n)).toBe(0)
+  })
+})
+
+describe('formatExact', () => {
+  // A donor confirms what they pay. A total cut to 2 decimals would show less than the wallet takes.
+  it('shows every unit up to 6 decimals, with at least 2', () => {
+    expect(formatExact(10_849999n, 'USDC')).toBe('10.849999 USDC')
+    expect(formatExact(105_000000n, 'USDC')).toBe('105.00 USDC')
+    expect(formatExact(2_500000n, 'EURC')).toBe('2.50 EURC')
+    expect(formatExact(1_250500n, 'USDC')).toBe('1.2505 USDC')
+    expect(formatExact(1234_000001n, 'USDC')).toBe('1,234.000001 USDC')
+    expect(formatExact(0n, 'USDC')).toBe('0.00 USDC')
+    expect(formatExact(1n, 'USDC')).toBe('0.000001 USDC')
   })
 })

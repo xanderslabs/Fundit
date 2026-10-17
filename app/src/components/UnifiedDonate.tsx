@@ -16,7 +16,7 @@ import {
 } from '../lib/bridge'
 import type { CampaignView } from '../lib/campaigns'
 import { explainError } from '../lib/errors'
-import { bpsToPercent, formatAmount, parseAmount } from '../lib/format'
+import { bpsToPercent, formatExact, parseAmount } from '../lib/format'
 import { arcReceipts, waitForResult } from '../lib/sender'
 import {
   donateFromUnified,
@@ -271,7 +271,7 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
             </p>
           ) : (
             <p>
-              Your unified balance: <strong>{formatAmount(total, 'USDC')}</strong>
+              Your unified balance: <strong>{formatExact(total, 'USDC')}</strong>
               {balance.data!.byChain.length > 0 && (
                 <span className="hint"> (on {balance.data!.byChain.map((c) => chainName(c.chain)).join(', ')})</span>
               )}
@@ -306,7 +306,7 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
           )}
           {sendable !== undefined && total !== undefined && total > 0n && (
             <p className="hint">
-              Up to {formatAmount(sendable, 'USDC')} can be sent after fees
+              Up to {formatExact(sendable, 'USDC')} can be sent after fees
               {reserveQuery.isFetching ? " (checking Circle's fees...)" : '.'}
             </p>
           )}

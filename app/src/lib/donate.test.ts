@@ -15,7 +15,8 @@ function sender(kind: Sender['kind']): Sender {
   return { kind, address: ME, send: async () => ({ status: 'rejected', completed: 0 }) }
 }
 
-const base = { campaign: CAMPAIGN, token: TOKEN, amount: 100_000000n, tip: 5_000000n, message: 'Good luck' }
+// senderCode is the code at the donor address on Arc. viem's getCode gives undefined for an address with none.
+const base = { campaign: CAMPAIGN, token: TOKEN, amount: 100_000000n, tip: 5_000000n, message: 'Good luck', senderCode: undefined }
 const donateData = encodeFunctionData({ abi: campaignAbi, functionName: 'donate', args: [100_000000n, 5_000000n, 'Good luck'] })
 
 describe('buildDonateCalls', () => {
@@ -58,6 +59,37 @@ describe('buildDonateCalls', () => {
     expect(calls[0]!.to).toBe(TOKEN)
     expect(calls[1]!.to).toBe(CAMPAIGN)
     expect(calls[1]!.data).toBe(donateData)
+  })
+
+  // Memo reverts unless its caller is an EOA. A smart wallet, a Safe or an EIP-7702 delegated address has code
+  // on Arc and connects as an ordinary wallet, so the code decides, not the wallet kind.
+  describe('Memo only for an address with no code', () => {
+    const SAFE_CODE = '0x608060405273ffffffffffffffffffffffffffffffffffffffff600054167fa619486e' as const
+    const DELEGATION_7702 = `0xef0100${'5a'.repeat(20)}` as const
+
+    it('eoa with empty code ("0x" or none) goes through Memo', () => {
+      for (const senderCode of [undefined, '0x'] as const) {
+        const calls = buildDonateCalls({ ...base, senderCode, sender: sender('eoa'), allowance: 105_000000n })
+        expect(calls).toHaveLength(1)
+        expect(calls[0]!.to).toBe(MEMO_ADDRESS)
+      }
+    })
+
+    it('an address with code calls donate on the campaign directly, approval unchanged', () => {
+      for (const senderCode of [SAFE_CODE, DELEGATION_7702]) {
+        const calls = buildDonateCalls({ ...base, senderCode, sender: sender('eoa'), allowance: 0n })
+        expect(calls).toHaveLength(2)
+        expect(calls[0]!.to).toBe(TOKEN)
+        expect(decodeFunctionData({ abi: erc20Abi, data: calls[0]!.data }).args).toEqual([CAMPAIGN, 105_000000n])
+        expect(calls[1]!.to).toBe(CAMPAIGN)
+        expect(calls[1]!.data).toBe(donateData)
+      }
+    })
+
+    it('passkey stays direct', () => {
+      const calls = buildDonateCalls({ ...base, sender: sender('passkey'), allowance: 105_000000n })
+      expect(calls).toEqual([{ to: CAMPAIGN, data: donateData }])
+    })
   })
 
   // The contract would revert with MessageTooLong after the approval was already paid for.

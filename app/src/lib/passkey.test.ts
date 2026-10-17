@@ -102,6 +102,14 @@ describe('passkeySender', () => {
     })
   })
 
+  // One user operation carries every call, so its hash stands for the last one (the donation).
+  it('reports the user operation hash for the last call before waiting for the receipt', async () => {
+    const b = bundler()
+    const onHash = vi.fn((_hash: Hex, _index: number) => expect(b.waitForUserOperationReceipt).not.toHaveBeenCalled())
+    await passkeySender(ACCOUNT, b).send([A, B], { label: 'Donate', onHash })
+    expect(onHash).toHaveBeenCalledWith(OP_HASH, 1)
+  })
+
   it('sends nothing when the gas estimate reverts', async () => {
     const b = bundler({ estimateUserOperationGas: vi.fn(async () => Promise.reject(new Error('execution reverted'))) })
     await expect(passkeySender(ACCOUNT, b).send([A])).rejects.toThrow('execution reverted')

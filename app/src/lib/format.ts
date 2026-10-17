@@ -38,6 +38,14 @@ export function formatAmount(value: bigint, symbol: TokenSymbol): string {
   return `${negative ? '-' : ''}${shown} ${symbol}`
 }
 
+// Every unit, for amounts a donor confirms: at least 2 decimals and up to all 6, so nothing is cut off.
+export function formatExact(value: bigint, symbol: TokenSymbol): string {
+  const negative = value < 0n
+  const abs = negative ? -value : value
+  const fraction = (abs % UNIT).toString().padStart(DECIMALS, '0').replace(/0+$/, '').padEnd(2, '0')
+  return `${negative ? '-' : ''}${groupThousands((abs / UNIT).toString())}.${fraction} ${symbol}`
+}
+
 export function bpsToPercent(bps: number): string {
   return `${bps / 100}%`
 }

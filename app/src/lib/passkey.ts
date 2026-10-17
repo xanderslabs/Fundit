@@ -121,7 +121,7 @@ export function passkeySender<A extends { address: Address }>(account: A, bundle
   return {
     kind: 'passkey',
     address: account.address,
-    async send(calls) {
+    async send(calls, opts) {
       if (calls.length === 0) throw new Error('No calls to send')
       const ops = calls.map((c) => ({ to: c.to, data: c.data }))
       let hash: Hex
@@ -140,6 +140,7 @@ export function passkeySender<A extends { address: Address }>(account: A, bundle
         if (isUserRejection(err)) return { status: 'rejected', completed: 0 }
         throw err
       }
+      opts?.onHash?.(hash, calls.length - 1)
       return userOperationResult(bundler, hash)
     },
     recheck: (hash) => userOperationResult(bundler, hash),

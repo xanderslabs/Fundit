@@ -21,7 +21,7 @@ import type { CampaignView } from '../lib/campaigns'
 import { arcClient } from '../lib/clients'
 import { buildDonateCalls, donationBreakdown, fetchDonorFunds } from '../lib/donate'
 import { explainError } from '../lib/errors'
-import { bpsToPercent, formatAmount, parseAmount } from '../lib/format'
+import { bpsToPercent, formatAmount, formatExact, parseAmount } from '../lib/format'
 import type { TxResult } from '../lib/sender'
 import { byteLength } from '../lib/validate'
 import { CrossChainDonate, PendingBridgeTracker } from './CrossChainDonate'
@@ -32,6 +32,8 @@ const EXPLORER_URL = arc.blockExplorers.default.url
 const QUICK_AMOUNTS = ['10', '25', '50', '100'] as const
 const TIP_PERCENTS = [0, 5, 10, 15] as const
 const DAY_MS = 24 * 60 * 60 * 1000
+// A passkey wallet pays its network fee in USDC from the balance it donates from. This much stays free for it.
+const PASSKEY_GAS_BUFFER = 50_000n
 const START_OVER_WARNING =
   'The earlier transaction may still go through. If it does and you donate again, you will give twice. Start a new donation anyway?'
 
@@ -163,7 +165,13 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   const messageBytes = byteLength(message)
   const messageTooLong = messageBytes > MAX_MESSAGE_BYTES
   const balance = funds.data?.balance
-  const overBalance = breakdown !== null && balance !== undefined && breakdown.total > balance
+  // Only a USDC balance pays the passkey wallet's gas. An EURC balance is not touched by it.
+  const gasBuffer = sender?.kind === 'passkey' && symbol === 'USDC' ? PASSKEY_GAS_BUFFER : 0n
+  const overBalance = breakdown !== null && balance !== undefined && breakdown.total + gasBuffer > balance
+  const notEnough = (have: bigint) =>
+    gasBuffer > 0n
+      ? `Your balance is ${formatAmount(have, symbol)}. Keep about ${formatExact(gasBuffer, symbol)} more for the network fee, which your passkey wallet pays in USDC.`
+      : `Your balance is ${formatAmount(have, symbol)}, which is not enough ${symbol} for this amount and tip.`
 
   const busy = phase.kind === 'sending' || phase.kind === 'checking'
   // An unconfirmed transaction may still be mined. Until a check settles it, no new donation can start.
@@ -222,14 +230,29 @@ export function DonatePanel({ view }: { view: CampaignView }) {
     setPhase({ kind: 'sending' })
     try {
       // Read the balance and allowance again right before building, so a finished approval is not repeated.
-      const fresh = await fetchDonorFunds(arcClient, token, sender.address, campaign)
+      // The code at the donor address decides Memo or a direct call: Memo only takes an EOA caller.
+      const [fresh, senderCode] = await Promise.all([
+        fetchDonorFunds(arcClient, token, sender.address, campaign),
+        sender.kind === 'eoa' ? arcClient.getCode({ address: sender.address }) : Promise.resolve(undefined),
+      ])
       queryClient.setQueryData(fundsKey, fresh)
-      if (fresh.balance < amount + tip) {
-        setPhase({ kind: 'error', message: `Your balance is ${formatAmount(fresh.balance, symbol)}, which is not enough ${symbol} for this donation.` })
+      if (fresh.balance < amount + tip + gasBuffer) {
+        setPhase({ kind: 'error', message: notEnough(fresh.balance) })
         return
       }
-      const calls = buildDonateCalls({ sender, campaign, token, amount, tip, message, allowance: fresh.allowance })
-      handle(await sender.send(calls, { label: 'Donate' }), calls.length > 1)
+      const calls = buildDonateCalls({ sender, campaign, token, amount, tip, message, allowance: fresh.allowance, senderCode })
+      const donateIndex = calls.length - 1
+      const res = await sender.send(calls, {
+        label: 'Donate',
+        // Saved as soon as the donation has a hash, so a reload before the receipt still blocks a second one.
+        // The approval alone moves nothing to the campaign, so its hash is not saved.
+        onHash: (hash, index) => {
+          if (index === donateIndex) {
+            savePendingArc({ campaign, hash, approve: false, ...(sender.kind === 'passkey' ? { hashKind: 'userop' as const } : {}) })
+          }
+        },
+      })
+      handle(res, calls.length > 1)
     } catch (err) {
       setPhase({ kind: 'error', message: explainError(err) })
     } finally {
@@ -370,7 +393,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
               )}
               {overBalance && balance !== undefined && (
                 <p className="field-error" role="alert">
-                  Your balance is {formatAmount(balance, symbol)}, which is not enough {symbol} for this amount and tip.
+                  {notEnough(balance)}
                 </p>
               )}
               {balanceNote && (
@@ -415,19 +438,19 @@ export function DonatePanel({ view }: { view: CampaignView }) {
             <dl className="donate-breakdown" aria-label="Breakdown">
               <div>
                 <dt>To the fundraiser</dt>
-                <dd>{formatAmount(breakdown.toCampaign, symbol)}</dd>
+                <dd>{formatExact(breakdown.toCampaign, symbol)}</dd>
               </div>
               <div>
                 <dt>Platform fee ({bpsToPercent(summary.donationFeeBps)})</dt>
-                <dd>{formatAmount(breakdown.fee, symbol)}</dd>
+                <dd>{formatExact(breakdown.fee, symbol)}</dd>
               </div>
               <div>
                 <dt>Tip for Fundit</dt>
-                <dd>{formatAmount(breakdown.tip, symbol)}</dd>
+                <dd>{formatExact(breakdown.tip, symbol)}</dd>
               </div>
               <div className="donate-total">
                 <dt>Total you pay</dt>
-                <dd>{formatAmount(breakdown.total, symbol)}</dd>
+                <dd>{formatExact(breakdown.total, symbol)}</dd>
               </div>
             </dl>
           )}

@@ -143,8 +143,9 @@ describe('UnifiedDonate', () => {
   it('blocks an amount the fees would push over the balance, and says how much can be sent', async () => {
     m.balance = { total: 40_000000n, byChain: [{ chain: 'Base', amount: 40_000000n }] }
     renderIt()
-    // Before an amount, the static fee table sets the limit (Base: 0.01 gas, 0.201 forwarder, 0.5 bps).
-    expect(await screen.findByText(/Up to 39\.78 USDC can be sent after fees/)).toBeTruthy()
+    // Before an amount, the static fee table sets the limit (Base: 0.01 gas, 0.201 forwarder, 0.5 bps), shown
+    // to the unit.
+    expect(await screen.findByText(/Up to 39\.787 USDC can be sent after fees/)).toBeTruthy()
     const user = userEvent.setup()
     const input = screen.getByLabelText('Amount')
     await waitFor(() => expect(input.matches(':disabled')).toBe(false))

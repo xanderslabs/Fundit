@@ -166,6 +166,31 @@ describe('wagmiSender', () => {
   })
 })
 
+
+describe('wagmiSender onHash', () => {
+  // A reload while the receipt is awaited must still know the donation went out. The caller saves the hash
+  // here, before any receipt.
+  it('reports each hash with its index as soon as the wallet returns it, before the receipt', async () => {
+    core.sendTransaction.mockResolvedValueOnce(H1).mockResolvedValueOnce(H2)
+    const seen: [Hex, number, number][] = []
+    const onHash = vi.fn((hash: Hex, index: number) => {
+      seen.push([hash, index, arc.waitForTransactionReceipt.mock.calls.length])
+    })
+    await wagmiSender(config, ME).send(
+      [
+        { to: A, data: '0x01' },
+        { to: B, data: '0x02' },
+      ],
+      { label: 'Donate', onHash },
+    )
+    // Third value: receipt waits started before the callback. Each hash is reported before its own wait.
+    expect(seen).toEqual([
+      [H1, 0, 0],
+      [H2, 1, 1],
+    ])
+  })
+})
+
 describe('waitForResult', () => {
   function client(over: Partial<ReceiptClient>): ReceiptClient {
     return {

@@ -22,7 +22,7 @@ import {
 } from '../lib/bridge'
 import type { CampaignView } from '../lib/campaigns'
 import { explainError } from '../lib/errors'
-import { bpsToPercent, formatAmount, parseAmount } from '../lib/format'
+import { bpsToPercent, formatExact, parseAmount } from '../lib/format'
 import { fetchForwardFee, fetchTransferStatus, type TransferStatus } from '../lib/iris'
 
 const POLL_MS = 10_000
@@ -187,12 +187,12 @@ export function CrossChainDonate({
         <dl className="donate-breakdown" aria-label="Breakdown">
           <div>
             <dt>{quote?.source === 'fallback' ? "Estimated fee (could not reach your wallet's network)" : 'Transfer fees'}</dt>
-            <dd>{quote !== undefined ? formatAmount(quote.fee, 'USDC') : fee.isError ? 'Not available' : 'Checking...'}</dd>
+            <dd>{quote !== undefined ? formatExact(quote.fee, 'USDC') : fee.isError ? 'Not available' : 'Checking...'}</dd>
           </div>
           <div className="donate-total">
             <dt>Reaches the campaign</dt>
             {/* Bridge Kit's estimate is the most it will charge, so this is a floor. */}
-            <dd>{reaches !== null && !tooSmall ? `At least ${formatAmount(reaches, 'USDC')}` : '-'}</dd>
+            <dd>{reaches !== null && !tooSmall ? `At least ${formatExact(reaches, 'USDC')}` : '-'}</dd>
           </div>
         </dl>
       )}
