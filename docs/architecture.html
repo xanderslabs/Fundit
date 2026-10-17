@@ -78,10 +78,10 @@
   <header class="prose" style="display:grid;gap:12px">
     <div class="eyebrow">Fundit V2 on Arc mainnet</div>
     <h1>Fundit architecture</h1>
-    <p class="lede">Every fundraiser is its own escrow contract on Arc. Donations arrive in USDC or EURC, the creator withdraws to Arc or to another CCTP chain, and no operator key can move the funds.</p>
+    <p class="lede">Every fundraiser is its own escrow contract on Arc. Donations arrive in USDC or EURC, the creator withdraws to Arc or to another CCTP chain, and no operator key can move a creator's balance.</p>
   </header>
 
-  <div class="note prose"><strong>Pre-launch.</strong> The contracts are not deployed yet. Cross-chain donations, unified balance donations and passkeys are built and tested on an Arc mainnet fork, and stay behind build flags until a live canary confirms them.</div>
+  <div class="note prose"><strong>Pre-launch.</strong> The contracts are not deployed yet. Cross-chain donations, unified balance donations and passkeys are built and unit-tested with mocks. On an Arc mainnet fork, the end-to-end suite simulates a forwarded mint (a plain USDC transfer and a stubbed Iris response). No Bridge Kit, Gateway or Modular Wallets call has run against Arc yet. They stay off until the live canary confirms them.</div>
 
   <section aria-labelledby="flow">
     <h2 id="flow">Money flow</h2>
@@ -153,7 +153,7 @@
       </svg>
     </div>
     <div class="legend">
-      <span><i class="swatch"></i>On at launch</span>
+      <span><i class="swatch"></i>Planned at launch</span>
       <span><i class="swatch flag"></i>Behind <code>VITE_CROSSCHAIN</code> until the canary passes</span>
     </div>
   </section>
@@ -162,12 +162,12 @@
     <h2 id="products">Circle and Arc products</h2>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Product</th><th>Role</th><th>Code</th><th>Launch</th></tr></thead>
+        <thead><tr><th>Product</th><th>Role</th><th>Code</th><th>Planned at launch</th></tr></thead>
         <tbody>
-          <tr><td>Arc</td><td>Home chain. Gas is paid in USDC.</td><td><code>app/src/config.ts</code></td><td><span class="pill on">On</span></td></tr>
-          <tr><td>USDC and EURC</td><td>Campaign tokens, ERC-20 interface, 6 decimals</td><td><code>CampaignFactory.sol</code></td><td><span class="pill on">On</span></td></tr>
-          <tr><td>Arc Memo</td><td>Tags each on-Arc donation from an EOA and keeps the donor as <code>msg.sender</code></td><td><code>app/src/lib/donate.ts</code></td><td><span class="pill on">On</span></td></tr>
-          <tr><td>CCTP V2 and Forwarding Service</td><td>USDC payouts to six chains</td><td><code>Campaign.sol</code>, <code>app/src/lib/payout.ts</code></td><td><span class="pill on">On</span></td></tr>
+          <tr><td>Arc</td><td>Home chain. Gas is paid in USDC.</td><td><code>app/src/config.ts</code></td><td><span class="pill on">Planned</span></td></tr>
+          <tr><td>USDC and EURC</td><td>Campaign tokens, ERC-20 interface, 6 decimals</td><td><code>CampaignFactory.sol</code></td><td><span class="pill on">Planned</span></td></tr>
+          <tr><td>Arc Memo</td><td>Tags each on-Arc donation from an EOA and keeps the donor as <code>msg.sender</code></td><td><code>app/src/lib/donate.ts</code></td><td><span class="pill on">Planned</span></td></tr>
+          <tr><td>CCTP V2 and Forwarding Service</td><td>USDC payouts to six chains</td><td><code>Campaign.sol</code>, <code>app/src/lib/payout.ts</code></td><td><span class="pill on">Planned</span></td></tr>
           <tr><td>Bridge Kit</td><td>Donations from other chains into the campaign</td><td><code>app/src/lib/bridge.ts</code></td><td><span class="pill off">Flag</span></td></tr>
           <tr><td>Gateway and Unified Balance Kit</td><td>Donations from a unified USDC balance</td><td><code>app/src/lib/unified.ts</code></td><td><span class="pill off">Flag</span></td></tr>
           <tr><td>Modular Wallets</td><td>Passkey smart accounts</td><td><code>app/src/lib/passkey.ts</code></td><td><span class="pill off">Flag</span></td></tr>
@@ -183,7 +183,7 @@
         <h3 style="margin:0;font-size:1.05rem">The owner can</h3>
         <ul>
           <li>Set the donation and withdrawal fee for new campaigns, each at most 5%. Launch values are 1% and 1%.</li>
-          <li>Rotate the treasury.</li>
+          <li>Set the treasury to any non-zero address. <code>claimFees</code> pays the treasury named at claim time, so a new treasury also receives unclaimed fees and tips from existing campaigns.</li>
           <li>Set a featured campaign.</li>
           <li>Pause the creation of new campaigns.</li>
         </ul>
@@ -191,10 +191,11 @@
       <div>
         <h3 style="margin:0;font-size:1.05rem">The owner can never</h3>
         <ul>
-          <li>Move, freeze or redirect campaign funds.</li>
+          <li>Move, freeze or redirect any creator balance.</li>
           <li>Pause donations or withdrawals.</li>
           <li>Change an existing campaign's fees, token or creator.</li>
           <li>Upgrade any contract.</li>
+          <li>Give up ownership. <code>renounceOwnership</code> always reverts.</li>
         </ul>
       </div>
       <div>

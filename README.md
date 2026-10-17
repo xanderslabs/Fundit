@@ -43,16 +43,16 @@ inflow and outflow on chain. Fundit has no backend, no database and no server th
 | Tip | Chosen by the donor, can be zero | None | Per donation |
 
 The launch values are the planned deploy configuration. The cap is enforced in
-[`CampaignFactory.sol`](contracts/src/CampaignFactory.sol#L42).
+[`CampaignFactory.sol`](contracts/src/CampaignFactory.sol#L155-L160).
 
 ## Circle and Arc products used
 
-This list matches the product list on the app's home page, in
-[`app/src/pages/Home.tsx`](app/src/pages/Home.tsx#L33-L44). Two build flags decide what ships:
+This list covers every product on the app's home page
+([`app/src/pages/Home.tsx`](app/src/pages/Home.tsx#L33-L44)), plus Arc itself and the CCTP fees API. Two build flags decide what ships:
 `VITE_CROSSCHAIN` and `VITE_PASSKEYS` ([`app/src/config.ts`](app/src/config.ts#L85-L88)). Both are
 off at launch and turn on only after a live mainnet canary confirms each path.
 
-| Product | How Fundit uses it | Code | At launch |
+| Product | How Fundit uses it | Code | Planned at launch |
 | --- | --- | --- | --- |
 | Arc | Home chain for every campaign. Gas is paid in USDC. | [`app/src/config.ts`](app/src/config.ts#L5-L7) | On |
 | USDC | Campaign token, used through the ERC-20 interface with 6 decimals. | [`app/src/config.ts`](app/src/config.ts#L12-L15), [`CampaignFactory.sol`](contracts/src/CampaignFactory.sol#L105) | On |
@@ -63,15 +63,20 @@ off at launch and turn on only after a live mainnet canary confirms each path.
 | CCTP V2 fees API (Iris) | Fast and Standard fee quotes with forwarding. | [`app/src/lib/iris.ts`](app/src/lib/iris.ts#L15) | On |
 | Bridge Kit | Cross-chain donations: burns USDC on the donor's chain with the campaign as recipient and `useForwarder: true`. | [`app/src/lib/bridge.ts`](app/src/lib/bridge.ts#L298-L326) | Behind `VITE_CROSSCHAIN` |
 | Gateway and Unified Balance Kit | Donations from a donor's unified USDC balance, minted to the campaign on Arc. | [`app/src/lib/unified.ts`](app/src/lib/unified.ts#L216-L243) | Behind `VITE_CROSSCHAIN` |
-| Modular Wallets (passkeys) | Passkey smart accounts for donors and creators, with user operations sent to Circle's bundler. | [`app/src/lib/passkey.ts`](app/src/lib/passkey.ts#L190-L215) | Behind `VITE_PASSKEYS` |
+| Modular Wallets (passkeys) | Passkey smart accounts for donors and creators, with user operations sent to Circle's bundler. | [`app/src/lib/passkey.ts`](app/src/lib/passkey.ts#L193-L217) | Behind `VITE_PASSKEYS` |
 
-Cross-chain donations, unified balance donations and passkeys are built and tested against an Arc
-mainnet fork. They stay off until the live canary confirms them on mainnet.
+Cross-chain donations, unified balance donations and passkeys are built and unit-tested with mocks.
+On an Arc mainnet fork, the end-to-end suite simulates a forwarded mint (a plain USDC transfer and a
+stubbed Iris response). No Bridge Kit, Gateway or Modular Wallets call has run against Arc yet. They
+stay off until the live canary confirms them.
+
+The "Planned at launch" column is the plan until the live canary confirms each path.
 
 ### Not used
 
-Fundit does not use Circle Wallets with a paymaster (passkey accounts pay their own gas in USDC on
-Arc), Onramp Kit, Swap, StableFX, USYC or any other Circle product not listed above.
+Fundit sends no user operation through a paymaster: passkey accounts pay their own gas in USDC on Arc
+([`passkey.ts`](app/src/lib/passkey.ts#L118-L119)). Fundit does not use Onramp Kit, Swap, StableFX,
+USYC or any other Circle product not listed above.
 
 ## Architecture
 
@@ -95,10 +100,15 @@ in [`docs/architecture.html`](docs/architecture.html).
 Read [`contracts/SECURITY.md`](contracts/SECURITY.md) for the full model and the accepted Slither
 findings. The short version:
 
-- The factory owner can set fees (each at most 5%, for new campaigns only), rotate the treasury, set
-  a featured campaign and pause the creation of new campaigns.
-- The owner can never move, freeze or redirect campaign funds, change an existing campaign's fees,
-  pause donations or withdrawals, or upgrade any contract.
+- The factory owner can set fees (each at most 5%, for new campaigns only), set a featured campaign
+  and pause the creation of new campaigns.
+- The owner can set the treasury to any non-zero address. `claimFees` pays the treasury named at
+  claim time, so a new treasury also receives unclaimed fees and tips from existing campaigns.
+- The owner can never move, freeze or redirect any creator balance, change an existing campaign's
+  fees, token or creator, pause donations or withdrawals, or upgrade any contract.
+- `renounceOwnership` always reverts
+  ([`CampaignFactory.sol`](contracts/src/CampaignFactory.sol#L186-L188)), so the treasury can always
+  be rotated.
 - Fees stay in the campaign until someone calls `claimFees()`. A broken treasury cannot block
   donations or withdrawals.
 - **Creator recovery.** A creator can name an optional backup address. The backup can start a
@@ -204,4 +214,4 @@ See [`app/e2e/README.md`](app/e2e/README.md) for what a run does.
 
 ## License
 
-Not set yet.
+MIT. See [`LICENSE`](LICENSE).

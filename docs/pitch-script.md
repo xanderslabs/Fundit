@@ -15,6 +15,8 @@ creator can withdraw, and anyone can audit every dollar.
 
 ## 0:30 to 1:45. Demo
 
+[Only after the mainnet deploy. Before then, demo the fork build.]
+
 [Open fundit.xyz on the home page.]
 
 Here's the home page. Every card is a campaign contract on Arc mainnet.
@@ -36,6 +38,8 @@ USDC, so I never need another token.
 The donation is on chain, with the fee and the tip split out. Anyone can verify it on the Arc
 explorer.
 
+[Only after canary C4 passes.]
+
 [Open Manage and withdraw to Base.]
 
 As the creator, I withdraw. I can take the money on Arc, or send USDC to Base, Ethereum, Arbitrum
@@ -51,7 +55,8 @@ Fundit is built on Circle from the contract up:
 - **Arc Memo** tags each donation.
 - **CCTP V2 and the Forwarding Service** pay creators on six other chains.
 
-Behind flags, we've also built three more paths, tested on an Arc mainnet fork:
+Behind flags, we've also built three more paths. They're unit-tested, with the settle path tested on
+an Arc mainnet fork:
 
 - **Bridge Kit**, so a donor on Base or Arbitrum can give straight into a campaign on Arc.
 - **Gateway with the Unified Balance Kit**, so a donor can give from their unified USDC balance.
@@ -64,25 +69,26 @@ path that strands a donation.
 
 Here's what makes Fundit different from a platform:
 
-- The owner can never move or freeze campaign funds. That's enforced in code, and the contracts
-  can't be upgraded.
+- The owner can never move, freeze or redirect a creator's balance. That's enforced in code, and the
+  contracts can't be upgraded.
 - Fees launch at 1% on donations and 1% on withdrawals. The code caps each at 5%, and a campaign's
   fees are fixed when it's created.
 - Fees are pulled by a separate call, so a broken treasury can never block a donation or a
-  withdrawal.
+  withdrawal. The owner can rotate the treasury, and the new one also collects unclaimed fees and
+  tips.
 - If a creator loses their key, an optional backup can take over after a 7-day wait, and the creator
   can cancel at any time during that wait.
 
-There's no backend, no database and no server that holds keys. The app is a static site.
+The app is a static site, and no Fundit server ever holds a key that can move money.
 
 ## 3:15 to 3:45. Traction plan
 
 We're pre-launch. The contracts are tested with unit, fuzz, invariant and fork tests and are ready
 for mainnet. Our first users come from:
 
-- Creators we already know in `[placeholder: community or region]`.
 - Diaspora fundraisers, where cross-border payouts hurt most.
-- Crypto communities that already hold USDC on Base and Arbitrum.
+- Crypto communities that already hold USDC on Base and Arbitrum, once cross-chain donations are on
+  (M2).
 
 Our target for the first 90 days is `[placeholder: number]` campaigns and `[placeholder: amount]`
 USDC raised. We'll report every number from on-chain data.
