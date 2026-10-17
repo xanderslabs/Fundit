@@ -1,0 +1,34 @@
+{
+  "chainId": 5042,
+  "network": "Arc mainnet",
+  "deployedAt": 1792250396,
+  "deployBlock": 26452579,
+  "deployTx": "0x1e7f9bbc73ebbab575ee8d9a5ffd6ac67aa7ca24df0afcdc738fd590f568a8ad",
+  "deployer": "0x3552E9c14C7b6050839009A5B160A4446a1e916D",
+  "contracts": {
+    "CampaignFactory": "0xf1b2AEF82c37fC41D254D8e06BD7780ce34617d9",
+    "CampaignImplementation": "0x083CE7a68Ae418f832E12c2aB976615237e03853"
+  },
+  "constructorArgs": {
+    "owner": "0x3552E9c14C7b6050839009A5B160A4446a1e916D",
+    "treasury": "0x3552E9c14C7b6050839009A5B160A4446a1e916D",
+    "usdc": "0x3600000000000000000000000000000000000000",
+    "eurc": "0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1",
+    "tokenMessenger": "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d",
+    "donationFeeBps": 100,
+    "withdrawFeeBps": 100,
+    "eurcPayoutDomains": []
+  },
+  "verification": {
+    "sourcify": {
+      "CampaignFactory": "exact_match",
+      "CampaignImplementation": "exact_match",
+      "lookup": "https://sourcify.dev/#/lookup/0xf1b2AEF82c37fC41D254D8e06BD7780ce34617d9"
+    },
+    "arcscan": "not verified: explorer.arc.io blocks automated verification behind Cloudflare (circlefin/arc-node#425)"
+  },
+  "explorer": {
+    "factory": "https://explorer.arc.io/address/0xf1b2AEF82c37fC41D254D8e06BD7780ce34617d9",
+    "deployTx": "https://explorer.arc.io/tx/0x1e7f9bbc73ebbab575ee8d9a5ffd6ac67aa7ca24df0afcdc738fd590f568a8ad"
+  }
+}
