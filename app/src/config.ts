@@ -1,5 +1,5 @@
 import { type Address, type Chain, type Hex, parseAbi } from 'viem'
-import { arbitrum, avalanche, base, mainnet, optimism, polygon } from 'viem/chains'
+import { arbitrum, arc, avalanche, base, mainnet, optimism, polygon } from 'viem/chains'
 import { loadConfig } from './deployConfig'
 
 // Arc mainnet
@@ -39,6 +39,8 @@ const env = import.meta.env
 // Free public RPCs, used as wagmi transports. Every host here must also be in public/_headers connect-src.
 export const ARC_RPC_URL: string = env.VITE_ARC_RPC_URL || 'https://rpc.mainnet.arc.io'
 export const MAINNET_RPC_URL: string = env.VITE_MAINNET_RPC_URL || 'https://ethereum-rpc.publicnode.com'
+// Arc's public RPCs as viem lists them, the fallbacks for Arc reads. Their hosts are under *.arc.io.
+export const ARC_RPC_FALLBACKS: readonly string[] = arc.rpcUrls.default.http
 
 export const CCTP_CHAINS: readonly CctpChain[] = [
   { key: 'Ethereum', chainId: 1, domain: 0, usdc: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', viemChain: mainnet, rpcUrl: MAINNET_RPC_URL, fast: true },
@@ -98,6 +100,7 @@ export const MAX_MESSAGE_BYTES = 280
 // Every external origin the app calls. config.test.ts checks each one against the CSP connect-src.
 export const EXTERNAL_HOSTS: readonly string[] = [
   ARC_RPC_URL,
+  ...ARC_RPC_FALLBACKS,
   ...CCTP_CHAINS.map((c) => c.rpcUrl),
   IRIS_URL,
   GATEWAY_URL,

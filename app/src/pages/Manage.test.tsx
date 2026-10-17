@@ -15,12 +15,26 @@ const CREATOR = getAddress('0x1111111111111111111111111111111111111111') as Addr
 const STRANGER = getAddress('0x3333333333333333333333333333333333333333') as Address
 const HASH = `0x${'ab'.repeat(32)}` as Hex
 
-const state: { view: CampaignView | undefined; sender: Sender | null } = { view: undefined, sender: null }
+// external is the connected wallet's address while a passkey session is also active.
+const state: { view: CampaignView | undefined; sender: Sender | null; external: Address | null } = {
+  view: undefined,
+  sender: null,
+  external: null,
+}
+const setActive = vi.fn()
 
 vi.mock('../hooks/useCampaigns', () => ({
   useCampaign: () => ({ data: state.view, isPending: state.view === undefined, isError: false, refetch: () => {} }),
 }))
-vi.mock('../hooks/useSender', () => ({ useSender: () => state.sender }))
+vi.mock('../hooks/useSender', () => ({
+  useSender: () => state.sender,
+  useWalletChoice: () => ({
+    both: state.sender?.kind === 'passkey' && state.external !== null,
+    active: state.sender ? (state.sender.kind === 'passkey' ? 'passkey' : 'external') : null,
+    external: state.external,
+    setActive,
+  }),
+}))
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: () => {} }) }))
 vi.mock('../lib/clients', () => ({ arcClient: { readContract: async () => true } }))
 
@@ -92,6 +106,8 @@ afterEach(() => {
   cleanup()
   state.view = undefined
   state.sender = null
+  state.external = null
+  setActive.mockReset()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   localStorage.clear()
@@ -102,6 +118,27 @@ describe('Manage', () => {
   it('sends a connected non-creator to the campaign page', async () => {
     state.view = view()
     fakeSender('eoa', STRANGER)
+    renderPage()
+    expect(await screen.findByText('Campaign page')).toBeTruthy()
+  })
+
+  // The organiser connected their wallet, but the passkey session is the one in use. A silent redirect to the
+  // public page would hide why Manage is not open.
+  it('asks a creator whose passkey is in use to switch to the connected wallet', async () => {
+    state.view = view()
+    fakeSender('passkey', STRANGER)
+    state.external = CREATOR
+    renderPage()
+    expect(screen.getByText('You are using your passkey wallet. Switch to your connected wallet to manage this fundraiser.')).toBeTruthy()
+    expect(screen.queryByText('Campaign page')).toBeNull()
+    await userEvent.setup().click(button('Use connected wallet'))
+    expect(setActive).toHaveBeenCalledWith('external')
+  })
+
+  it('still sends a passkey user to the campaign page when the connected wallet is not the creator', async () => {
+    state.view = view()
+    fakeSender('passkey', STRANGER)
+    state.external = getAddress('0x4444444444444444444444444444444444444444')
     renderPage()
     expect(await screen.findByText('Campaign page')).toBeTruthy()
   })

@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react'
 import { type Address, getAddress, type Hex, type TransactionReceipt } from 'viem'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TX_TIMEOUT_MS } from '../config'
-import { useSender } from '../hooks/useSender'
+import { pickWallet, setActiveWallet, useSender, useWalletChoice } from '../hooks/useSender'
 import {
   clearPasskeySession,
   loginPasskey,
@@ -213,7 +213,10 @@ describe('passkey session store', () => {
 })
 
 describe('useSender', () => {
-  beforeEach(() => clearPasskeySession())
+  beforeEach(() => {
+    clearPasskeySession()
+    setActiveWallet('passkey')
+  })
 
   // A logged-in passkey wallet is who acts, even if an external wallet is also connected for bridging.
   it('returns the passkey sender when a passkey session exists', () => {
@@ -226,5 +229,29 @@ describe('useSender', () => {
   it('returns the wallet sender without a passkey session', () => {
     const { result } = renderHook(() => useSender())
     expect(result.current?.kind).toBe('eoa')
+  })
+
+  // With both active the person chooses. The choice must change who signs, not only what the header says.
+  it('returns the wallet sender once the person switches to the connected wallet, and back', () => {
+    savePasskeySession({ address: ACCOUNT.address, credentialId: 'cred-1' })
+    const { result } = renderHook(() => ({ sender: useSender(), choice: useWalletChoice() }))
+    expect(result.current.choice).toMatchObject({ both: true, active: 'passkey', external: '0x9999999999999999999999999999999999999999' })
+    act(() => result.current.choice.setActive('external'))
+    expect(result.current.sender?.kind).toBe('eoa')
+    expect(result.current.choice.active).toBe('external')
+    act(() => setActiveWallet('passkey'))
+    expect(result.current.sender?.kind).toBe('passkey')
+  })
+})
+
+describe('pickWallet', () => {
+  const P = { address: ACCOUNT.address, credentialId: 'c' }
+  const E = '0x9999999999999999999999999999999999999999' as Address
+  it('prefers the passkey by default, the chosen one when both exist, and whichever exists otherwise', () => {
+    expect(pickWallet({ passkey: P, external: E, prefer: 'passkey' })).toBe('passkey')
+    expect(pickWallet({ passkey: P, external: E, prefer: 'external' })).toBe('external')
+    expect(pickWallet({ passkey: P, external: null, prefer: 'external' })).toBe('passkey')
+    expect(pickWallet({ passkey: null, external: E, prefer: 'passkey' })).toBe('external')
+    expect(pickWallet({ passkey: null, external: null, prefer: 'passkey' })).toBeNull()
   })
 })

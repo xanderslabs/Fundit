@@ -1,8 +1,9 @@
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { loadEnv, type Plugin } from 'vite'
 import { configDefaults, defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
-import { loadConfig } from './src/deployConfig.ts'
+import { checkBuildEnv, loadConfig } from './src/deployConfig.ts'
 
 // `--mode e2e` only: swaps the AppKit wagmi config for src/wagmi.e2e.ts (mock connector, local fork RPC)
 // and the AppKit hooks for src/appkit.e2e.ts. Production and dev builds never load either file.
@@ -21,8 +22,13 @@ function e2eSwap(): Plugin {
 }
 
 export default defineConfig(({ command, mode }) => {
-  // Fail the production build, not the deployed page, when the factory or Reown config is missing.
-  if (command === 'build') loadConfig({ ...loadEnv(mode, '.', 'VITE_'), PROD: mode === 'production' })
+  // Fail the production build, not the deployed page, when the factory or Reown config is missing, when
+  // passkeys are on with no Circle client key, or when an RPC host is missing from the CSP.
+  if (command === 'build') {
+    const env = { ...loadEnv(mode, '.', 'VITE_'), PROD: mode === 'production' }
+    loadConfig(env)
+    checkBuildEnv(env, readFileSync(fileURLToPath(new URL('./public/_headers', import.meta.url)), 'utf8'))
+  }
 
   return {
     plugins: mode === 'e2e' ? [react(), e2eSwap()] : [react()],

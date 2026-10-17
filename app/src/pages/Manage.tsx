@@ -8,7 +8,7 @@ import { PendingBridgeTracker } from '../components/CrossChainDonate'
 import { TxStatus, useTx } from '../components/TxStatus'
 import { ARC_DOMAIN, CHAIN_LABELS } from '../config'
 import { useCampaign } from '../hooks/useCampaigns'
-import { useSender } from '../hooks/useSender'
+import { useSender, useWalletChoice } from '../hooks/useSender'
 import { chainByKey, savePendingPayout } from '../lib/bridge'
 import type { CampaignView } from '../lib/campaigns'
 import { arcClient } from '../lib/clients'
@@ -526,6 +526,7 @@ export function Manage() {
   const valid = isAddress(param)
   const query = useCampaign(valid ? param : undefined)
   const sender = useSender()
+  const choice = useWalletChoice()
 
   if (!valid || query.data === 'not-a-campaign') {
     return (
@@ -555,8 +556,22 @@ export function Manage() {
   }
   const view = query.data
   if (!sender) return <ConnectNotice />
-  // Only the organiser can sign these calls. Anyone else sees the public page.
-  if (!isAddressEqual(sender.address, view.summary.creator)) return <Navigate to={`/c/${view.address}`} replace />
+  if (!isAddressEqual(sender.address, view.summary.creator)) {
+    // The organiser's wallet is connected, but the passkey wallet acts. Say so instead of leaving the page.
+    if (sender.kind === 'passkey' && choice.external && isAddressEqual(choice.external, view.summary.creator)) {
+      return (
+        <section className="notice">
+          <h1>Manage fundraiser</h1>
+          <p>You are using your passkey wallet. Switch to your connected wallet to manage this fundraiser.</p>
+          <button type="button" className="btn" onClick={() => choice.setActive('external')}>
+            Use connected wallet
+          </button>
+        </section>
+      )
+    }
+    // Only the organiser can sign these calls. Anyone else sees the public page.
+    return <Navigate to={`/c/${view.address}`} replace />
+  }
 
   return (
     <section className="manage">

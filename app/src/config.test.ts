@@ -3,6 +3,7 @@ import headers from '../public/_headers?raw'
 import { campaignAbi } from './abi/campaign'
 import { factoryAbi } from './abi/factory'
 import { CCTP_CHAINS, EXTERNAL_HOSTS, FORWARD_HOOK_DATA, TOKENS } from './config'
+import { connectSrcAllows } from './deployConfig'
 
 describe('config', () => {
   it('uses the 32-byte CCTP Forwarding hook data ("cctp-forward", version 0, length 0)', () => {
@@ -40,26 +41,24 @@ describe('config', () => {
 })
 
 describe('_headers CSP', () => {
-  const csp = headers.match(/Content-Security-Policy:\s*(.+)/)?.[1] ?? ''
-  const connectSrc = csp.split(';').map((d) => d.trim()).find((d) => d.startsWith('connect-src')) ?? ''
-  const sources = connectSrc.split(/\s+/).slice(1)
-
-  const allowed = (url: string) => {
-    const { protocol, host } = new URL(url)
-    return sources.some((s) => {
-      if (!s.includes('://')) return false
-      const [scheme, pattern] = s.split('://') as [string, string]
-      if (`${scheme}:` !== protocol) return false
-      return pattern.startsWith('*.') ? host.endsWith(pattern.slice(1)) : host === pattern
-    })
-  }
-
   it('has a connect-src directive', () => {
-    expect(sources.length).toBeGreaterThan(0)
+    expect(headers).toMatch(/connect-src 'self' https:/)
   })
 
   // A host missing here is blocked by the browser at runtime with no build or type error.
   it.each(EXTERNAL_HOSTS)('allows the app to call %s', (url) => {
-    expect(allowed(url)).toBe(true)
+    expect(connectSrcAllows(headers, url)).toBe(true)
+  })
+
+  it('refuses a host or scheme connect-src does not list', () => {
+    expect(connectSrcAllows(headers, 'https://evil.example.com')).toBe(false)
+    expect(connectSrcAllows(headers, 'http://rpc.mainnet.arc.io')).toBe(false)
+  })
+})
+
+describe('_headers security headers', () => {
+  // Without HSTS a first visit over http can be intercepted before the redirect to https.
+  it('sends Strict-Transport-Security for a year, with subdomains', () => {
+    expect(headers).toMatch(/^\s+Strict-Transport-Security: max-age=31536000; includeSubDomains$/m)
   })
 })
