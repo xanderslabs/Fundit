@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useRef, useState } from 'react'
 import type { Hex } from 'viem'
 import { arc } from 'viem/chains'
 import { useConnection } from 'wagmi'
-import { MAX_MESSAGE_BYTES } from '../config'
+import { CROSSCHAIN_ENABLED, MAX_MESSAGE_BYTES } from '../config'
 import { useSender } from '../hooks/useSender'
 import {
   type BlockingEntry,
@@ -133,8 +133,12 @@ export function DonatePanel({ view }: { view: CampaignView }) {
     return saved ? arcTimeout(saved) : { kind: 'idle' }
   })
   const [crossChainBusy, setCrossChainBusy] = useState(false)
+  // With VITE_CROSSCHAIN off only the Arc wallet is offered. A source with a saved unconfirmed donation
+  // always shows, so its status stays in view and can be checked.
   const sources = PAY_SOURCES.filter(
-    (s) => s.id === blockedSource || ((!s.usdcOnly || symbol === 'USDC') && (!s.needsWallet || isConnected)),
+    (s) =>
+      s.id === blockedSource ||
+      ((s.id === 'arc' || CROSSCHAIN_ENABLED) && (!s.usdcOnly || symbol === 'USDC') && (!s.needsWallet || isConnected)),
   )
   // The blocked source shows its status. Otherwise a source that is no longer offered (the wallet
   // disconnected) falls back to Arc.
@@ -316,7 +320,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   return (
     <section className="panel donate" aria-label="Donate">
       <h2>Donate</h2>
-      {closed && <p className="field-error">This campaign is closed.</p>}
+      {closed && <p className="field-error">This fundraiser is closed.</p>}
       <PendingBridgeTracker campaign={campaign} />
 
       <fieldset className="form-field donate-source" disabled={closed || locked || crossChainBusy || blocker !== null}>

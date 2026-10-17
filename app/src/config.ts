@@ -81,6 +81,9 @@ export const FACTORY_DEPLOY_BLOCK: bigint = deploy.factoryDeployBlock
 export const REOWN_PROJECT_ID: string = deploy.reownProjectId
 export const CIRCLE_CLIENT_KEY: string = env.VITE_CIRCLE_CLIENT_KEY ?? ''
 export const PASSKEYS_ENABLED: boolean = env.VITE_PASSKEYS === '1'
+// Donations from another chain and from a Gateway unified balance, and bridging into a passkey wallet. Off by
+// default. Entries already saved in the browser are tracked and still block a second donation either way.
+export const CROSSCHAIN_ENABLED: boolean = env.VITE_CROSSCHAIN === '1'
 
 export const IRIS_URL = 'https://iris-api.circle.com'
 export const GATEWAY_URL = 'https://gateway-api.circle.com'

@@ -20,6 +20,8 @@ vi.mock('../hooks/useCampaigns', () => ({
 vi.mock('../hooks/useActivity', () => ({
   useActivity: () => ({ isPending: true, isError: false, isSuccess: false, hasNextPage: false }),
 }))
+// The activity list reads unaccounted() on Arc; ActivityList.test.tsx covers that row.
+vi.mock('../lib/clients', () => ({ arcClient: { readContract: async () => 0n } }))
 
 // No wallet connected: the donate panel shows its connect prompt. DonatePanel.test.tsx covers donating.
 vi.mock('../hooks/useSender', () => ({ useSender: () => null }))
@@ -120,7 +122,7 @@ describe('CampaignPage', () => {
   it('disables donating on a closed campaign', () => {
     hookState.current = { data: view({}, true), isPending: false, isError: false }
     renderPage()
-    expect(screen.getByText('This campaign is closed.')).toBeTruthy()
+    expect(screen.getByText('This fundraiser is closed.')).toBeTruthy()
     expect((screen.getByRole('button', { name: 'Donate' }) as HTMLButtonElement).disabled).toBe(true)
   })
 })

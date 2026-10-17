@@ -1,5 +1,4 @@
 import { type Address, encodeFunctionData, erc20Abi, parseUnits } from 'viem'
-import { campaignAbi } from '../src/abi/campaign'
 import { ACCOUNTS, connect, createCampaign, expect, rpc, send, summary, test, tokenAddress, USDC_WEI } from './fixtures'
 
 // Any address works as the holder: on Arc, setting its native balance gives it USDC.
@@ -50,9 +49,15 @@ test('a stubbed CCTP mint shows in raised, and as a cross-chain donation once se
   const activity = page.getByRole('region', { name: 'Activity' })
   await expect(activity.getByText('No activity yet.')).toBeVisible()
   await expect(activity.getByText(/Cross-chain donation/)).toHaveCount(0)
+  // The list says the inflow is there but not booked yet, so it does not look missing.
+  await expect(activity.getByText('5.00 USDC from other chains, not counted yet')).toBeVisible()
 
-  // Anyone can call settle(). It books the inflow as an ExternalDonationSettled event.
-  await send(ACCOUNTS.other, campaign, encodeFunctionData({ abi: campaignAbi, functionName: 'settle' }))
+  // Anyone can call settle(). The donor's wallet does it from the activity list, and it books the inflow as
+  // an ExternalDonationSettled event.
+  await activity.getByRole('button', { name: 'Count it now' }).click()
+  await expect(activity.getByText('Counted. It now shows in the list.')).toBeVisible()
+  await expect(activity.getByText('Cross-chain donation of 5.00 USDC')).toBeVisible()
+  await expect(activity.getByText(/not counted yet/)).toHaveCount(0)
   const settled = await summary(campaign)
   expect(settled.raised).toBe(parseUnits('5', 6))
   // 1% donation fee on the settled amount.
@@ -79,12 +84,16 @@ test('an EURC campaign offers only "Arc wallet" in the donate panel', async ({ a
   await expect(donate.getByText('EURC campaigns accept donations on Arc only.')).toBeVisible()
 })
 
-test('a USDC campaign offers all three sources to a connected wallet', async ({ as }) => {
-  // The control for the EURC test above: the filter, not a missing connection, is what hides the others.
+test('with VITE_CROSSCHAIN off, a USDC campaign offers only "Arc wallet" to a connected wallet', async ({ as }) => {
+  // The e2e build uses the production default, cross-chain donations off. DonatePanel.test.tsx covers the
+  // flag on, where a connected wallet gets all three sources.
   const campaign = await createCampaign(ACCOUNTS.creator, 'USDC', 'E2E dollar fund')
   const page = await as(ACCOUNTS.donor)
   await page.goto(`/c/${campaign}`)
   await connect(page, ACCOUNTS.donor)
-  const sources = page.getByRole('region', { name: 'Donate' }).getByRole('group', { name: 'Pay with' }).getByRole('radio')
-  await expect(sources).toHaveCount(3)
+  const donate = page.getByRole('region', { name: 'Donate' })
+  await expect(donate.getByText(/Your balance: .* USDC/)).toBeVisible()
+  const sources = donate.getByRole('group', { name: 'Pay with' }).getByRole('radio')
+  await expect(sources).toHaveCount(1)
+  await expect(donate.getByRole('radio', { name: /^Arc wallet/ })).toBeChecked()
 })

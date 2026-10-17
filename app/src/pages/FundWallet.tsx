@@ -7,10 +7,10 @@ import { useConnection } from 'wagmi'
 import { erc20Abi } from '../abi/erc20'
 import { PasskeyLogin } from '../components/PasskeyLogin'
 import { PendingBridgeTracker } from '../components/CrossChainDonate'
-import { ARC_DOMAIN, CCTP_CHAINS, CHAIN_LABELS, type CctpChainKey, TOKENS } from '../config'
+import { ARC_DOMAIN, CCTP_CHAINS, CHAIN_LABELS, type CctpChainKey, CROSSCHAIN_ENABLED, TOKENS } from '../config'
 import { chainByKey, donateCrossChain, estimateCrossChain } from '../lib/bridge'
 import { arcClient } from '../lib/clients'
-import { explainError } from '../lib/errors'
+import { explainAfterApproval } from '../lib/errors'
 import { formatAmount, parseAmount } from '../lib/format'
 import { fetchForwardFee } from '../lib/iris'
 import { usePasskeySession } from '../lib/passkey'
@@ -116,7 +116,7 @@ function BridgeToPasskey({ recipient }: { recipient: Address }) {
       setAmountText('')
       setPhase({ kind: 'sent' })
     } catch (err) {
-      setPhase({ kind: 'error', message: explainError(err) })
+      setPhase({ kind: 'error', message: explainAfterApproval(err) })
     } finally {
       inFlight.current = false
     }
@@ -258,12 +258,17 @@ export function FundWallet() {
         <p className="hint">Send only USDC on Arc to this address. It is not the same wallet on other chains.</p>
       </section>
 
-      <section className="panel manage-section" aria-labelledby="fund-bridge-heading">
-        <h2 id="fund-bridge-heading">Bridge USDC from another chain</h2>
-        <p className="hint">Move USDC from a wallet on another chain. Circle delivers it to your passkey wallet on Arc.</p>
-        <BridgeToPasskey recipient={address} />
+      {CROSSCHAIN_ENABLED ? (
+        <section className="panel manage-section" aria-labelledby="fund-bridge-heading">
+          <h2 id="fund-bridge-heading">Bridge USDC from another chain</h2>
+          <p className="hint">Move USDC from a wallet on another chain. Circle delivers it to your passkey wallet on Arc.</p>
+          <BridgeToPasskey recipient={address} />
+          <PendingBridgeTracker campaign={address} destination="your passkey wallet" />
+        </section>
+      ) : (
+        // A bridge started while the option was on may still arrive, so it stays tracked.
         <PendingBridgeTracker campaign={address} destination="your passkey wallet" />
-      </section>
+      )}
     </section>
   )
 }

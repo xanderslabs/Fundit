@@ -1,37 +1,47 @@
 import { Link } from 'react-router'
 import { CampaignCard } from '../components/CampaignCard'
 import { CampaignGrid, LoadError } from '../components/CampaignGrid'
-import { PASSKEYS_ENABLED } from '../config'
+import { CROSSCHAIN_ENABLED, PASSKEYS_ENABLED } from '../config'
 import { useCampaigns, useFeatured } from '../hooks/useCampaigns'
 
 const NEWEST_COUNT = 6
 
-const STEPS = [
-  {
-    title: 'Create',
-    text: 'Pick USDC or EURC, set a goal and tell your story. Your fundraiser gets its own escrow contract on Arc.',
-  },
-  {
-    title: 'Share',
-    text: 'Send the link anywhere. People can give from Arc, from another chain, or from their Circle unified balance.',
-  },
-  {
-    title: 'Withdraw anywhere',
-    text: 'Take the money out on Arc, or have USDC sent to Ethereum, Base, Arbitrum and other chains in one step.',
-  },
-]
+// Built at render, so the flags decide what the page promises.
+function steps() {
+  return [
+    {
+      title: 'Create',
+      text: 'Pick USDC or EURC, set a goal and tell your story. Your fundraiser gets its own escrow contract on Arc.',
+    },
+    {
+      title: 'Share',
+      text: CROSSCHAIN_ENABLED
+        ? 'Send the link anywhere. People can give from Arc, from another chain, or from their Circle unified balance.'
+        : 'Send the link anywhere. People give in USDC or EURC from their wallet on Arc.',
+    },
+    {
+      title: 'Withdraw anywhere',
+      text: 'Take the money out on Arc, or have USDC sent to Ethereum, Base, Arbitrum and other chains in one step.',
+    },
+  ]
+}
 
 type Product = { name: string; text: string }
 
-// Only products the app uses. Circle Wallets shows only while passkeys are switched on.
-const PRODUCTS: Product[] = [
-  { name: 'USDC and EURC', text: 'Every fundraiser holds one of the two, with 6 decimals, on Arc.' },
-  { name: 'CCTP', text: 'Moves USDC between chains for donations and payouts. The Forwarding Service finishes each transfer for you.' },
-  { name: 'Gateway', text: 'Lets donors give from a unified USDC balance spread across chains.' },
-  ...(PASSKEYS_ENABLED ? [{ name: 'Wallets', text: 'Passkey wallets, so you can give without a browser extension.' }] : []),
-  { name: 'App Kits', text: 'Bridge Kit and Unified Balance Kit run the cross-chain steps in your browser.' },
-  { name: 'Arc Memo', text: 'Tags each donation from a regular wallet as a Fundit donation on Arc.' },
-]
+// Only products the app uses. Gateway and the App Kits show only while cross-chain donations are on, and
+// Circle Wallets only while passkeys are on. CCTP stays: payouts to other chains use it either way.
+function products(): Product[] {
+  return [
+    { name: 'USDC and EURC', text: 'Every fundraiser holds one of the two, with 6 decimals, on Arc.' },
+    CROSSCHAIN_ENABLED
+      ? { name: 'CCTP', text: 'Moves USDC between chains for donations and payouts. The Forwarding Service finishes each transfer for you.' }
+      : { name: 'CCTP', text: 'Sends USDC payouts to other chains. The Forwarding Service finishes each transfer for you.' },
+    ...(CROSSCHAIN_ENABLED ? [{ name: 'Gateway', text: 'Lets donors give from a unified USDC balance spread across chains.' }] : []),
+    ...(PASSKEYS_ENABLED ? [{ name: 'Wallets', text: 'Passkey wallets, so you can give without a browser extension.' }] : []),
+    ...(CROSSCHAIN_ENABLED ? [{ name: 'App Kits', text: 'Bridge Kit and Unified Balance Kit run the cross-chain steps in your browser.' }] : []),
+    { name: 'Arc Memo', text: 'Tags each donation from a regular wallet as a Fundit donation on Arc.' },
+  ]
+}
 
 export function Home() {
   const featured = useFeatured()
@@ -67,7 +77,7 @@ export function Home() {
           <h2 id="how-it-works">How it works</h2>
         </div>
         <ol className="steps">
-          {STEPS.map((step, i) => (
+          {steps().map((step, i) => (
             <li key={step.title} className="step">
               <span className="step-number" aria-hidden="true">
                 {i + 1}
@@ -112,7 +122,7 @@ export function Home() {
           <h2 id="built-on">Built on Arc with Circle</h2>
         </div>
         <ul className="products">
-          {PRODUCTS.map((p) => (
+          {products().map((p) => (
             <li key={p.name}>
               <h3>{p.name}</h3>
               <p className="muted">{p.text}</p>

@@ -1,14 +1,15 @@
 import { useAppKit } from '@reown/appkit/react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { type FormEvent, useEffect, useState } from 'react'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router'
 import { type Address, encodeFunctionData, formatUnits, isAddress, isAddressEqual, zeroAddress } from 'viem'
 import { campaignAbi } from '../abi/campaign'
+import { PendingBridgeTracker } from '../components/CrossChainDonate'
 import { TxStatus, useTx } from '../components/TxStatus'
 import { ARC_DOMAIN, CHAIN_LABELS } from '../config'
 import { useCampaign } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
-import { chainByKey } from '../lib/bridge'
+import { chainByKey, savePendingPayout } from '../lib/bridge'
 import type { CampaignView } from '../lib/campaigns'
 import { arcClient } from '../lib/clients'
 import { PlainError } from '../lib/errors'
@@ -146,9 +147,20 @@ function WithdrawSection({ view, sender }: { view: CampaignView; sender: Sender 
   const queryClient = useQueryClient()
   const refresh = useRefresh(campaign)
   const [amountText, setAmountText] = useState('')
-  const tx = useTx(() => {
+  // What the last submit sent, read once its receipt is in.
+  const sending = useRef<{ dest: PayoutDest; fast: boolean; net: bigint } | null>(null)
+  // The success text for the last payout. A payout to another chain is only burned on Arc so far.
+  const [sentText, setSentText] = useState('Your withdrawal went through.')
+  const tx = useTx((hash) => {
     refresh(true)
     setAmountText('')
+    const sent = sending.current
+    if (sent && sent.dest !== 'Arc') {
+      savePendingPayout({ campaign, burnTx: hash, destDomain: destDomain(sent.dest), amount: formatUnits(sent.net, 6) })
+      setSentText(`Sent from Arc. It arrives on ${CHAIN_LABELS[sent.dest]} in about ${sent.fast ? 'a minute' : '15 to 20 minutes'}.`)
+    } else {
+      setSentText('Your withdrawal went through.')
+    }
   })
   const [dest, setDest] = useState<PayoutDest>('Arc')
   const [fastChoice, setFastChoice] = useState(true)
@@ -206,7 +218,8 @@ function WithdrawSection({ view, sender }: { view: CampaignView; sender: Sender 
 
   function submit(e: FormEvent) {
     e.preventDefault()
-    if (!canSubmit || amount === null || net === null || recipient === null) return
+    if (!canSubmit || amount === null || net === null || recipient === null || tx.locked) return
+    sending.current = { dest, fast, net }
     void tx.run(
       sender,
       async () => {
@@ -355,7 +368,7 @@ function WithdrawSection({ view, sender }: { view: CampaignView; sender: Sender 
         <TxStatus
           tx={tx}
           noun="withdrawal"
-          successText="Your withdrawal went through."
+          successText={sentText}
           startOverWarning="The earlier withdrawal may still go through. If it does and you withdraw again, you will take out funds twice. Start over anyway?"
         />
         {tx.phase.kind !== 'timeout' && (
@@ -364,6 +377,7 @@ function WithdrawSection({ view, sender }: { view: CampaignView; sender: Sender 
           </button>
         )}
       </form>
+      <PendingBridgeTracker campaign={campaign} kind="payout" />
     </section>
   )
 }

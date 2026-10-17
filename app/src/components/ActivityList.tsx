@@ -1,10 +1,15 @@
-import type { Address } from 'viem'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { type Address, encodeFunctionData } from 'viem'
 import { arc } from 'viem/chains'
+import { campaignAbi } from '../abi/campaign'
 import type { TokenSymbol } from '../config'
 import { useActivity } from '../hooks/useActivity'
+import { useSender } from '../hooks/useSender'
 import type { ActivityItem } from '../lib/activity'
+import { arcClient } from '../lib/clients'
 import { formatAmount } from '../lib/format'
 import { Name } from './Name'
+import { TxStatus, useTx } from './TxStatus'
 
 const EXPLORER_URL = arc.blockExplorers.default.url
 const ZERO = '0x0000000000000000000000000000000000000000'
@@ -75,6 +80,57 @@ function Line({ item, symbol }: { item: ActivityItem; symbol: TokenSymbol }) {
   }
 }
 
+// Money minted to the campaign by CCTP or Gateway counts in raised() at once, but the list shows it only after
+// settle() books it as a cross-chain donation. Anyone may call settle(), so any connected wallet can do it here.
+function Unaccounted({ campaign, symbol }: { campaign: Address; symbol: TokenSymbol }) {
+  const sender = useSender()
+  const queryClient = useQueryClient()
+  const key = campaign.toLowerCase()
+  // Under ['activity', campaign], so every refresh of the activity list reads it again too.
+  const query = useQuery({
+    queryKey: ['activity', key, 'unaccounted'],
+    queryFn: () => arcClient.readContract({ address: campaign, abi: campaignAbi, functionName: 'unaccounted' }),
+    staleTime: 15_000,
+  })
+  const tx = useTx(() => {
+    void queryClient.invalidateQueries({ queryKey: ['campaign', key] })
+    void queryClient.invalidateQueries({ queryKey: ['activity', key] })
+  })
+  const amount = query.data ?? 0n
+  // After a send the status stays in view, even once the amount drops to 0.
+  if (amount === 0n && tx.phase.kind === 'idle') return null
+
+  function count() {
+    if (!sender || tx.locked) return
+    void tx.run(sender, () => ({ to: campaign, data: encodeFunctionData({ abi: campaignAbi, functionName: 'settle' }) }), 'Count it now')
+  }
+
+  return (
+    <div className="status-box activity-unaccounted">
+      {amount > 0n && (
+        <>
+          <p>
+            <strong>{formatAmount(amount, symbol)} from other chains, not counted yet</strong>
+          </p>
+          {sender ? (
+            <button type="button" className="btn btn-outline" disabled={tx.locked} onClick={count}>
+              {tx.busy ? 'Counting...' : 'Count it now'}
+            </button>
+          ) : (
+            <p className="muted">Connect any wallet to count it.</p>
+          )}
+        </>
+      )}
+      <TxStatus
+        tx={tx}
+        noun="transaction"
+        successText="Counted. It now shows in the list."
+        startOverWarning="The earlier transaction may still go through. Try again anyway?"
+      />
+    </div>
+  )
+}
+
 export function ActivityList({ campaign, createdAtBlock, symbol }: { campaign: Address; createdAtBlock: bigint; symbol: TokenSymbol }) {
   const query = useActivity(campaign, createdAtBlock)
   const pages = query.data?.pages ?? []
@@ -83,6 +139,7 @@ export function ActivityList({ campaign, createdAtBlock, symbol }: { campaign: A
   return (
     <section className="activity" aria-label="Activity">
       <h2>Activity</h2>
+      <Unaccounted campaign={campaign} symbol={symbol} />
       {query.isPending && <p className="muted">Loading activity...</p>}
       {query.isError && items.length === 0 && (
         <p className="muted">

@@ -5,6 +5,7 @@ import type { Address } from 'viem'
 import { arc } from 'viem/chains'
 import { CampaignGrid, LoadError } from '../components/CampaignGrid'
 import { Name } from '../components/Name'
+import { CROSSCHAIN_ENABLED } from '../config'
 import { blockTimes } from '../hooks/useActivity'
 import { useCampaign } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
@@ -101,12 +102,12 @@ function MyDonations({ address }: { address: Address }) {
         </ol>
       )}
       <p className="muted">
-        This list covers about the last 200,000 blocks on Arc.{' '}
+        This list covers about the last day on Arc.{' '}
         <a href={`${EXPLORER_URL}/address/${address}`} target="_blank" rel="noopener noreferrer">
           Older donations: view on explorer
         </a>
       </p>
-      <p className="muted">Donations made from other chains appear on the campaign as cross-chain donations.</p>
+      {CROSSCHAIN_ENABLED && <p className="muted">Donations made from other chains appear on the campaign as cross-chain donations.</p>}
     </section>
   )
 }
@@ -119,7 +120,7 @@ export function Profile() {
     return (
       <section className="notice">
         <h1>My page</h1>
-        <p>Connect a wallet to see your campaigns</p>
+        <p>Connect a wallet to see your fundraisers.</p>
         <button type="button" className="btn" onClick={() => open()}>
           Connect wallet
         </button>

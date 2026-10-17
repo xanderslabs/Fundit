@@ -8,7 +8,7 @@ import {
 import { describe, expect, it } from 'vitest'
 import { campaignAbi } from '../abi/campaign'
 import { factoryAbi } from '../abi/factory'
-import { explainError } from './errors'
+import { explainAfterApproval, explainError } from './errors'
 
 const GENERIC = 'Something went wrong. Nothing was sent.'
 
@@ -30,10 +30,15 @@ describe('explainError', () => {
     expect(text.length).toBeGreaterThan(0)
   })
 
+  // People see "fundraiser" everywhere else in the app. Error texts use the same word.
+  it.each(abiErrors.map((e) => [e.name, e] as const))('says fundraiser, not campaign, for %s', (_name, abiError) => {
+    expect(explainError(revertWith(abiError))).not.toMatch(/campaign/i)
+  })
+
   it('uses the agreed wording for two key errors', () => {
     const find = (name: string) => campaignAbi.find((x) => x.type === 'error' && x.name === name) as AbiError
     expect(explainError(revertWith(find('UnsupportedPayoutDomain')))).toBe('EURC can only be paid out on Arc.')
-    expect(explainError(revertWith(find('CampaignClosed')))).toBe('This campaign is closed.')
+    expect(explainError(revertWith(find('CampaignClosed')))).toBe('This fundraiser is closed.')
   })
 
   // MetaMask-style wallets put the revert hex one or two levels down instead of at error.data.
@@ -41,9 +46,9 @@ describe('explainError', () => {
     const closed = campaignAbi.find((x) => x.type === 'error' && x.name === 'CampaignClosed') as AbiError
     const hex = encodeErrorResult({ abi: [closed], errorName: 'CampaignClosed' } as never)
     const nested = { code: -32603, message: 'Internal JSON-RPC error.', data: { code: 3, data: hex } }
-    expect(explainError(nested)).toBe('This campaign is closed.')
+    expect(explainError(nested)).toBe('This fundraiser is closed.')
     const original = { code: -32603, message: 'Internal JSON-RPC error.', data: { originalError: { code: 3, data: hex } } }
-    expect(explainError(original)).toBe('This campaign is closed.')
+    expect(explainError(original)).toBe('This fundraiser is closed.')
   })
 
   it('maps a wallet rejection to a cancel message', () => {
@@ -136,5 +141,20 @@ describe('explainError', () => {
     expect(explainError(token)).toBe('You do not have enough USDC on OP Mainnet.')
     const gas = Object.assign(new Error('Insufficient native token on Optimism to cover gas fees'), { name: 'BALANCE_INSUFFICIENT_GAS' })
     expect(explainError(gas)).toBe('You do not have enough ETH on OP Mainnet to pay the network fee.')
+  })
+})
+
+describe('explainAfterApproval', () => {
+  // A cross-chain or unified donation can fail after the wallet already approved or signed. "Nothing was sent"
+  // would then be untrue, so the generic text stops at "Something went wrong."
+  it('never says "Nothing was sent"', () => {
+    expect(explainAfterApproval(new Error('socket hang up'))).toBe('Something went wrong. (socket hang up)')
+    expect(explainAfterApproval({})).toBe('Something went wrong. ([object Object])')
+  })
+
+  it('keeps the specific texts', () => {
+    expect(explainAfterApproval(new UserRejectedRequestError(new Error('x')))).toBe('You cancelled the request.')
+    const token = Object.assign(new Error('Insufficient USDC balance on Base'), { name: 'BALANCE_INSUFFICIENT_TOKEN' })
+    expect(explainAfterApproval(token)).toBe('You do not have enough USDC on Base.')
   })
 })

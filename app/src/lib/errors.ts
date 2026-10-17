@@ -6,9 +6,9 @@ import { CCTP_CHAINS, CHAIN_LABELS, type CctpChainKey } from '../config'
 // Plain text for every custom error in Campaign and CampaignFactory. errors.test.ts checks none is missing.
 const ERROR_TEXT: Record<string, string> = {
   // Campaign
-  AlreadyInitialized: 'This campaign is already set up.',
-  CampaignClosed: 'This campaign is closed.',
-  CannotSweepCampaignToken: "The campaign's own token cannot be returned this way. Use withdraw instead.",
+  AlreadyInitialized: 'This fundraiser is already set up.',
+  CampaignClosed: 'This fundraiser is closed.',
+  CannotSweepCampaignToken: "The fundraiser's own token cannot be returned this way. Use withdraw instead.",
   FeeTooHighForAmount: 'This amount is too small to cover the fee. Try a larger amount.',
   InsufficientBalance: 'There is not enough balance for this.',
   InvalidBackup: 'The backup address must be different from the organiser address.',
@@ -21,7 +21,7 @@ const ERROR_TEXT: Record<string, string> = {
   NotCreator: 'Only the organiser can do this.',
   RecoveryNotReady: 'The 7-day recovery wait has not passed yet.',
   RecoveryPending: 'A recovery is already in progress.',
-  ReentrancyGuardReentrantCall: 'The campaign refused a nested call.',
+  ReentrancyGuardReentrantCall: 'The fundraiser refused a nested call.',
   SafeERC20FailedOperation: 'The token transfer failed. Check your balance and approval.',
   UnsupportedPayoutDomain: 'EURC can only be paid out on Arc.',
   ZeroAddress: 'An address is missing.',
@@ -31,7 +31,7 @@ const ERROR_TEXT: Record<string, string> = {
   FailedDeployment: 'The fundraiser could not be created. Try again.',
   FeeTooHigh: 'That fee is above the allowed maximum.',
   InvalidDomain: 'That destination chain is not supported.',
-  NotCampaign: 'That address is not a Fundit campaign.',
+  NotCampaign: 'That address is not a Fundit fundraiser.',
   OwnableInvalidOwner: 'That owner address is not valid.',
   OwnableUnauthorizedAccount: 'Only the Fundit owner can do this.',
   RenounceDisabled: 'Ownership cannot be given up.',
@@ -135,7 +135,8 @@ function detail(e: unknown): string {
   return line.length > MAX_DETAIL ? `${line.slice(0, MAX_DETAIL)}...` : line
 }
 
-export function explainError(e: unknown): string {
+// generic is the fallback text for an error we cannot name.
+export function explainError(e: unknown, generic = GENERIC): string {
   if (isUserRejection(e)) return 'You cancelled the request.'
   if (e instanceof PlainError) return e.message
   const kit = kitText(e)
@@ -143,5 +144,11 @@ export function explainError(e: unknown): string {
   const name = revertName(e)
   if (name && ERROR_TEXT[name]) return ERROR_TEXT[name]
   const d = detail(e)
-  return d ? `${GENERIC} (${d})` : GENERIC
+  return d ? `${generic} (${d})` : generic
+}
+
+// For cross-chain and unified balance donations, which can fail after the wallet approved or signed
+// something. "Nothing was sent" may be untrue there.
+export function explainAfterApproval(e: unknown): string {
+  return explainError(e, 'Something went wrong.')
 }

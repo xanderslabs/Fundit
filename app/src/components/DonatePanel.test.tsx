@@ -29,6 +29,15 @@ const reads: { address: Address; functionName: string; args: readonly unknown[] 
 // What "Check again" gets back. Each test sets it; the default throws so an unplanned re-check is loud.
 const recheck: { next: () => Promise<TxResult> } = { next: async () => { throw new Error('no re-check planned') } }
 
+// Cross-chain sources ship behind VITE_CROSSCHAIN. Most tests here cover how sources block each other, so the
+// flag is on unless a test turns it off.
+const flags = vi.hoisted(() => ({ crosschain: true }))
+vi.mock('../config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../config')>()),
+  get CROSSCHAIN_ENABLED() {
+    return flags.crosschain
+  },
+}))
 vi.mock('../hooks/useSender', () => ({ useSender: () => state.sender }))
 vi.mock('../lib/sender', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/sender')>()),
@@ -115,6 +124,7 @@ afterEach(() => {
   state.allowance = 0n
   state.wallet = false
   state.code = undefined
+  flags.crosschain = true
   iris.status = 'pending'
   reads.length = 0
   codeReads.length = 0
@@ -250,10 +260,10 @@ describe('DonatePanel', () => {
     expect(localStorage.getItem('fundit.pendingBridges')).toBeNull()
   })
 
-  it('is disabled with "This campaign is closed." when the campaign is closed', () => {
+  it('is disabled with "This fundraiser is closed." when the fundraiser is closed', () => {
     fakeSender()
     renderPanel(view('USDC', true))
-    expect(screen.getByText('This campaign is closed.')).toBeTruthy()
+    expect(screen.getByText('This fundraiser is closed.')).toBeTruthy()
     expect(screen.getByLabelText('Amount').matches(':disabled')).toBe(true)
     expect(donateButton().disabled).toBe(true)
   })
@@ -500,6 +510,57 @@ describe('DonatePanel', () => {
     expect(await screen.findByText(/Thank you/)).toBeTruthy()
     expect(send).toHaveBeenCalledTimes(1)
   })
+  describe('VITE_CROSSCHAIN flag', () => {
+    const radios = () => screen.getAllByRole('radio', { name: /Arc wallet|USDC on another chain|Unified USDC balance/ })
+
+    it('off: a USDC campaign offers only the Arc wallet, even with a wallet connected', () => {
+      flags.crosschain = false
+      state.wallet = true
+      fakeSender()
+      renderPanel(view('USDC'))
+      expect(radios().map((r) => r.closest('label')!.textContent)).toEqual([expect.stringMatching(/^Arc wallet/)])
+    })
+
+    it('on: a USDC campaign offers all three sources to a connected wallet', () => {
+      state.wallet = true
+      fakeSender()
+      renderPanel(view('USDC'))
+      expect(radios()).toHaveLength(3)
+    })
+
+    // Entries saved before the flag went off still describe money that may move. They must still block and be
+    // checkable, or the donor could give twice.
+    it('off: a stored unified spend still shows its status and blocks the Arc wallet', () => {
+      flags.crosschain = false
+      localStorage.setItem(
+        'fundit.pendingBridges',
+        JSON.stringify([{ kind: 'unified', campaign: CAMPAIGN, amount: '5', transferId: 't-1', createdAt: Date.now() }]),
+      )
+      state.wallet = true
+      fakeSender()
+      state.balance = 1000_000000n
+      renderPanel(view('USDC'))
+      expect((screen.getByRole('radio', { name: /Unified USDC balance/ }) as HTMLInputElement).checked).toBe(true)
+      expect(screen.getByText(/unified balance donation is not confirmed yet/)).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Check again' })).toBeTruthy()
+      expect(screen.getByRole('radio', { name: /Arc wallet/ }).matches(':disabled')).toBe(true)
+      expect(screen.queryByRole('button', { name: 'Donate' })).toBeNull()
+    })
+
+    it('off: a stored cross-chain transfer still shows and blocks', () => {
+      flags.crosschain = false
+      localStorage.setItem(
+        'fundit.pendingBridges',
+        JSON.stringify([{ kind: 'bridge', campaign: CAMPAIGN, burnTx: `0x${'cd'.repeat(32)}`, srcDomain: 6, amount: '25', createdAt: Date.now() }]),
+      )
+      fakeSender()
+      renderPanel(view('USDC'))
+      expect(screen.getByText(/cross-chain donation of 25 USDC is still on its way/)).toBeTruthy()
+      expect(screen.getByRole('radio', { name: /Arc wallet/ }).matches(':disabled')).toBe(true)
+      expect(screen.queryByRole('button', { name: 'Donate' })).toBeNull()
+    })
+  })
+
   describe('unified balance option', () => {
     const option = () => screen.queryByRole('radio', { name: /Unified USDC balance/ })
 
@@ -629,6 +690,17 @@ describe('DonatePanel', () => {
       renderPanel(view('USDC'))
       expect(radio(/Arc wallet/).disabled).toBe(true)
       unsubmittable()
+    })
+
+    // The organiser's own payout to another chain is money leaving the campaign, not a donation on its way.
+    it('a payout to another chain does not block and does not show in the donate panel', async () => {
+      store({ kind: 'payout', burnTx: BURN, srcDomain: 26, destDomain: 6, amount: '9.9' })
+      fakeSender()
+      state.balance = 1000_000000n
+      renderPanel(view('USDC'))
+      expect(screen.queryByText(/9.9 USDC/)).toBeNull()
+      expect(radio(/Arc wallet/).disabled).toBe(false)
+      await fillAndDonate()
     })
 
     it('a minted cross-chain entry does not block', async () => {

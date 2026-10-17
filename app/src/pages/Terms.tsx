@@ -1,5 +1,5 @@
 import { Link } from 'react-router'
-import { PASSKEYS_ENABLED } from '../config'
+import { CROSSCHAIN_ENABLED, PASSKEYS_ENABLED } from '../config'
 
 export function Terms() {
   return (
@@ -88,7 +88,8 @@ export function Terms() {
 
       <h2>7. Third-party services</h2>
       <p>
-        Fundit relies on services we do not run: the Arc blockchain, Circle (USDC, EURC, CCTP, Gateway
+        Fundit relies on services we do not run: the Arc blockchain, Circle (USDC, EURC, CCTP
+        {CROSSCHAIN_ENABLED && ', Gateway'}
         {PASSKEYS_ENABLED && ' and passkey wallets'}), Reown and WalletConnect for connecting wallets, and public RPC providers for reading blockchain data.
         Their own terms apply to your use of them, and we are not responsible for their availability or errors.
       </p>
@@ -128,7 +129,7 @@ export function Terms() {
 
       <h2>13. Contact</h2>
       <p>
-        Questions about these terms: mail@fundit.fun. See also our{' '}
+        Questions about these terms: hello@fundit.xyz. See also our{' '}
         <Link to="/privacy">Privacy Policy</Link>.
       </p>
     </article>

@@ -2,6 +2,7 @@ import { useAppKit } from '@reown/appkit/react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { type Address, type EIP1193Provider, formatUnits, type Hex } from 'viem'
+import { arc } from 'viem/chains'
 import { useConnection } from 'wagmi'
 import { ARC_DOMAIN, CCTP_CHAINS, CHAIN_LABELS, type CctpChainKey } from '../config'
 import {
@@ -17,11 +18,13 @@ import {
   type PendingBridge,
   type PendingCrossChain,
   pendingCrossChain,
+  type PendingPayout,
+  pendingPayouts,
   type PendingSubmitted,
   subscribePending,
 } from '../lib/bridge'
 import type { CampaignView } from '../lib/campaigns'
-import { explainError } from '../lib/errors'
+import { explainAfterApproval } from '../lib/errors'
 import { bpsToPercent, formatExact, parseAmount } from '../lib/format'
 import { fetchForwardFee, fetchTransferStatus, type TransferStatus } from '../lib/iris'
 
@@ -118,7 +121,7 @@ export function CrossChainDonate({
       setAmountText('')
       setPhase({ kind: 'sent', chain: sourceKey })
     } catch (err) {
-      setPhase({ kind: 'error', message: explainError(err) })
+      setPhase({ kind: 'error', message: explainAfterApproval(err) })
     } finally {
       inFlight.current = false
       onBusyChange?.(false)
@@ -203,8 +206,8 @@ export function CrossChainDonate({
         platform fee ({bpsToPercent(summary.donationFeeBps)}) applies once the donation is counted.
       </p>
       <p className="hint">
-        Tips and messages work only when you pay on Arc. This donation shows in the activity list as a cross-chain
-        donation.
+        Tips and messages work only when you pay on Arc. The donation counts toward the total as soon as it arrives,
+        and shows in the activity list once someone counts it there.
       </p>
 
       <div className="donate-status" aria-live="polite">
@@ -236,27 +239,39 @@ export function CrossChainDonate({
   )
 }
 
-function forCampaign(campaign: Address): PendingCrossChain[] {
-  return pendingCrossChain().filter((b) => b.campaign.toLowerCase() === campaign.toLowerCase())
+type TrackerKind = 'donation' | 'payout'
+
+function forCampaign(campaign: Address, kind: TrackerKind): (PendingCrossChain | PendingPayout)[] {
+  const all = kind === 'payout' ? pendingPayouts() : pendingCrossChain()
+  return all.filter((b) => b.campaign.toLowerCase() === campaign.toLowerCase())
 }
 
-// Cross-chain transfers to this address that have not reached it yet. Read from localStorage, so they
-// survive a reload and keep showing until the donor dismisses them. destination names the address in the text.
-export function PendingBridgeTracker({ campaign, destination = 'the campaign' }: { campaign: Address; destination?: string }) {
-  const [entries, setEntries] = useState(() => forCampaign(campaign))
+// Cross-chain transfers to this address that have not reached it yet, or with kind 'payout', this campaign's
+// payouts on their way from Arc to another chain. Read from localStorage, so they survive a reload and keep
+// showing until dismissed. destination names the address in the text.
+export function PendingBridgeTracker({
+  campaign,
+  destination = 'the campaign',
+  kind = 'donation',
+}: {
+  campaign: Address
+  destination?: string
+  kind?: TrackerKind
+}) {
+  const [entries, setEntries] = useState(() => forCampaign(campaign, kind))
 
   useEffect(() => {
-    const reload = () => setEntries(forCampaign(campaign))
+    const reload = () => setEntries(forCampaign(campaign, kind))
     reload()
     return subscribePending(reload)
-  }, [campaign])
+  }, [campaign, kind])
 
   if (entries.length === 0) return null
   return (
-    <section className="bridge-tracker" aria-label="Cross-chain transfers on the way">
-      {entries.map((e) => (
-        e.kind === 'bridge' ? <BridgeRow key={e.burnTx} entry={e} destination={destination} /> : <SubmittedRow key={e.id} entry={e} />
-      ))}
+    <section className="bridge-tracker" aria-label={kind === 'payout' ? 'Payouts on the way' : 'Cross-chain transfers on the way'}>
+      {entries.map((e) =>
+        e.kind === 'submitted' ? <SubmittedRow key={e.id} entry={e} /> : <BridgeRow key={e.burnTx} entry={e} destination={destination} />,
+      )}
     </section>
   )
 }
@@ -266,9 +281,32 @@ type RowStatus = TransferStatus | 'expired'
 // Dismissing a transfer that has not arrived forgets money that may still move (and unblocks donating), so it asks first.
 const DISMISS_UNKNOWN = 'This transfer may still arrive. Dismiss it anyway?'
 
-function BridgeRow({ entry, destination }: { entry: PendingBridge; destination: string }) {
+// Text for one tracked burn: a donation on its way to Arc, or a payout on its way from Arc.
+function rowText(entry: PendingBridge | PendingPayout, destination: string) {
+  if (entry.kind === 'payout') {
+    const to = CHAIN_LABELS[CCTP_CHAINS.find((c) => c.domain === entry.destDomain)!.key]
+    return {
+      what: `${entry.amount} USDC to ${to}`,
+      arrived: 'arrived.',
+      attested: `Circle confirmed it. Arriving on ${to} now.`,
+      waiting: 'Waiting for Arc to confirm it.',
+      explorer: arc.blockExplorers.default.url,
+      thanks: null,
+    }
+  }
+  const from = CCTP_CHAINS.find((c) => c.domain === entry.srcDomain)!
+  return {
+    what: `${entry.amount} USDC from ${CHAIN_LABELS[from.key]}`,
+    arrived: `reached ${destination}.`,
+    attested: 'Circle confirmed it. Arriving on Arc now.',
+    waiting: `Waiting for ${CHAIN_LABELS[from.key]} to confirm it.`,
+    explorer: from.viemChain.blockExplorers?.default.url,
+    thanks: destination === 'the campaign' ? ' Thank you.' : null,
+  }
+}
+
+function BridgeRow({ entry, destination }: { entry: PendingBridge | PendingPayout; destination: string }) {
   const { campaign, burnTx, srcDomain, createdAt } = entry
-  const chain = CCTP_CHAINS.find((c) => c.domain === srcDomain)!
   const queryClient = useQueryClient()
   const overdue = () => Date.now() - createdAt > MAX_TRACK_MS
   // An overdue entry still gets one last look at Iris before it shows as expired: it may have arrived while
@@ -307,12 +345,16 @@ function BridgeRow({ entry, destination }: { entry: PendingBridge; destination: 
     }
   }, [done, campaign, burnTx, srcDomain, createdAt, queryClient])
 
-  const what = `${entry.amount} USDC from ${CHAIN_LABELS[chain.key]}`
+  const text = rowText(entry, destination)
+  const what = text.what
   return (
     <div className={status === 'minted' ? 'status-box status-success' : 'status-box'}>
       {status === 'minted' ? (
         <p>
-          <strong>{what} reached {destination}.</strong>{destination === 'the campaign' ? ' Thank you.' : null}
+          <strong>
+            {what} {text.arrived}
+          </strong>
+          {text.thanks}
         </p>
       ) : status === 'expired' ? (
         <>
@@ -320,17 +362,17 @@ function BridgeRow({ entry, destination }: { entry: PendingBridge; destination: 
             <strong>{what} is taking longer than expected.</strong>
           </p>
           <p>
-            <ExplorerLink chainUrl={chain.viemChain.blockExplorers?.default.url} hash={burnTx} />
+            <ExplorerLink chainUrl={text.explorer} hash={burnTx} />
           </p>
         </>
       ) : (
         <p>
           <strong>{what} is on its way.</strong>{' '}
           {status === 'attested'
-            ? 'Circle confirmed it. Arriving on Arc now.'
+            ? text.attested
             : status === 'unknown'
               ? 'Could not reach Circle to check. Trying again.'
-              : `Waiting for ${CHAIN_LABELS[chain.key]} to confirm it.`}
+              : text.waiting}
         </p>
       )}
       {done && (

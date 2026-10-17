@@ -1,10 +1,10 @@
 import { type Address, type Chain, createPublicClient, type EIP1193Provider, getAddress, type Hex, http, isAddress, isHex, parseUnits, UserRejectedRequestError } from 'viem'
-import { ARC_RPC_URL, CCTP_CHAINS, CHAIN_LABELS, type CctpChain, type CctpChainKey } from '../config'
+import { ARC_DOMAIN, ARC_RPC_URL, CCTP_CHAINS, CHAIN_LABELS, type CctpChain, type CctpChainKey } from '../config'
 import { isUserRejection } from './errors'
 
 // One localStorage key holds everything that must survive a reload: cross-chain transfers on their way
 // to Arc (with a burn hash, or only 'submitted' when the wallet has sent but no burn hash is known yet),
-// and at most one unconfirmed Arc donation per campaign. Storage can throw (private windows,
+// at most one unconfirmed Arc donation per campaign, and payouts from Arc to another chain. Storage can throw (private windows,
 // blocked site data), so every access is wrapped and a failure only loses the reminder, never money.
 const KEY = 'fundit.pendingBridges'
 // Fired on window after every change, so open trackers re-read the store.
@@ -19,8 +19,20 @@ export type PendingSubmitted = { kind: 'submitted'; id: string; campaign: Addres
 export type PendingArc = { kind: 'arc'; campaign: Address; hash: Hex; approve: boolean; hashKind?: 'userop'; createdAt: number }
 // A unified balance spend the donor started. transferId and hash are filled in when Circle reports them.
 export type PendingUnified = { kind: 'unified'; campaign: Address; amount: string; transferId?: string; hash?: Hex; createdAt: number }
+// An organiser's withdrawal burned on Arc (domain 26) and minted on destDomain. Money leaving the campaign, so
+// it never blocks a donation. minted works as for PendingBridge.
+export type PendingPayout = {
+  kind: 'payout'
+  campaign: Address
+  burnTx: Hex
+  srcDomain: typeof ARC_DOMAIN
+  destDomain: number
+  amount: string
+  minted?: true
+  createdAt: number
+}
 export type PendingCrossChain = PendingBridge | PendingSubmitted
-type Entry = PendingBridge | PendingSubmitted | PendingArc | PendingUnified
+type Entry = PendingBridge | PendingSubmitted | PendingArc | PendingUnified | PendingPayout
 
 const isTxHash = (v: unknown): v is Hex => typeof v === 'string' && isHex(v) && v.length === 66
 
@@ -31,6 +43,15 @@ function isEntry(e: unknown): e is Entry {
   const knownDomain = CCTP_CHAINS.some((c) => c.domain === x.srcDomain)
   if (x.kind === 'bridge') return isTxHash(x.burnTx) && knownDomain && typeof x.amount === 'string' && (x.minted === undefined || x.minted === true)
   if (x.kind === 'submitted') return typeof x.id === 'string' && knownDomain && typeof x.amount === 'string'
+  if (x.kind === 'payout') {
+    return (
+      isTxHash(x.burnTx) &&
+      x.srcDomain === ARC_DOMAIN &&
+      CCTP_CHAINS.some((c) => c.domain === x.destDomain) &&
+      typeof x.amount === 'string' &&
+      (x.minted === undefined || x.minted === true)
+    )
+  }
   if (x.kind === 'arc') return isTxHash(x.hash) && typeof x.approve === 'boolean' && (x.hashKind === undefined || x.hashKind === 'userop')
   if (x.kind === 'unified') {
     return (
@@ -85,20 +106,34 @@ export function notifyPending() {
 }
 
 // Shown when a submit finds that another donation to this campaign is still unconfirmed.
-export const ANOTHER_PENDING = 'Another donation to this campaign is not confirmed yet. Wait for it before you donate again.'
+export const ANOTHER_PENDING = 'Another donation to this fundraiser is not confirmed yet. Wait for it before you donate again.'
 
 export function pendingBridges(): PendingBridge[] {
   return readAll().filter((e): e is PendingBridge => e.kind === 'bridge')
 }
 
+const isBurn = (e: Entry, burnTx: Hex): e is PendingBridge | PendingPayout =>
+  (e.kind === 'bridge' || e.kind === 'payout') && same(e.burnTx, burnTx)
+
+// Clears a cross-chain donation or a payout by its burn hash.
 export function clearBridge(burnTx: Hex) {
-  writeAll(readAll().filter((e) => !(e.kind === 'bridge' && same(e.burnTx, burnTx))))
+  writeAll(readAll().filter((e) => !isBurn(e, burnTx)))
 }
 
 export function markBridgeMinted(burnTx: Hex) {
   const all = readAll()
-  if (!all.some((e) => e.kind === 'bridge' && same(e.burnTx, burnTx) && !e.minted)) return
-  writeAll(all.map((e) => (e.kind === 'bridge' && same(e.burnTx, burnTx) ? { ...e, minted: true as const } : e)))
+  if (!all.some((e) => isBurn(e, burnTx) && !e.minted)) return
+  writeAll(all.map((e) => (isBurn(e, burnTx) ? { ...e, minted: true as const } : e)))
+}
+
+export function pendingPayouts(): PendingPayout[] {
+  return readAll().filter((e): e is PendingPayout => e.kind === 'payout')
+}
+
+// Saved once the withdrawal's Arc receipt is in. The Arc transaction is the CCTP burn Iris reports on.
+export function savePendingPayout(p: { campaign: Address; burnTx: Hex; destDomain: number; amount: string }) {
+  const all = readAll().filter((e) => !isBurn(e, p.burnTx))
+  writeAll([...all, { kind: 'payout', ...p, srcDomain: ARC_DOMAIN, createdAt: Date.now() }])
 }
 
 // An entry whose money may still move to this campaign. While one exists, no new donation may start from
@@ -130,7 +165,8 @@ export function clearSubmitted(id: string) {
   writeAll(readAll().filter((e) => !(e.kind === 'submitted' && e.id === id)))
 }
 
-// Replaces the submitted record (if any) with the burn, keeping its createdAt for the 2-hour window.
+// Replaces the submitted record (if any) with the burn, keeping its createdAt: the entry expires 7 days after the
+// first send, and the tracker shows it as overdue 2 hours after it.
 function saveBridge(entry: Omit<PendingBridge, 'kind' | 'createdAt'>, submittedId: string) {
   const all = readAll()
   const submitted = all.find((e) => e.kind === 'submitted' && e.id === submittedId)

@@ -1,5 +1,13 @@
 import { Link } from 'react-router'
-import { PASSKEYS_ENABLED } from '../config'
+import { CROSSCHAIN_ENABLED, PASSKEYS_ENABLED } from '../config'
+
+// What Circle provides here, joined as plain English: "a", "a and b", "a, b and c".
+function circleServices(): string {
+  const parts = ['cross-chain transfers (CCTP)']
+  if (CROSSCHAIN_ENABLED) parts.push('unified balances (Gateway)')
+  if (PASSKEYS_ENABLED) parts.push('passkey wallets')
+  return parts.length === 1 ? parts[0]! : `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`
+}
 
 export function Privacy() {
   return (
@@ -59,7 +67,7 @@ export function Privacy() {
       <ul>
         <li>Public RPC providers for Arc, Ethereum and the other supported chains, to read and send transactions.</li>
         <li>
-          Circle, for cross-chain transfers (CCTP){PASSKEYS_ENABLED ? ', unified balances (Gateway) and passkey wallets' : ' and unified balances (Gateway)'}.
+          Circle, for {circleServices()}.
         </li>
         <li>Reown and WalletConnect, to connect your wallet.</li>
         <li>The sites that host fundraiser images and avatars.</li>
@@ -84,7 +92,7 @@ export function Privacy() {
 
       <h2>9. Contact</h2>
       <p>
-        Questions about privacy: mail@fundit.fun. See also our <Link to="/terms">Terms of Service</Link>.
+        Questions about privacy: hello@fundit.xyz. See also our <Link to="/terms">Terms of Service</Link>.
       </p>
     </article>
   )

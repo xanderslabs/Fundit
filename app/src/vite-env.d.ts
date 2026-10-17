@@ -8,6 +8,7 @@ interface ImportMetaEnv {
   readonly VITE_ARC_RPC_URL?: string
   readonly VITE_MAINNET_RPC_URL?: string
   readonly VITE_PASSKEYS?: string
+  readonly VITE_CROSSCHAIN?: string
 }
 
 interface ImportMeta {

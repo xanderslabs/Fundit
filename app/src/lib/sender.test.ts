@@ -240,7 +240,7 @@ describe('waitForResult', () => {
     })
     const c = client({ waitForTransactionReceipt: async () => receipt(H1, 'reverted'), call })
     const res = await waitForResult(c, H1, 1000)
-    expect(res).toEqual({ status: 'reverted', hash: H1, completed: 0, error: `${REVERTED} This campaign is closed.` })
+    expect(res).toEqual({ status: 'reverted', hash: H1, completed: 0, error: `${REVERTED} This fundraiser is closed.` })
     // The replay runs at the block the transaction was mined in.
     expect(call).toHaveBeenCalledWith(expect.objectContaining({ account: ME, to: A, data: '0x01', blockNumber: 7n }))
   })

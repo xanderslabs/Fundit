@@ -1,6 +1,18 @@
 import { type Address, type EIP1193Provider, getAddress, type Hex, UserRejectedRequestError } from 'viem'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { clearBridge, clearPendingArc, donateCrossChain, pendingArc, pendingBridges, pendingCrossChain, savePendingArc } from './bridge'
+import {
+  blockingEntry,
+  clearBridge,
+  clearPendingArc,
+  donateCrossChain,
+  markBridgeMinted,
+  pendingArc,
+  pendingBridges,
+  pendingCrossChain,
+  pendingPayouts,
+  savePendingArc,
+  savePendingPayout,
+} from './bridge'
 import { explainError } from './errors'
 
 const CAMPAIGN = getAddress('0x00000000000000000000000000000000000000a1')
@@ -116,6 +128,37 @@ describe('pending store', () => {
     expect(pendingBridges()).toEqual([])
     clearPendingArc(CAMPAIGN)
     expect(pendingArc(CAMPAIGN)).toBeNull()
+  })
+})
+
+// A payout burns on Arc and mints to the organiser's address on another chain. It is tracked like a
+// cross-chain donation but is money leaving the campaign, so it must never block a donation.
+describe('pending payouts', () => {
+  afterEach(() => localStorage.clear())
+
+  it('saves a payout from Arc (domain 26) and lists it apart from cross-chain donations', () => {
+    savePendingPayout({ campaign: CAMPAIGN, burnTx: BURN, destDomain: 6, amount: '9.9' })
+    expect(pendingPayouts()).toMatchObject([{ kind: 'payout', campaign: CAMPAIGN, burnTx: BURN, srcDomain: 26, destDomain: 6, amount: '9.9' }])
+    expect(pendingCrossChain()).toEqual([])
+    expect(pendingBridges()).toEqual([])
+  })
+
+  it('never blocks a donation to the campaign', () => {
+    savePendingPayout({ campaign: CAMPAIGN, burnTx: BURN, destDomain: 6, amount: '9.9' })
+    expect(blockingEntry(CAMPAIGN)).toBeNull()
+  })
+
+  it('is marked minted and cleared by its burn hash', () => {
+    savePendingPayout({ campaign: CAMPAIGN, burnTx: BURN, destDomain: 6, amount: '9.9' })
+    markBridgeMinted(BURN)
+    expect(pendingPayouts()[0]!.minted).toBe(true)
+    clearBridge(BURN)
+    expect(pendingPayouts()).toEqual([])
+  })
+
+  it('ignores a payout entry with an unknown destination', () => {
+    localStorage.setItem(KEY, JSON.stringify([{ kind: 'payout', campaign: CAMPAIGN, burnTx: BURN, srcDomain: 26, destDomain: 99, amount: '1', createdAt: Date.now() }]))
+    expect(pendingPayouts()).toEqual([])
   })
 })
 

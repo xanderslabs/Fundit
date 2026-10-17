@@ -4,17 +4,21 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Privacy } from './Privacy'
 import { Terms } from './Terms'
 
-const flags = vi.hoisted(() => ({ passkeys: false }))
+const flags = vi.hoisted(() => ({ passkeys: false, crosschain: false }))
 vi.mock('../config', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../config')>()),
   get PASSKEYS_ENABLED() {
     return flags.passkeys
+  },
+  get CROSSCHAIN_ENABLED() {
+    return flags.crosschain
   },
 }))
 
 afterEach(() => {
   cleanup()
   flags.passkeys = false
+  flags.crosschain = false
 })
 
 function text(page: 'terms' | 'privacy') {
@@ -35,5 +39,20 @@ describe.each(['terms', 'privacy'] as const)('%s page', (page) => {
     cleanup()
     flags.passkeys = true
     expect(text(page)).toMatch(/passkey/i)
+  })
+
+  // Gateway unified balances ship behind VITE_CROSSCHAIN, like passkeys behind theirs.
+  it('mentions Gateway only when cross-chain donations are switched on', () => {
+    expect(text(page)).not.toMatch(/Gateway/)
+    cleanup()
+    flags.crosschain = true
+    expect(text(page)).toMatch(/Gateway/)
+  })
+
+  it('gives hello@fundit.xyz as the contact, keeps the draft notice and the governing law placeholder', () => {
+    const t = text(page)
+    expect(t).toMatch(/hello@fundit\.xyz/)
+    expect(t).not.toMatch(/mail@fundit\.fun/)
+    if (page === 'terms') expect(t).toMatch(/\[to be set before launch\]/)
   })
 })

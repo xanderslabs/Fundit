@@ -98,7 +98,7 @@ test('A creates a USDC campaign, B donates with a tip and message, A withdraws t
   await b.reload()
   await connect(b, B)
   const closedPanel = b.getByRole('region', { name: 'Donate' })
-  await expect(closedPanel.getByText('This campaign is closed.')).toBeVisible()
+  await expect(closedPanel.getByText('This fundraiser is closed.')).toBeVisible()
   await expect(closedPanel.getByRole('textbox', { name: 'Amount' })).toBeDisabled()
   await expect(closedPanel.getByRole('button', { name: 'Donate', exact: true })).toBeDisabled()
 })

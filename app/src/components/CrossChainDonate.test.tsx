@@ -21,6 +21,7 @@ const estimate = vi.hoisted(() => ({
   calls: [] as string[],
   accounts: [] as (string | undefined)[],
   donations: 0,
+  donate: (() => new Promise(() => {})) as () => Promise<unknown>,
 }))
 vi.mock('../lib/bridge', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/bridge')>()),
@@ -31,10 +32,12 @@ vi.mock('../lib/bridge', async (importOriginal) => ({
   },
   donateCrossChain: async () => {
     estimate.donations++
-    return new Promise(() => {})
+    return estimate.donate()
   },
 }))
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: () => {} }) }))
+// The donate panel offers this source only with VITE_CROSSCHAIN on. DonatePanel.test.tsx covers the flag off.
+vi.mock('../config', async (importOriginal) => ({ ...(await importOriginal<typeof import('../config')>()), CROSSCHAIN_ENABLED: true }))
 vi.mock('../hooks/useSender', () => ({ useSender: () => null }))
 
 function view(symbol: TokenSymbol): CampaignView {
@@ -95,6 +98,7 @@ afterEach(() => {
   estimate.calls.length = 0
   estimate.accounts.length = 0
   estimate.donations = 0
+  estimate.donate = () => new Promise(() => {})
 })
 
 const connectWallet = () => {
@@ -157,6 +161,15 @@ describe('CrossChainDonate', () => {
   })
 })
 
+describe('CrossChainDonate copy', () => {
+  // The forwarder mint is not an event the activity list reads. It shows there only after settle().
+  it('does not promise the activity list shows the donation at once', () => {
+    wrap(<CrossChainDonate view={view('USDC')} />)
+    expect(screen.getByText(/counts toward the total as soon as it arrives/)).toBeTruthy()
+    expect(screen.getByText(/shows in the activity list once someone counts it/)).toBeTruthy()
+  })
+})
+
 describe('CrossChainDonate fees with a wallet', () => {
   // One estimate per settled amount, not one SDK round trip per keystroke.
   it('estimates once for the settled amount', async () => {
@@ -195,11 +208,28 @@ describe('CrossChainDonate fees with a wallet', () => {
     await waitFor(() => expect((screen.getByRole('button', { name: 'Donate' }) as HTMLButtonElement).disabled).toBe(false))
     localStorage.setItem(KEY, JSON.stringify([{ kind: 'unified', campaign: CAMPAIGN, amount: '5', createdAt: Date.now() }]))
     await user.click(screen.getByRole('button', { name: 'Donate' }))
-    expect(await screen.findByText(/Another donation to this campaign is not confirmed yet/)).toBeTruthy()
+    expect(await screen.findByText(/Another donation to this fundraiser is not confirmed yet/)).toBeTruthy()
     expect(estimate.donations).toBe(0)
   })
 
   // Nothing is being sent while quoting, so the error must not talk about sending.
+  // The wallet may already have approved USDC on the source chain when the bridge fails, so the generic
+  // text must not claim that nothing was sent.
+  it('does not say "Nothing was sent" for an unexpected failure', async () => {
+    connectWallet()
+    stubFetch(() => FEE_SAMPLE)
+    estimate.donate = async () => {
+      throw new Error('socket hang up')
+    }
+    wrap(<CrossChainDonate view={view('USDC')} />)
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText('Amount'), '25')
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Donate' }) as HTMLButtonElement).disabled).toBe(false))
+    await user.click(screen.getByRole('button', { name: 'Donate' }))
+    expect(await screen.findByText('Something went wrong. (socket hang up)')).toBeTruthy()
+    expect(screen.queryByText(/Nothing was sent/)).toBeNull()
+  })
+
   it('says plainly when no quote is available', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })))
     wrap(<CrossChainDonate view={view('USDC')} />)

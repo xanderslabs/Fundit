@@ -94,6 +94,7 @@ afterEach(() => {
   state.sender = null
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+  localStorage.clear()
 })
 
 describe('Manage', () => {
@@ -224,6 +225,38 @@ describe('Manage', () => {
     const alert = await screen.findByText('This amount is too small to cover the transfer fee.', { selector: '.status-box p' })
     expect(alert.textContent).not.toMatch(/Something went wrong/)
     expect(send).not.toHaveBeenCalled()
+  })
+
+  // The Arc receipt only proves the burn. The organiser must not read it as money already on Base.
+  it('says a payout to another chain is sent from Arc and still arriving, and tracks it to the mint', async () => {
+    stubFees(200000)
+    state.view = view()
+    fakeSender()
+    renderPage()
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText('Amount'), '10')
+    await user.selectOptions(screen.getByLabelText('Send to'), 'Base')
+    expect(await screen.findByText('0.20 USDC')).toBeTruthy()
+    await user.click(button('Withdraw'))
+    expect(await screen.findByText('Sent from Arc. It arrives on Base in about a minute.')).toBeTruthy()
+    expect(screen.queryByText(/withdrawal went through/)).toBeNull()
+    // 10 less the 1% fee is burned on Arc. Iris reports it by the Arc burn hash, from domain 26.
+    expect(await screen.findByText(/9.9 USDC to Base is on its way/)).toBeTruthy()
+    const saved = JSON.parse(localStorage.getItem('fundit.pendingBridges')!)
+    expect(saved).toMatchObject([{ kind: 'payout', campaign: CAMPAIGN, burnTx: HASH, srcDomain: 26, destDomain: 6, amount: '9.9' }])
+    const irisCalls = (fetch as unknown as { mock: { calls: [string][] } }).mock.calls.map(([u]) => u).filter((u) => u.includes('/v2/messages/'))
+    expect(irisCalls[0]).toBe(`https://iris-api.circle.com/v2/messages/26?transactionHash=${HASH}`)
+  })
+
+  it('keeps the plain success text for a payout on Arc, and tracks nothing', async () => {
+    state.view = view()
+    fakeSender()
+    renderPage()
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText('Amount'), '10')
+    await user.click(button('Withdraw'))
+    expect(await screen.findByText('Your withdrawal went through.')).toBeTruthy()
+    expect(localStorage.getItem('fundit.pendingBridges')).toBeNull()
   })
 
   // A withdrawal that timed out may still be mined. Sending again could pay out twice.

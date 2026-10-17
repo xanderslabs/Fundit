@@ -40,7 +40,8 @@ export function ExplorerLink({ hash }: { hash: Hex }) {
 
 // One single-call action on Arc, with the same no-double-send rules as donating: a send or check already
 // running blocks another, and a timed-out transaction blocks a new one until a check settles it.
-export function useTx(onSuccess: () => void) {
+// onSuccess gets the hash of the mined transaction.
+export function useTx(onSuccess: (hash: Hex) => void) {
   const [phase, setPhase] = useState<TxPhase>({ kind: 'idle' })
   // Set synchronously, so a second click before React re-renders cannot start a second send or check.
   const inFlight = useRef(false)
@@ -50,7 +51,7 @@ export function useTx(onSuccess: () => void) {
   function handle(res: TxResult) {
     switch (res.status) {
       case 'success':
-        onSuccess()
+        onSuccess(res.hash)
         setPhase({ kind: 'success', hash: res.hash })
         return
       case 'timeout':

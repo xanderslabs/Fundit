@@ -15,7 +15,7 @@ import {
   subscribePending,
 } from '../lib/bridge'
 import type { CampaignView } from '../lib/campaigns'
-import { explainError } from '../lib/errors'
+import { explainAfterApproval } from '../lib/errors'
 import { bpsToPercent, formatExact, parseAmount } from '../lib/format'
 import { arcReceipts, waitForResult } from '../lib/sender'
 import {
@@ -175,7 +175,7 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
       try {
         ;({ allocations } = await planSpend({ provider, campaign, account: wallet.address, byChain, amount, reserves }))
       } catch (err) {
-        setPhase({ kind: 'error', message: explainUnifiedError(err) ?? explainError(err) })
+        setPhase({ kind: 'error', message: explainUnifiedError(err) ?? explainAfterApproval(err) })
         return
       }
       // Saved before the wallet is asked, so a reload during the spend still blocks a second one.
@@ -193,7 +193,7 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
       } catch (err) {
         if (isSafeToRetry(err)) {
           clearPendingUnified(campaign)
-          setPhase({ kind: 'error', message: explainUnifiedError(err) ?? explainError(err) })
+          setPhase({ kind: 'error', message: explainUnifiedError(err) ?? explainAfterApproval(err) })
         } else {
           // Circle may have accepted the transfer. Stay blocked until a check or a confirmed Start over.
           const transferId = pendingTransferId(err) ?? undefined
@@ -203,7 +203,7 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
       }
     } catch (err) {
       clearPendingUnified(campaign)
-      setPhase({ kind: 'error', message: explainError(err) })
+      setPhase({ kind: 'error', message: explainAfterApproval(err) })
     } finally {
       inFlight.current = false
     }
@@ -235,7 +235,7 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
         setPhase({ kind: 'error', message: 'Circle could not finish this transfer. Check your unified balance before you try again.' })
       }
     } catch (err) {
-      setPhase({ kind: 'timeout', ...p, note: `We could not check it. ${explainError(err)}` })
+      setPhase({ kind: 'timeout', ...p, note: `We could not check it. ${explainAfterApproval(err)}` })
     } finally {
       inFlight.current = false
     }
@@ -318,8 +318,8 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
         extra. Fundit's platform fee ({bpsToPercent(summary.donationFeeBps)}) applies once the donation is counted.
       </p>
       <p className="hint">
-        Tips and messages work only when you pay on Arc. This donation shows in the activity list as a cross-chain
-        donation.
+        Tips and messages work only when you pay on Arc. The donation counts toward the total as soon as it arrives,
+        and shows in the activity list once someone counts it there.
       </p>
 
       <div className="donate-status" aria-live="polite">
