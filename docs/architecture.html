@@ -1,0 +1,217 @@
+<title>Fundit Architecture</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: one reading column, a full-width diagram band, then reference tables. Brand from app/src/styles/tokens.css. */
+  :root {
+    --bg: #ffffff;
+    --fg: #101928;
+    --muted: #586283;
+    --card: #eceff1;
+    --border: #d5dade;
+    --accent: #ff7c0a;
+    --ok: #19b820;
+    --flag: #8a5a00;
+    --flag-bg: #fff3e3;
+    --font: 'Outfit', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b111c; --fg: #eceff1; --muted: #a3abc4; --card: #172131; --border: #2a3547;
+      --accent: #ff9a3d; --ok: #4cd955; --flag: #ffc274; --flag-bg: #2a1f10; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b111c; --fg: #eceff1; --muted: #a3abc4; --card: #172131; --border: #2a3547;
+    --accent: #ff9a3d; --ok: #4cd955; --flag: #ffc274; --flag-bg: #2a1f10; color-scheme: dark;
+  }
+  body {
+    background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 16px; line-height: 1.6;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 40px 64px;
+  }
+  main { max-width: 960px; margin: 0 auto; display: grid; gap: 40px; }
+  .prose { max-width: 66ch; }
+  h1, h2 { text-wrap: balance; line-height: 1.15; margin: 0; }
+  h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 800; letter-spacing: -0.02em; }
+  h2 { font-size: 1.5rem; font-weight: 700; }
+  p { margin: 0; }
+  section { display: grid; gap: 16px; min-width: 0; }
+  .eyebrow { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); }
+  .lede { color: var(--muted); font-size: 1.125rem; }
+  code { font-family: var(--mono); font-size: 0.875em; background: var(--card); padding: 0.1em 0.35em; border-radius: 6px; }
+  .note { border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; background: var(--flag-bg); color: var(--fg); }
+  .note strong { color: var(--flag); }
+  .diagram { overflow-x: auto; border: 1px solid var(--border); border-radius: 16px; background: var(--bg); padding: 16px; }
+  .diagram svg { display: block; min-width: 760px; width: 100%; height: auto; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 0.875rem; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .swatch { width: 28px; height: 0; border-top: 3px solid var(--fg); }
+  .swatch.flag { border-top: 3px dashed var(--accent); }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 700; }
+  .pill { display: inline-block; font-size: 0.75rem; font-weight: 700; padding: 2px 10px; border-radius: 999px; white-space: nowrap; }
+  .pill.on { color: var(--ok); border: 1px solid var(--ok); }
+  .pill.off { color: var(--flag); border: 1px solid var(--flag); }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; }
+  .cols > div { min-width: 0; display: grid; gap: 8px; align-content: start; }
+  ul { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }
+  footer { color: var(--muted); font-size: 0.875rem; }
+  /* SVG colors come from tokens so both themes read. */
+  .n-box { fill: var(--card); stroke: var(--border); stroke-width: 1.5; }
+  .n-esc { fill: var(--bg); stroke: var(--accent); stroke-width: 2.5; }
+  .t-h { fill: var(--fg); font: 700 15px var(--font); }
+  .t-s { fill: var(--muted); font: 400 12.5px var(--font); }
+  .t-m { fill: var(--muted); font: 400 11.5px var(--mono); }
+  .e { stroke: var(--fg); stroke-width: 2; fill: none; }
+  .e-flag { stroke: var(--accent); stroke-width: 2; fill: none; stroke-dasharray: 7 5; }
+  .ah { fill: var(--fg); }
+  .ah-flag { fill: var(--accent); }
+</style>
+
+<main>
+  <header class="prose" style="display:grid;gap:12px">
+    <div class="eyebrow">Fundit V2 on Arc mainnet</div>
+    <h1>Fundit architecture</h1>
+    <p class="lede">Every fundraiser is its own escrow contract on Arc. Donations arrive in USDC or EURC, the creator withdraws to Arc or to another CCTP chain, and no operator key can move the funds.</p>
+  </header>
+
+  <div class="note prose"><strong>Pre-launch.</strong> The contracts are not deployed yet. Cross-chain donations, unified balance donations and passkeys are built and tested on an Arc mainnet fork, and stay behind build flags until a live canary confirms them.</div>
+
+  <section aria-labelledby="flow">
+    <h2 id="flow">Money flow</h2>
+    <div class="diagram">
+      <svg viewBox="0 0 900 470" role="img" aria-labelledby="svg-title svg-desc">
+        <title id="svg-title">Fundit money flow</title>
+        <desc id="svg-desc">Three donor paths enter one campaign escrow on Arc. The factory creates the escrow. The creator withdraws on Arc or through CCTP to another chain, and fees go to the treasury through claimFees.</desc>
+        <defs>
+          <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="af" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-flag" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+
+        <!-- Donors -->
+        <rect class="n-box" x="10" y="20" width="230" height="78" rx="12"/>
+        <text class="t-h" x="26" y="48">Donor on Arc</text>
+        <text class="t-s" x="26" y="68">Approve, then donate()</text>
+        <text class="t-m" x="26" y="86">via Memo.memo(...)</text>
+
+        <rect class="n-box" x="10" y="130" width="230" height="78" rx="12"/>
+        <text class="t-h" x="26" y="158">Donor on another chain</text>
+        <text class="t-s" x="26" y="178">Bridge Kit, CCTP V2 burn</text>
+        <text class="t-m" x="26" y="196">useForwarder: true</text>
+
+        <rect class="n-box" x="10" y="240" width="230" height="78" rx="12"/>
+        <text class="t-h" x="26" y="268">Donor with Gateway</text>
+        <text class="t-s" x="26" y="288">Unified Balance Kit spend</text>
+        <text class="t-m" x="26" y="306">recipient = campaign</text>
+
+        <!-- Factory -->
+        <rect class="n-box" x="335" y="360" width="230" height="78" rx="12"/>
+        <text class="t-h" x="351" y="388">CampaignFactory</text>
+        <text class="t-s" x="351" y="408">CREATE2 clone, fees copied once</text>
+        <text class="t-m" x="351" y="426">MAX_FEE_BPS = 500</text>
+
+        <!-- Escrow -->
+        <rect class="n-esc" x="335" y="110" width="230" height="140" rx="14"/>
+        <text class="t-h" x="351" y="140">Campaign escrow</text>
+        <text class="t-s" x="351" y="160">EIP-1167 clone on Arc</text>
+        <text class="t-s" x="351" y="178">One token: USDC or EURC</text>
+        <text class="t-m" x="351" y="204">creatorBalance</text>
+        <text class="t-m" x="351" y="220">+ feesAccrued</text>
+        <text class="t-m" x="351" y="236">+ unaccounted = balance</text>
+
+        <!-- Outputs -->
+        <rect class="n-box" x="660" y="20" width="230" height="78" rx="12"/>
+        <text class="t-h" x="676" y="48">Creator on Arc</text>
+        <text class="t-s" x="676" y="68">withdraw(), domain 26</text>
+        <text class="t-m" x="676" y="86">ERC-20 transfer</text>
+
+        <rect class="n-box" x="660" y="130" width="230" height="96" rx="12"/>
+        <text class="t-h" x="676" y="158">Creator on another chain</text>
+        <text class="t-s" x="676" y="178">TokenMessengerV2</text>
+        <text class="t-m" x="676" y="196">depositForBurnWithHook</text>
+        <text class="t-s" x="676" y="214">Forwarding Service mints</text>
+
+        <rect class="n-box" x="660" y="258" width="230" height="60" rx="12"/>
+        <text class="t-h" x="676" y="284">Treasury</text>
+        <text class="t-m" x="676" y="304">claimFees(), anyone calls</text>
+
+        <!-- Edges in -->
+        <path class="e" d="M240,59 C290,59 290,140 333,140" marker-end="url(#a)"/>
+        <path class="e-flag" d="M240,169 L333,175" marker-end="url(#af)"/>
+        <path class="e-flag" d="M240,279 C290,279 290,215 333,215" marker-end="url(#af)"/>
+        <path class="e" d="M450,360 L450,252" marker-end="url(#a)"/>
+        <!-- Edges out -->
+        <path class="e" d="M565,150 C610,150 610,59 658,59" marker-end="url(#a)"/>
+        <path class="e" d="M565,178 L658,178" marker-end="url(#a)"/>
+        <path class="e" d="M565,225 C610,225 610,288 658,288" marker-end="url(#a)"/>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i class="swatch"></i>On at launch</span>
+      <span><i class="swatch flag"></i>Behind <code>VITE_CROSSCHAIN</code> until the canary passes</span>
+    </div>
+  </section>
+
+  <section aria-labelledby="products">
+    <h2 id="products">Circle and Arc products</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Product</th><th>Role</th><th>Code</th><th>Launch</th></tr></thead>
+        <tbody>
+          <tr><td>Arc</td><td>Home chain. Gas is paid in USDC.</td><td><code>app/src/config.ts</code></td><td><span class="pill on">On</span></td></tr>
+          <tr><td>USDC and EURC</td><td>Campaign tokens, ERC-20 interface, 6 decimals</td><td><code>CampaignFactory.sol</code></td><td><span class="pill on">On</span></td></tr>
+          <tr><td>Arc Memo</td><td>Tags each on-Arc donation from an EOA and keeps the donor as <code>msg.sender</code></td><td><code>app/src/lib/donate.ts</code></td><td><span class="pill on">On</span></td></tr>
+          <tr><td>CCTP V2 and Forwarding Service</td><td>USDC payouts to six chains</td><td><code>Campaign.sol</code>, <code>app/src/lib/payout.ts</code></td><td><span class="pill on">On</span></td></tr>
+          <tr><td>Bridge Kit</td><td>Donations from other chains into the campaign</td><td><code>app/src/lib/bridge.ts</code></td><td><span class="pill off">Flag</span></td></tr>
+          <tr><td>Gateway and Unified Balance Kit</td><td>Donations from a unified USDC balance</td><td><code>app/src/lib/unified.ts</code></td><td><span class="pill off">Flag</span></td></tr>
+          <tr><td>Modular Wallets</td><td>Passkey smart accounts</td><td><code>app/src/lib/passkey.ts</code></td><td><span class="pill off">Flag</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="trust">
+    <h2 id="trust">Trust model</h2>
+    <div class="cols">
+      <div>
+        <h3 style="margin:0;font-size:1.05rem">The owner can</h3>
+        <ul>
+          <li>Set the donation and withdrawal fee for new campaigns, each at most 5%. Launch values are 1% and 1%.</li>
+          <li>Rotate the treasury.</li>
+          <li>Set a featured campaign.</li>
+          <li>Pause the creation of new campaigns.</li>
+        </ul>
+      </div>
+      <div>
+        <h3 style="margin:0;font-size:1.05rem">The owner can never</h3>
+        <ul>
+          <li>Move, freeze or redirect campaign funds.</li>
+          <li>Pause donations or withdrawals.</li>
+          <li>Change an existing campaign's fees, token or creator.</li>
+          <li>Upgrade any contract.</li>
+        </ul>
+      </div>
+      <div>
+        <h3 style="margin:0;font-size:1.05rem">Creator recovery</h3>
+        <ul>
+          <li>An optional backup can start a recovery.</li>
+          <li>After 7 days (<code>RECOVERY_DELAY</code>) the backup becomes the creator.</li>
+          <li>The creator keeps every power during the wait and can cancel it.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="eurc" class="prose">
+    <h2 id="eurc">EURC campaigns</h2>
+    <p>EURC campaigns take donations and pay out on Arc only. On an Arc mainnet fork, <code>depositForBurn(EURC)</code> reverts with "Burn token not supported" for domains 0, 1, 6 and 14. The factory's EURC payout list is fixed at deploy and starts empty.</p>
+  </section>
+
+  <footer>Source: <code>contracts/src/</code>, <code>contracts/SECURITY.md</code> and <code>app/src/lib/</code> in the Fundit repository. Draft, October 2026.</footer>
+</main>
