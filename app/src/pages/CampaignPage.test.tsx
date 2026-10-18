@@ -72,15 +72,21 @@ afterEach(() => {
 
 describe('CampaignPage', () => {
   // An address that the factory does not know may be a clone with a hostile creator, so it is never shown as a fundraiser.
-  it("shows 'Not a Fundit' for an address the factory does not know", () => {
+  function expectFunditNotFound() {
+    expect(screen.getByRole('heading', { level: 1, name: "This Fundit doesn't exist or the link is wrong." })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Explore Fundits' }).getAttribute('href')).toBe('/explore')
+    expect(screen.getByRole('link', { name: 'Go home' }).getAttribute('href')).toBe('/')
+  }
+
+  it('shows the Fundit 404 page for an address the factory does not know', () => {
     hookState.current = { data: 'not-a-campaign', isPending: false, isError: false }
     renderPage()
-    expect(screen.getByText('Not a Fundit')).toBeTruthy()
+    expectFunditNotFound()
   })
 
-  it("shows 'Not a Fundit' for a URL that is not an address", () => {
+  it('shows the Fundit 404 page for a URL that is not an address', () => {
     renderPage('/c/hello')
-    expect(screen.getByText('Not a Fundit')).toBeTruthy()
+    expectFunditNotFound()
   })
 
   // Campaign text is written by anyone, so it must render as inert text.

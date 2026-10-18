@@ -1100,6 +1100,55 @@
   }
 }
 
+/* 404: an unknown page, or a Fundit address that is not a Fundit */
+.not-found {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 48px 0 64px;
+  text-align: center;
+}
+
+.not-found-code {
+  margin: 0 0 8px;
+  background: linear-gradient(135deg, var(--primary), var(--ink));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-size: clamp(96px, 22vw, 160px);
+  font-weight: var(--weight-display-heavy);
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.not-found h1 {
+  font-size: clamp(28px, 5vw, 40px);
+}
+
+.not-found > p {
+  margin: 0;
+}
+
+.not-found-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+@media (max-width: 480px) {
+  .not-found-actions {
+    align-self: stretch;
+  }
+
+  .not-found-actions .btn {
+    flex: 1 1 100%;
+  }
+}
+
 /* Legal pages */
 .legal {
   max-width: 72ch;

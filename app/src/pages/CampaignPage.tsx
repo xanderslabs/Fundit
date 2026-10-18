@@ -15,18 +15,7 @@ import type { CampaignView } from '../lib/campaigns'
 import { bpsToPercent, formatAmount } from '../lib/format'
 import { shortAddress } from '../lib/names'
 import { safeHttpsUrl } from '../lib/urls'
-
-function NotACampaign() {
-  return (
-    <section className="notice">
-      <h1>Not a Fundit</h1>
-      <p>This address was not created by the Fundit factory, so we will not show it as a Fundit.</p>
-      <Link to="/explore" className="btn">
-        Explore Fundits
-      </Link>
-    </section>
-  )
-}
+import { NotFound } from './NotFound'
 
 function CampaignStats({ view }: { view: CampaignView }) {
   const { summary, symbol } = view
@@ -149,7 +138,8 @@ export function CampaignPage() {
   const valid = isAddress(param)
   const query = useCampaign(valid ? param : undefined)
 
-  if (!valid || query.data === 'not-a-campaign') return <NotACampaign />
+  // An invalid address and one the factory does not know get the same Fundit 404 page.
+  if (!valid || query.data === 'not-a-campaign') return <NotFound fundit />
   if (query.isError) {
     return (
       <section className="notice">
