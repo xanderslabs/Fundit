@@ -4,7 +4,7 @@ import { Link, MemoryRouter, Route, Routes } from 'react-router'
 import type { Address } from 'viem'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PlainError } from '../lib/errors'
-import { AddBackupPasskey } from './AddBackupPasskey'
+import { AddBackupPasskey, confirmLeave } from './AddBackupPasskey'
 
 const ADDRESS = '0x00000000000000000000000000000000000000cC' as Address
 const STORED = { address: ADDRESS, credentialId: 'cred-1' }
@@ -14,12 +14,16 @@ const WORDS = PHRASE.split(' ')
 const state = { funded: true, pending: false }
 const addBackupPasskey = vi.fn()
 const checkPendingBackup = vi.fn()
+const discardPendingBackup = vi.fn((_address: Address) => {
+  state.pending = false
+})
 const newRecoveryPhrase = vi.fn(async () => PHRASE)
 vi.mock('../lib/passkey', () => ({
   addBackupPasskey: (...a: unknown[]) => addBackupPasskey(...a),
   checkPendingBackup: (...a: unknown[]) => checkPendingBackup(...a),
   newRecoveryPhrase: () => newRecoveryPhrase(),
   canPayBackupGas: async () => state.funded,
+  discardPendingBackup: (a: Address) => discardPendingBackup(a),
   useBackupPending: () => state.pending,
 }))
 
@@ -27,6 +31,7 @@ afterEach(() => {
   cleanup()
   addBackupPasskey.mockReset()
   checkPendingBackup.mockReset()
+  discardPendingBackup.mockClear()
   newRecoveryPhrase.mockClear()
   state.funded = true
   state.pending = false
@@ -170,7 +175,77 @@ describe('AddBackupPasskey', () => {
   })
 })
 
+describe('a stuck backup', () => {
+  const START_OVER = 'Your last backup may still go through. If it does, the words you saved will also work. Start over with new words?'
+
+  // Before the cutoff only Check again is offered: the operation may still land.
+  it('offers only Check again while the backup is pending but not stuck', async () => {
+    state.pending = true
+    checkPendingBackup.mockResolvedValue('pending')
+    render(ui())
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Check again' }))
+    expect(checkPendingBackup).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('button', { name: 'Start over' })).toBeNull()
+  })
+
+  // A dropped operation must not block a recovery key forever. Start over asks, then clears the record.
+  it('offers Start over once Check again finds it stuck, and clears the record after confirmation', async () => {
+    state.pending = true
+    checkPendingBackup.mockResolvedValue('stuck')
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const { rerender } = render(ui())
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Check again' }))
+    await user.click(screen.getByRole('button', { name: 'Start over' }))
+    expect(confirm).toHaveBeenCalledWith(START_OVER)
+    expect(discardPendingBackup).not.toHaveBeenCalled()
+    confirm.mockReturnValue(true)
+    await user.click(screen.getByRole('button', { name: 'Start over' }))
+    expect(discardPendingBackup).toHaveBeenCalledWith(ADDRESS)
+    rerender(ui())
+    expect(await screen.findByRole('button', { name: 'Show my recovery key' })).toBeTruthy()
+  })
+
+  it('offers Start over with the words still on screen after a stuck send', async () => {
+    addBackupPasskey.mockResolvedValue('pending')
+    checkPendingBackup.mockResolvedValue('stuck')
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    render(ui())
+    const user = userEvent.setup()
+    await showWords(user)
+    await confirmWords(user)
+    await user.click(screen.getByRole('button', { name: 'Check again' }))
+    await user.click(screen.getByRole('button', { name: 'Start over' }))
+    expect(discardPendingBackup).toHaveBeenCalledWith(ADDRESS)
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0)
+  })
+})
+
 describe('leaving with the words on screen', () => {
+  // Without a hash nothing is known to have been sent, so the words stay and the warning is the plain one.
+  it('keeps the not-added warning after a send that failed without a hash', async () => {
+    addBackupPasskey.mockRejectedValue(new Error('Failed to fetch'))
+    const onGuardChange = vi.fn()
+    render(ui({ onGuardChange }))
+    const user = userEvent.setup()
+    await showWords(user)
+    await confirmWords(user)
+    expect(screen.getByRole('alert')).toBeTruthy()
+    expect(onGuardChange).toHaveBeenLastCalledWith(LEAVE)
+    expect(screen.getAllByRole('listitem')).toHaveLength(12)
+  })
+
+  // Sign out and other actions outside the prompt ask the same question through confirmLeave.
+  it('confirmLeave asks while the words are shown and passes otherwise', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    render(ui())
+    expect(confirmLeave()).toBe(true)
+    expect(confirm).not.toHaveBeenCalled()
+    await showWords(userEvent.setup())
+    expect(confirmLeave()).toBe(false)
+    expect(confirm).toHaveBeenCalledWith(LEAVE)
+  })
+
   it('reports the leave warning while the words are shown, and the pending one after a send', async () => {
     addBackupPasskey.mockResolvedValue('pending')
     const onGuardChange = vi.fn()

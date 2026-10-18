@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { type Address, type Hex, isAddress, toFunctionSelector, type TransactionReceipt, type Transport } from 'viem'
+import { type Address, decodeErrorResult, type Hex, isAddress, parseAbi, type TransactionReceipt, type Transport } from 'viem'
 import { arc } from 'viem/chains'
 import { erc20Abi } from '../abi/erc20'
 import { CIRCLE_CLIENT_KEY, MODULAR_WALLETS_URL, PASSKEY_GAS_BUFFER, PASSKEYS_ENABLED, TOKENS, TX_TIMEOUT_MS } from '../config'
@@ -298,6 +298,10 @@ let newAccount: string | null = null
 const savedThisLoad = new Set<string>()
 
 export type PendingBackup = { account: Address; hash: Hex; hashKind: 'userop'; createdAt: number }
+// A pending backup with no receipt after this long was probably dropped, so the person may start over.
+export const BACKUP_STUCK_MS = 30 * 60 * 1000
+// Same as bridge.ts: older records are dropped on read.
+const BACKUP_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
 function backupSaved(address: Address): boolean {
   const a = address.toLowerCase()
@@ -321,10 +325,16 @@ export function markBackupSaved(address: Address) {
 }
 
 export function readPendingBackup(address: Address): PendingBackup | null {
+  const key = PENDING_KEY + address.toLowerCase()
   try {
-    const x = JSON.parse(localStorage.getItem(PENDING_KEY + address.toLowerCase()) ?? 'null') as Partial<PendingBackup> | null
+    const x = JSON.parse(localStorage.getItem(key) ?? 'null') as Partial<PendingBackup> | null
     if (!x || typeof x.hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(x.hash) || typeof x.account !== 'string') return null
-    return { account: x.account, hash: x.hash, hashKind: 'userop', createdAt: Number(x.createdAt) || 0 }
+    if (typeof x.createdAt !== 'number' || x.createdAt <= Date.now() - BACKUP_MAX_AGE_MS) {
+      // No notify here: this runs inside a store snapshot read.
+      localStorage.removeItem(key)
+      return null
+    }
+    return { account: x.account, hash: x.hash, hashKind: 'userop', createdAt: x.createdAt }
   } catch {
     return null
   }
@@ -337,6 +347,11 @@ function savePendingBackup(p: PendingBackup) {
     // Without storage the pending backup is only known while the words are on screen.
   }
   notify()
+}
+
+// Start over: forget a backup that never confirmed, so a new one can begin.
+export function discardPendingBackup(address: Address) {
+  clearPendingBackup(address)
 }
 
 function clearPendingBackup(address: Address) {
@@ -385,16 +400,25 @@ export async function canPayBackupGas(address: Address): Promise<boolean> {
 }
 
 // The weighted multisig plugin reverts addOwners for an address that is already an owner with
-// InvalidOwner(bytes30) (BaseWeightedMultisigPlugin._addOwners in circlefin/buidl-wallet-contracts). For the
-// same recovery address that means an earlier backup already landed.
-const INVALID_OWNER = toFunctionSelector('InvalidOwner(bytes30)')
-export function isAlreadyOwner(e: unknown): boolean {
+// InvalidOwner(bytes30) (BaseWeightedMultisigPlugin._addOwners in circlefin/buidl-wallet-contracts). The owner
+// id is AddressBytesLib.toBytes30: bytes30(uint240(uint160(addr))), so the address is its low 20 bytes. Only
+// an id for this recovery address means an earlier backup already landed.
+const invalidOwnerAbi = parseAbi(['error InvalidOwner(bytes30 ownerId)'])
+const INVALID_OWNER = /0xb7ed090c[0-9a-f]{64}/i
+export function isAlreadyOwner(e: unknown, recoveryAddress: Address): boolean {
   let cur = e
   for (let i = 0; cur && typeof cur === 'object' && i < 20; i++) {
     const x = cur as { message?: unknown; details?: unknown; data?: unknown; cause?: unknown }
     const data = typeof x.data === 'object' && x.data !== null ? (x.data as { data?: unknown }).data : x.data
     for (const v of [x.message, x.details, data]) {
-      if (typeof v === 'string' && v.toLowerCase().includes(INVALID_OWNER)) return true
+      const hex = typeof v === 'string' ? INVALID_OWNER.exec(v)?.[0] : undefined
+      if (!hex) continue
+      try {
+        const [ownerId] = decodeErrorResult({ abi: invalidOwnerAbi, data: hex as Hex }).args
+        if (`0x${ownerId.slice(-40)}`.toLowerCase() === recoveryAddress.toLowerCase()) return true
+      } catch {
+        // Not decodable. Keep looking.
+      }
     }
     cur = x.cause
   }
@@ -434,7 +458,7 @@ export async function addBackupPasskey(stored: StoredPasskey, recoveryPhrase: st
       verificationGasLimit: gas.verificationGasLimit,
     } as Params)
   } catch (err) {
-    if (isAlreadyOwner(err)) {
+    if (isAlreadyOwner(err, recoveryAddress)) {
       markBackupSaved(stored.address)
       return 'added'
     }
@@ -453,11 +477,13 @@ function settleBackup(address: Address, res: TxResult): BackupStatus {
   return 'added'
 }
 
-// Checks a pending backup with the passkey sender's recheck. It never sends anything again.
-export async function checkPendingBackup(stored: StoredPasskey): Promise<BackupStatus | 'none'> {
+// Checks a pending backup with the passkey sender's recheck. It never sends anything again. 'stuck' is a
+// pending backup still without a receipt after BACKUP_STUCK_MS: the person may start over.
+export async function checkPendingBackup(stored: StoredPasskey): Promise<BackupStatus | 'stuck' | 'none'> {
   const pending = readPendingBackup(stored.address)
   if (!pending) return backupSaved(stored.address) ? 'added' : 'none'
-  return settleBackup(stored.address, await storedPasskeySender(stored).recheck!(pending.hash))
+  const status = settleBackup(stored.address, await storedPasskeySender(stored).recheck!(pending.hash))
+  return status === 'pending' && Date.now() - pending.createdAt > BACKUP_STUCK_MS ? 'stuck' : status
 }
 
 // True when Circle's Arc mainnet endpoint answers with Arc's chain id. Run by hand once a client key exists.

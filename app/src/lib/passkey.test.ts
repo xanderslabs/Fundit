@@ -7,6 +7,7 @@ import {
   addBackupPasskey,
   checkPendingBackup,
   clearPasskeySession,
+  discardPendingBackup,
   dismissBackupPrompt,
   loginPasskey,
   markBackupSaved,
@@ -402,11 +403,49 @@ describe('addBackupPasskey', () => {
 
   // addOwners reverts InvalidOwner for an address that is already an owner. With the same words that means an
   // earlier attempt landed, so a retry reports success instead of an error.
+  // The plugin's owner id for an address is bytes30(uint240(uint160(addr))): ten zero bytes, then the address.
+  // As an ABI word, bytes30 is left-aligned, so two zero bytes follow.
+  const invalidOwner = (addr: string) => `0xb7ed090c${'00'.repeat(10)}${addr.slice(2).toLowerCase()}0000`
+
   it('reports success when the recovery address is already an owner', async () => {
-    kit.estimateRegisterRecoveryAddressGas.mockRejectedValue(new Error('UserOperation reverted during simulation with reason: 0xb7ed090c000000'))
+    kit.estimateRegisterRecoveryAddressGas.mockRejectedValue(
+      new Error(`UserOperation reverted during simulation with reason: ${invalidOwner('0x00000000000000000000000000000000000000Ee')}`),
+    )
     expect(await addBackupPasskey(stored, PHRASE)).toBe('added')
     expect(kit.registerRecoveryAddress).not.toHaveBeenCalled()
     expect(saved()).toBe(true)
+  })
+
+  // InvalidOwner for some other owner id is a real failure, not proof that this key landed.
+  it('surfaces InvalidOwner for a different owner as an error', async () => {
+    kit.estimateRegisterRecoveryAddressGas.mockRejectedValue(
+      new Error(`UserOperation reverted during simulation with reason: ${invalidOwner('0x1111111111111111111111111111111111111111')}`),
+    )
+    await expect(addBackupPasskey(stored, PHRASE)).rejects.toThrow('reverted')
+    expect(saved()).toBe(false)
+  })
+
+  // A dropped user operation must not block a recovery key in this browser forever.
+  it('calls a pending backup stuck only after 30 minutes without a receipt, and Start over clears it', async () => {
+    const key = 'fundit.backup.pending.0x00000000000000000000000000000000000000cc'
+    const record = (ageMs: number) => JSON.stringify({ account: stored.address, hash: OP_HASH, hashKind: 'userop', createdAt: Date.now() - ageMs })
+    kit.bundler.waitForUserOperationReceipt.mockRejectedValue(new Error('not found'))
+    localStorage.setItem(key, record(29 * 60_000))
+    expect(await checkPendingBackup(stored)).toBe('pending')
+    localStorage.setItem(key, record(31 * 60_000))
+    expect(await checkPendingBackup(stored)).toBe('stuck')
+    expect(readPendingBackup(stored.address)).not.toBeNull()
+    discardPendingBackup(stored.address)
+    expect(readPendingBackup(stored.address)).toBeNull()
+    expect(localStorage.getItem(key)).toBeNull()
+  })
+
+  // Same rule as bridge.ts: records older than 7 days are dropped on read.
+  it('prunes a pending backup older than 7 days', () => {
+    const key = 'fundit.backup.pending.0x00000000000000000000000000000000000000cc'
+    localStorage.setItem(key, JSON.stringify({ account: stored.address, hash: OP_HASH, hashKind: 'userop', createdAt: Date.now() - 7 * 24 * 3600_000 - 1 }))
+    expect(readPendingBackup(stored.address)).toBeNull()
+    expect(localStorage.getItem(key)).toBeNull()
   })
 })
 

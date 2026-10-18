@@ -5,6 +5,7 @@ import {
   addBackupPasskey,
   canPayBackupGas,
   checkPendingBackup,
+  discardPendingBackup,
   newRecoveryPhrase,
   type StoredPasskey,
   useBackupPending,
@@ -24,6 +25,15 @@ type Props = {
 const LEAVE = 'Leave without saving your backup? Your recovery key has not been added yet.'
 const KEEP_WORDS = 'Keep these words. The backup may still go through.'
 const LEAVE_PENDING = `Leave without saving your backup? ${KEEP_WORDS}`
+const START_OVER = 'Your last backup may still go through. If it does, the words you saved will also work. Start over with new words?'
+
+// The leave question of the prompt on screen, if any. Sign out in the account menu asks it too.
+let activeGuard: string | null = null
+
+// True when leaving is fine: nothing to lose, or the person confirmed.
+export function confirmLeave(): boolean {
+  return activeGuard === null || window.confirm(activeGuard)
+}
 
 // Three different word numbers (1 to 12), in order, from the browser's secure random source.
 function pickWords(): number[] {
@@ -41,13 +51,14 @@ function pickWords(): number[] {
 function useLeaveGuard(message: string | null) {
   useEffect(() => {
     if (!message) return
+    activeGuard = message
     function onBeforeUnload(e: BeforeUnloadEvent) {
       e.preventDefault()
     }
     function onClick(e: MouseEvent) {
       const link = (e.target as Element | null)?.closest?.('a[href]')
       if (!link || link.closest('.backup-prompt')) return
-      if (!window.confirm(message!)) {
+      if (!confirmLeave()) {
         e.preventDefault()
         e.stopPropagation()
       }
@@ -55,6 +66,7 @@ function useLeaveGuard(message: string | null) {
     window.addEventListener('beforeunload', onBeforeUnload)
     window.addEventListener('click', onClick, true)
     return () => {
+      activeGuard = null
       window.removeEventListener('beforeunload', onBeforeUnload)
       window.removeEventListener('click', onClick, true)
     }
@@ -74,6 +86,8 @@ export function AddBackupPasskey({ stored, onLater, onDone, headingId, onGuardCh
   // sent: the operation went out but has not confirmed. sending: the send is in progress.
   const [sent, setSent] = useState(false)
   const [sending, setSending] = useState(false)
+  // Check again found no receipt after the cutoff: the operation was probably dropped.
+  const [stuck, setStuck] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -141,7 +155,37 @@ export function AddBackupPasskey({ stored, onLater, onDone, headingId, onGuardCh
       }
     })
 
-  const check = () => run(async () => finish(await checkPendingBackup(stored)))
+  const check = () =>
+    run(async () => {
+      const status = await checkPendingBackup(stored)
+      setStuck(status === 'stuck')
+      finish(status)
+    })
+
+  // Forgets the unconfirmed backup and any words on screen, so a fresh backup can start.
+  function startOver() {
+    if (!window.confirm(START_OVER)) return
+    discardPendingBackup(stored.address)
+    setPhrase(null)
+    setAsked([])
+    setTyped({})
+    setSent(false)
+    setStuck(false)
+    setError(null)
+  }
+
+  const pendingActions = (
+    <div className="backup-actions">
+      <button type="button" className="btn" disabled={busy} onClick={() => void check()}>
+        Check again
+      </button>
+      {stuck && (
+        <button type="button" className="btn btn-outline" disabled={busy} onClick={startOver}>
+          Start over
+        </button>
+      )}
+    </div>
+  )
 
   let body
   if (phrase !== null) {
@@ -159,9 +203,7 @@ export function AddBackupPasskey({ stored, onLater, onDone, headingId, onGuardCh
         {sent ? (
           <>
             <p>{KEEP_WORDS}</p>
-            <button type="button" className="btn" disabled={busy} onClick={() => void check()}>
-              Check again
-            </button>
+            {pendingActions}
           </>
         ) : (
           <form
@@ -198,9 +240,7 @@ export function AddBackupPasskey({ stored, onLater, onDone, headingId, onGuardCh
     body = (
       <>
         <p>Your last backup is still confirming.</p>
-        <button type="button" className="btn" disabled={busy} onClick={() => void check()}>
-          Check again
-        </button>
+        {pendingActions}
       </>
     )
   } else if (funded === false) {

@@ -6,7 +6,7 @@ import { useDisconnect } from 'wagmi'
 import { PASSKEYS_ENABLED } from '../config'
 import { useWalletChoice } from '../hooks/useSender'
 import { dismissBackupPrompt, logoutPasskey, type StoredPasskey, useBackupPrompt, usePasskeySession } from '../lib/passkey'
-import { AddBackupPasskey } from './AddBackupPasskey'
+import { AddBackupPasskey, confirmLeave } from './AddBackupPasskey'
 import { Name } from './Name'
 import { PasskeyLogin } from './PasskeyLogin'
 
@@ -321,6 +321,8 @@ function AccountMenu({ address, onSignedOut }: { address: Address; onSignedOut: 
   }
 
   function signOut() {
+    // Recovery words on My page would be lost, so Sign out asks first like any other way out.
+    if (!confirmLeave()) return
     setOpen(false)
     if (choice.external) disconnect()
     if (session) logoutPasskey()

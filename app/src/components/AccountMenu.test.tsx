@@ -13,6 +13,7 @@ const state: { session: StoredPasskey | null; external: Address | null } = { ses
 const openWallet = vi.fn()
 const disconnect = vi.fn()
 const logoutPasskey = vi.fn()
+const confirmLeave = vi.fn(() => true)
 
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: openWallet }) }))
 vi.mock('wagmi', () => ({ useDisconnect: () => ({ mutate: disconnect }) }))
@@ -21,6 +22,10 @@ vi.mock('../lib/passkey', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/passkey')>()),
   usePasskeySession: () => state.session,
   logoutPasskey: () => logoutPasskey(),
+}))
+vi.mock('./AddBackupPasskey', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./AddBackupPasskey')>()),
+  confirmLeave: () => confirmLeave(),
 }))
 vi.mock('../hooks/useSender', () => ({
   useWalletChoice: (): WalletChoice => ({
@@ -38,6 +43,8 @@ afterEach(() => {
   openWallet.mockReset()
   disconnect.mockReset()
   logoutPasskey.mockReset()
+  confirmLeave.mockReset()
+  confirmLeave.mockReturnValue(true)
 })
 
 function ui() {
@@ -159,5 +166,18 @@ describe('AccountControl signed in', () => {
     state.external = null
     rerender(ui())
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Sign in' }))
+  })
+
+  // On My page with recovery words on screen, Sign out would drop them, so it asks first like any other exit.
+  it('Sign out asks first while recovery words are on screen, and does nothing when the person stays', async () => {
+    state.external = EXTERNAL
+    confirmLeave.mockReturnValue(false)
+    render(ui())
+    const user = userEvent.setup()
+    await user.click(pill())
+    await user.click(screen.getByRole('menuitem', { name: 'Sign out' }))
+    expect(confirmLeave).toHaveBeenCalledTimes(1)
+    expect(disconnect).not.toHaveBeenCalled()
+    expect(logoutPasskey).not.toHaveBeenCalled()
   })
 })
