@@ -8,9 +8,9 @@ Fundit is a crowdfunding app where each fundraiser is its own escrow contract on
 stablecoin-native blockchain. Donations arrive in USDC or EURC. The creator withdraws to Arc, or
 receives USDC on another chain through CCTP V2. The platform operator cannot move or freeze any
 creator's balance. People sign in with a Fundit account only: a passkey smart account from Circle
-Modular Wallets. This sign-in ships in the next release. Fundit runs as a static web app with no backend, no database and no server that
-holds spending keys. The contracts are deployed on Arc mainnet. This paper explains the design, the
-trust model and the plan for launch.
+Modular Wallets. This sign-in ships in the next release. Fundit runs as a static web app with no
+backend, no database and no server that holds spending keys. The contracts are deployed on Arc mainnet
+and Arc testnet. This paper explains the design, the trust model and the plan for launch.
 
 ## 1. Problem
 
@@ -39,7 +39,7 @@ removes all of it.
 4. **No servers with keys, no paid infrastructure.** The app is static. All reads come from public
    RPC endpoints and on-chain events, plus Circle's public Iris API.
 5. **No wallet app needed.** A person signs in with a passkey (a fingerprint, face or device PIN).
-6. **Honest claims.** Every test that moves money will run on Arc testnet first.
+6. **Honest claims.** Every test that moves money runs on Arc testnet first.
 
 ## 3. Why Arc and Circle
 
