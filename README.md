@@ -10,7 +10,7 @@ inflow and outflow on chain. Fundit has no backend, no database and no server th
   contracts deployed on Arc mainnet (chain ID `5042`, CCTP domain `26`). See
   [Deployed addresses](#deployed-addresses).
 - fundit.fun runs on Arc mainnet. Passkey sign-in ships with the next release, once the `fundit.fun`
-  Circle client key is set.
+  Circle client key is set. The rest of this README describes that release.
 - People sign in with a Fundit account only. A Fundit account is a passkey smart account from Circle
   Modular Wallets. There is no wallet sign-in.
 - `CampaignFactory` deploys one `Campaign` per fundraiser as an EIP-1167 clone with CREATE2.
@@ -58,7 +58,7 @@ by default ([`app/src/config.ts`](app/src/config.ts)).
 | USDC | Campaign token, used through the ERC-20 interface with 6 decimals. | [`app/src/config.ts`](app/src/config.ts), [`CampaignFactory.sol`](contracts/src/CampaignFactory.sol#L105) | On |
 | EURC | Campaign token. EURC campaigns take donations and pay out on Arc only. | [`app/src/config.ts`](app/src/config.ts), [`Create.tsx`](app/src/pages/Create.tsx) | On |
 | Modular Wallets (passkeys) | The Fundit account: a passkey smart account. Every action is a user operation sent to Circle's bundler. | [`app/src/lib/passkey.ts`](app/src/lib/passkey.ts) | On |
-| CCTP V2 (`TokenMessengerV2`) | Creator payouts, and **Send money out** from a Fundit account, in USDC to the CCTP chains in `CCTP_CHAINS`. | [`Campaign.sol`](contracts/src/Campaign.sol#L216-L230), [`app/src/lib/payout.ts`](app/src/lib/payout.ts), [`app/src/lib/accountWithdraw.ts`](app/src/lib/accountWithdraw.ts) | On |
+| CCTP V2 (`TokenMessengerV2`) | Creator payouts, and **Send money out** from a Fundit account, in USDC to the CCTP chains in `CCTP_CHAINS`. | [`Campaign.sol`](contracts/src/Campaign.sol#L217-L231), [`app/src/lib/payout.ts`](app/src/lib/payout.ts), [`app/src/lib/accountWithdraw.ts`](app/src/lib/accountWithdraw.ts) | On |
 | CCTP Forwarding Service | Hook data on every cross-chain payout and send, so Circle submits the destination mint. | [`app/src/config.ts`](app/src/config.ts) (`FORWARD_HOOK_DATA`) | On |
 | CCTP V2 fees API (Iris) | Fast and Standard fee quotes with forwarding. | [`app/src/lib/iris.ts`](app/src/lib/iris.ts) | On |
 | Bridge Kit | **Add money** from another chain: burns USDC on the person's chain with their Fundit account as the recipient. | [`app/src/lib/bridge.ts`](app/src/lib/bridge.ts), [`AddMoney.tsx`](app/src/pages/AddMoney.tsx) | Behind `VITE_CROSSCHAIN` |

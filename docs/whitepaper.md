@@ -8,7 +8,7 @@ Fundit is a crowdfunding app where each fundraiser is its own escrow contract on
 stablecoin-native blockchain. Donations arrive in USDC or EURC. The creator withdraws to Arc, or
 receives USDC on another chain through CCTP V2. The platform operator cannot move or freeze any
 creator's balance. People sign in with a Fundit account only: a passkey smart account from Circle
-Modular Wallets. Fundit runs as a static web app with no backend, no database and no server that
+Modular Wallets. This sign-in ships in the next release. Fundit runs as a static web app with no backend, no database and no server that
 holds spending keys. The contracts are deployed on Arc mainnet. This paper explains the design, the
 trust model and the plan for launch.
 
@@ -39,7 +39,7 @@ removes all of it.
 4. **No servers with keys, no paid infrastructure.** The app is static. All reads come from public
    RPC endpoints and on-chain events, plus Circle's public Iris API.
 5. **No wallet app needed.** A person signs in with a passkey (a fingerprint, face or device PIN).
-6. **Honest claims.** Every test that moves money runs on Arc testnet first.
+6. **Honest claims.** Every test that moves money will run on Arc testnet first.
 
 ## 3. Why Arc and Circle
 
@@ -241,10 +241,11 @@ second address that controls the same asset.
   state. It covers the CCTP payout path with plain `depositForBurn`, EIP-3009 support and EURC CCTP
   support.
 - **Static analysis.** Slither, with every accepted finding listed in `contracts/SECURITY.md`.
-- **Arc testnet.** Every end-to-end test and every test that moves money runs on Arc testnet. A build
-  with `VITE_ARC_NETWORK=testnet` reads every address and URL for testnet, and refuses to run on
-  `fundit.fun`. The testnet factory is not deployed yet. Until it is, the end-to-end specs are skipped.
-  They will sign up with a virtual passkey and run each money flow on testnet.
+- **Arc testnet.** The app has an Arc testnet build setting. A build with `VITE_ARC_NETWORK=testnet`
+  reads every address and URL for testnet, and refuses to run on `fundit.fun`. Every end-to-end test
+  and every test that moves money will run on Arc testnet once the testnet factory is deployed. Until
+  then, the end-to-end specs are skipped. They will sign up with a virtual passkey and run each money
+  flow on testnet.
 
 The contracts have not had a third-party audit. A grant would fund one (section 10).
 
@@ -262,20 +263,21 @@ public RPC endpoints.
 As of October 2026:
 
 - Contracts: deployed on Arc mainnet and verified on Sourcify (exact match). They are not verified on
-  the Arc explorer, which blocks automated verification.
-
-  | Contract | Address |
-  | --- | --- |
-  | `CampaignFactory` | [`0xf1b2AEF82c37fC41D254D8e06BD7780ce34617d9`](https://explorer.arc.io/address/0xf1b2AEF82c37fC41D254D8e06BD7780ce34617d9) |
-  | `Campaign` implementation | [`0x083CE7a68Ae418f832E12c2aB976615237e03853`](https://explorer.arc.io/address/0x083CE7a68Ae418f832E12c2aB976615237e03853) |
-  | Owner and treasury | [`0x3552E9c14C7b6050839009A5B160A4446a1e916D`](https://explorer.arc.io/address/0x3552E9c14C7b6050839009A5B160A4446a1e916D) |
-
-  The deploy block is `26452579`.
+  the Arc explorer, which blocks automated verification. The addresses and deploy block are in the
+  table below.
 - Contracts on Arc testnet: not deployed yet. Addresses: `TBD`.
 - App: `fundit.fun` runs on Arc mainnet. Passkey sign-in ships with the next release, once the
   `fundit.fun` Circle client key is set. In that release, sign-in is passkey only. Add money from
   another chain is behind `VITE_CROSSCHAIN`.
 - Traction: none yet. Metrics in this paper are placeholders until launch.
+
+Arc mainnet contracts (deploy block `26452579`):
+
+| Contract | Address |
+| --- | --- |
+| `CampaignFactory` | [`0xf1b2AEF82c37fC41D254D8e06BD7780ce34617d9`](https://explorer.arc.io/address/0xf1b2AEF82c37fC41D254D8e06BD7780ce34617d9) |
+| `Campaign` implementation | [`0x083CE7a68Ae418f832E12c2aB976615237e03853`](https://explorer.arc.io/address/0x083CE7a68Ae418f832E12c2aB976615237e03853) |
+| Owner and treasury | [`0x3552E9c14C7b6050839009A5B160A4446a1e916D`](https://explorer.arc.io/address/0x3552E9c14C7b6050839009A5B160A4446a1e916D) |
 
 ## 9. Launch plan
 

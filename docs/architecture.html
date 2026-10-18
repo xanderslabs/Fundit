@@ -79,10 +79,10 @@
   <header class="prose" style="display:grid;gap:12px">
     <div class="eyebrow">Fundit V2 on Arc mainnet</div>
     <h1>Fundit architecture</h1>
-    <p class="lede">Every fundraiser is its own escrow contract on Arc. People sign in with a Fundit account, a passkey smart account. Donations arrive in USDC or EURC, the creator withdraws to Arc or to another CCTP chain, and no operator key can move a creator's balance.</p>
+    <p class="lede">Every fundraiser is its own escrow contract on Arc. In the next release, people sign in with a Fundit account, a passkey smart account. Donations arrive in USDC or EURC, the creator withdraws to Arc or to another CCTP chain, and no operator key can move a creator's balance.</p>
   </header>
 
-  <div class="note prose"><strong>Live on Arc mainnet.</strong> fundit.fun runs on Arc mainnet, and the factory and implementation are deployed. Passkey sign-in ships with the next release. See <a href="#deployed">Deployed contracts</a>. Every test that moves money runs on Arc testnet, where the factory is not deployed yet.</div>
+  <div class="note prose"><strong>Live on Arc mainnet.</strong> fundit.fun runs on Arc mainnet, and the factory and implementation are deployed. Passkey sign-in ships with the next release. See <a href="#deployed">Deployed contracts</a>. The app has an Arc testnet build setting. Every test that moves money will run on Arc testnet once the testnet factory is deployed.</div>
 
   <section aria-labelledby="flow">
     <h2 id="flow">Money flow</h2>

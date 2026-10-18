@@ -15,11 +15,12 @@ creator can withdraw, and anyone can audit every dollar.
 
 ## 0:30 to 1:45. Demo
 
-[Use a testnet build for any step that moves money. The banner reads "Test network".]
+[Use a testnet build for any step that moves money. The banner reads "Test network". This demo needs
+the Arc testnet factory, which is not deployed yet.]
 
 [Open the home page.]
 
-Here's the home page. Every card is a campaign contract on Arc. The contracts are live on Arc mainnet.
+Here's the home page. Every card is a campaign contract. On mainnet these contracts are live today.
 
 [Select Sign in, then Continue with passkey, and create a Fundit account.]
 
@@ -50,8 +51,8 @@ explorer.
 
 [Open Manage and withdraw to Base.]
 
-As the creator, I withdraw. I can take the money on Arc, or send USDC to Base, Ethereum, Arbitrum
-and other CCTP chains. For Base, the campaign burns through CCTP V2 with the Forwarding Service,
+As the creator, I withdraw. I can take the money on Arc, or send USDC to another CCTP chain, here
+Base. For Base, the campaign burns through CCTP V2 with the Forwarding Service,
 and Circle mints on Base. I don't need gas on Base.
 
 ## 1:45 to 2:30. The Circle stack
@@ -65,8 +66,8 @@ Fundit is built on Circle from the contract up:
   their Fundit account.
 - **Bridge Kit** brings USDC in from another chain when you add money. It's behind a flag.
 
-Every test that moves money runs on Arc testnet first. We'd rather under-claim than ship a path that
-strands a donation.
+The app has an Arc testnet build setting. Every test that moves money will run on Arc testnet once the
+testnet factory is deployed. We'd rather under-claim than ship a path that strands a donation.
 
 ## 2:30 to 3:15. The trust model
 
