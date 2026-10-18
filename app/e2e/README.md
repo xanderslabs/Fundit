@@ -76,6 +76,12 @@ A run that fails part way leaves the rest of the 3 USDC in that account, and nob
 needs more than 3.1 USDC before a run starts. The suite checks this and prints the funder's balance before
 and after.
 
+## Traces
+
+A failed test keeps a Playwright trace in `app/test-results/`. The trace records the page's network calls,
+including the `Authorization` header with the localhost Circle client key. Do not attach traces to issues
+or reports. The funder key never appears in a trace: it stays in the Node process.
+
 ## Limits
 
 - The passkey name is `e2e-<milliseconds>`. Circle accepts 5 to 50 characters from `A-Z`, `a-z`, `0-9` and

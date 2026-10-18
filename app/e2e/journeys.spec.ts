@@ -13,8 +13,8 @@ import { addVirtualAuthenticator } from './passkey'
 test.describe.configure({ mode: 'serial' })
 
 // What the funder sends. The account gives GIFT of it, withdraws it back and sends the rest to the funder.
-// A run costs the gas of five user operations, the 1% fees, the 0.05 USDC the account keeps for gas and
-// whatever prefund is left in the account's EntryPoint deposit. Circle's bundler prices user operations far
+// A run costs the gas of five user operations, the 1% fees, the estimated reserve (the prefund) that Max keeps
+// back in the account, and whatever prefund is left in the account's EntryPoint deposit. Circle's bundler prices user operations far
 // above Arc's base fee, and the first one also deploys the account, so the top-up must cover that prefund.
 const TOP_UP = parseUnits('3', 6)
 const GIFT = '0.2'
@@ -67,7 +67,9 @@ function collectUserOpReceipts(p: Page) {
 // Waits for the success text, or stops early on an error the page shows, with that error in the failure.
 async function settled(scope: Locator, success: string, timeout = 90_000) {
   const done = scope.getByText(success)
-  const failed = scope.locator('.status-error, .field-error[role="alert"], [role="alert"].field-error')
+  // Only a failed send's status box. A form field alert can be right after success: a Max send leaves less than
+  // the reserve, so Send money out then says "Add at least ...".
+  const failed = scope.locator('.status-error')
   await expect(done.or(failed).first()).toBeVisible({ timeout })
   if (await failed.count()) throw new Error(`The page shows an error: ${await failed.first().innerText()}`)
   await expect(done).toBeVisible()
