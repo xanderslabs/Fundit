@@ -142,7 +142,7 @@ connected wallet.
 The donor's Fundit account approves the campaign for `amount + tip` and calls `donate(amount, tip,
 message)` in one user operation. The campaign records the account as `msg.sender`.
 
-**Give anonymously** puts the ASCII marker `[anon]` at the start of the message. Fundit pages then show
+**Hide my name** puts the ASCII marker `[anon]` at the start of the message. Fundit pages then show
 "Anonymous" in place of the donor's name. This hides the name on Fundit only. The gift is not private:
 the `Donated` event still records the donor's account address on chain.
 
@@ -244,7 +244,7 @@ second address that controls the same asset.
 - **Arc testnet.** The app has an Arc testnet build setting. A build with `VITE_ARC_NETWORK=testnet`
   reads every address and URL for testnet, and refuses to run on `fundit.fun`. The end-to-end suite
   runs on Arc testnet against the testnet factory. It signs up with a virtual passkey through Circle's
-  real flow and runs each money flow: add money, create, give anonymously, withdraw and send money out.
+  real flow and runs each money flow: add money, create, give with Hide my name on, withdraw and send money out.
   It checks every result on chain.
 
 The contracts have not had a third-party audit. A grant would fund one (section 10).

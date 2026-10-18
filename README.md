@@ -163,16 +163,16 @@ passkey created on one domain does not work on another.
    `localhost` key. For production, put it in the Cloudflare Pages build variables with the `fundit.fun` key. See
    [`app/.env.example`](app/.env.example).
 
-## Give anonymously
+## Hide my name
 
-The **Give** panel has a **Give anonymously** box. When the donor ticks it, the app puts the ASCII marker
+The **Give** panel has a **Hide my name** switch. When the donor switches it on, the app puts the ASCII marker
 `[anon]` (6 bytes) at the start of the message. The message limit drops from 280 bytes
 (`MAX_MESSAGE_BYTES`) to 274 bytes, and the form blocks a longer message before anything is sent. Fundit
 pages then show "Anonymous" in place of the donor's name, and show the message without the marker. Any
 message that starts with `[anon]` counts as anonymous, whether or not the box was ticked. See
 [`app/src/lib/anon.ts`](app/src/lib/anon.ts).
 
-Give anonymously hides the name on Fundit only. The gift stays public on chain. The `Donated` event
+Hide my name hides the name on Fundit only. The gift stays public on chain. The `Donated` event
 records the donor's Fundit account address, and anyone can read it on Arc.
 
 ## Deployed addresses
@@ -345,7 +345,7 @@ deploys the account. See [`app/e2e/README.md`](app/e2e/README.md).
 - **Card donations.** Donors pay by card through Circle's Onramp Kit, with USDC delivered to the
   campaign.
 - **Private giving.** Gifts through a zero-knowledge (ZK) pool, so the donor's address is not linked to
-  the gift on chain. Give anonymously does not do this today.
+  the gift on chain. Hide my name does not do this today.
 - **Giving agent.** An idea for a later version. It will connect wallets through Reown. Agents never
   hold keys that control money.
 

@@ -41,7 +41,7 @@ and nobody can change them later.
 [Open the campaign page and give 1 USDC with a tip and a message.]
 
 Now I give as a supporter, straight from my Fundit account. Gas is paid in USDC, so I never need
-another token. If I tick Give anonymously, Fundit shows "Anonymous" instead of my name. The gift is
+another token. If I switch on Hide my name, Fundit shows "Anonymous" instead of my name. The gift is
 still recorded on chain from my account address.
 
 [Show the activity list and the explorer link.]
