@@ -111,10 +111,10 @@ test.afterAll(async () => {
 test('signs up with a passkey', async () => {
   await page.goto('/')
   await page.getByRole('banner').getByRole('button', { name: 'Sign in' }).click()
-  await page.getByRole('button', { name: 'Continue with passkey' }).click()
+  await page.getByRole('button', { name: 'Create one now' }).click()
   // Circle takes 5 to 50 characters from A-Z, a-z, 0-9 and _@.:+- only.
-  await page.getByLabel('Name for your passkey').fill(`e2e-${Date.now()}`)
-  await page.getByRole('button', { name: 'Create my Fundit account' }).click()
+  await page.getByLabel('Username').fill(`e2e-${Date.now()}`)
+  await page.getByRole('button', { name: 'Create account' }).click()
 
   // Sign-up lands on Add money, which shows the new account's address.
   await expect(page).toHaveURL(/\/add-money$/, { timeout: 60_000 })

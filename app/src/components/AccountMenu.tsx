@@ -113,9 +113,7 @@ function ModalDialog({
 // opens from here; it opens only inside Add money.
 export function SignInButton({ className = 'btn', label = 'Sign in', onPasskeyDone, buttonRef }: SignInProps) {
   const [open, setOpen] = useState(false)
-  const [step, setStep] = useState<'choose' | 'passkey'>('choose')
   const trigger = useRef<HTMLButtonElement | null>(null)
-  const body = useRef<HTMLDivElement>(null)
   const headingId = useId()
 
   function dismiss() {
@@ -123,53 +121,29 @@ export function SignInButton({ className = 'btn', label = 'Sign in', onPasskeyDo
     trigger.current?.focus()
   }
 
-  // The Continue button goes away on the passkey step, so focus moves to the username field.
-  useEffect(() => {
-    if (open && step === 'passkey') body.current?.querySelector<HTMLElement>('input')?.focus()
-  }, [open, step])
-
   function setTrigger(el: HTMLButtonElement | null) {
     trigger.current = el
     if (typeof buttonRef === 'function') buttonRef(el)
     else if (buttonRef) buttonRef.current = el
   }
 
+  // Every entry point opens on the Sign in view. Create your account is one switch away inside the dialog.
   return (
     <>
-      <button
-        ref={setTrigger}
-        type="button"
-        className={className}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        onClick={() => {
-          setStep('choose')
-          setOpen(true)
-        }}
-      >
+      <button ref={setTrigger} type="button" className={className} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
         {label}
       </button>
       {open && (
         <ModalDialog labelledBy={headingId} onClose={dismiss}>
-          <div ref={body} className="signin-body">
-            <h2 id={headingId}>Sign in</h2>
-            {step === 'choose' ? (
-              <button type="button" className="btn" onClick={() => setStep('passkey')}>
-                Continue with passkey
-              </button>
-            ) : (
-              <>
-                <PasskeyLogin
-                  onDone={() => {
-                    setOpen(false)
-                    onPasskeyDone?.()
-                  }}
-                />
-                <Link to="/recover" onClick={() => setOpen(false)}>
-                  Lost your passkey? Recover your account
-                </Link>
-              </>
-            )}
+          <div className="signin-body">
+            <PasskeyLogin
+              headingId={headingId}
+              onLeave={() => setOpen(false)}
+              onDone={() => {
+                setOpen(false)
+                onPasskeyDone?.()
+              }}
+            />
           </div>
         </ModalDialog>
       )}

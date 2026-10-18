@@ -1,9 +1,7 @@
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router'
 import { explainError, isInvalidUsername, isUserRejection, USERNAME_PATTERN, USERNAME_RULE } from '../lib/errors'
 import { loginPasskey, registerPasskey } from '../lib/passkey'
-
-export const PASSKEY_INTRO =
-  'A passkey lets you sign in with your fingerprint, face or device PIN, with no wallet app to install. It opens a Fundit account on Arc that you add USDC to before you give.'
 
 export const MAX_USERNAME = 50
 
@@ -14,14 +12,34 @@ export function usernameError(name: string, submitted: boolean): string | null {
   return submitted && !USERNAME_PATTERN.test(name) ? USERNAME_RULE : null
 }
 
-// Sign up with a username, or log in with a passkey already on this device.
-export function PasskeyLogin({ onDone }: { onDone?: () => void }) {
+type View = 'signin' | 'create'
+
+// Sign in with a passkey already on this device, or switch to the create view and sign up with a username.
+// headingId names the heading for a dialog that wraps this. onLeave runs when the recovery link is followed.
+export function PasskeyLogin({ onDone, onLeave, headingId }: { onDone?: () => void; onLeave?: () => void; headingId?: string }) {
+  const [view, setView] = useState<View>('signin')
   const [username, setUsername] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [tried, setTried] = useState(false)
+  const switched = useRef(false)
+  const signInButton = useRef<HTMLButtonElement>(null)
+  const usernameField = useRef<HTMLInputElement>(null)
   const name = username.trim()
   const nameError = tried && name === '' ? 'Enter a name for your account.' : usernameError(name, tried)
+
+  // The old view's controls are gone after a switch, so focus moves to the new view's first control.
+  useEffect(() => {
+    if (!switched.current) return
+    ;(view === 'create' ? usernameField : signInButton).current?.focus()
+  }, [view])
+
+  function switchTo(next: View) {
+    switched.current = true
+    setError(null)
+    setTried(false)
+    setView(next)
+  }
 
   async function run(action: () => Promise<unknown>, registering = false) {
     if (busy) return
@@ -49,38 +67,68 @@ export function PasskeyLogin({ onDone }: { onDone?: () => void }) {
 
   return (
     <div className="passkey-login">
-      <p className="hint">{PASSKEY_INTRO}</p>
-      <form className="passkey-form" onSubmit={signUp} noValidate>
-        <div className="form-field">
-          <label htmlFor="passkey-username">Name for your passkey</label>
-          <input
-            id="passkey-username"
-            autoComplete="username webauthn"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            disabled={busy}
-            aria-invalid={nameError ? true : undefined}
-          />
-          <p className="hint">Only you see this. It helps you pick the right passkey later. {USERNAME_RULE}</p>
-          {nameError && (
-            <p className="field-error" role="alert">
-              {nameError}
-            </p>
-          )}
-        </div>
-        <button type="submit" className="btn" disabled={busy}>
-          Create my Fundit account
+      <h2 id={headingId}>{view === 'signin' ? 'Sign in' : 'Create your account'}</h2>
+      {view === 'signin' ? (
+        <button ref={signInButton} type="button" className="btn" disabled={busy} onClick={() => void run(() => loginPasskey())}>
+          Sign in with your passkey
         </button>
-      </form>
-      <button type="button" className="btn btn-outline" disabled={busy} onClick={() => void run(() => loginPasskey())}>
-        Sign in with a passkey
-      </button>
+      ) : (
+        <form className="passkey-form" onSubmit={signUp} noValidate>
+          <div className="form-field">
+            <label htmlFor="passkey-username">Username</label>
+            <input
+              ref={usernameField}
+              id="passkey-username"
+              autoComplete="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              disabled={busy}
+              aria-invalid={nameError ? true : undefined}
+              aria-describedby="passkey-username-hint"
+            />
+            <p id="passkey-username-hint" className="hint">
+              5 to 50 letters or numbers, no spaces
+            </p>
+            {nameError && (
+              <p className="field-error" role="alert">
+                {nameError}
+              </p>
+            )}
+          </div>
+          <button type="submit" className="btn" disabled={busy}>
+            Create account
+          </button>
+        </form>
+      )}
       {busy && <p className="hint">Follow the steps your browser shows.</p>}
       {error && (
         <p className="field-error" role="alert">
           {error}
         </p>
       )}
+      <div className="passkey-alt">
+        {view === 'signin' ? (
+          <p>
+            {"Don't have an account? "}
+            <button type="button" className="link-button" disabled={busy} onClick={() => switchTo('create')}>
+              Create one now
+            </button>
+          </p>
+        ) : (
+          <p>
+            {'Already have an account? '}
+            <button type="button" className="link-button" disabled={busy} onClick={() => switchTo('signin')}>
+              Sign in now
+            </button>
+          </p>
+        )}
+        <p>
+          {'Lost access to your account? '}
+          <Link to="/recover" onClick={onLeave}>
+            Recover it now
+          </Link>
+        </p>
+      </div>
     </div>
   )
 }

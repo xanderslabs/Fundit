@@ -113,7 +113,7 @@ describe('Create signed out', () => {
   it('Sign in opens the passkey sign-in dialog, never the wallet modal', async () => {
     renderCreate()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }))
-    expect(within(screen.getByRole('dialog', { name: 'Sign in' })).getByRole('button', { name: 'Continue with passkey' })).toBeTruthy()
+    expect(within(screen.getByRole('dialog', { name: 'Sign in' })).getByRole('button', { name: 'Sign in with your passkey' })).toBeTruthy()
     expect(openWallet).not.toHaveBeenCalled()
   })
 

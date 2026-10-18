@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { type Address, RpcRequestError, UnknownRpcError } from 'viem'
@@ -66,22 +66,66 @@ describe('Sign in', () => {
     return user
   }
 
-  async function openPasskey() {
+  async function openCreate() {
     const user = await openSignIn()
-    await user.click(screen.getByRole('button', { name: 'Continue with passkey' }))
+    await user.click(screen.getByRole('button', { name: 'Create one now' }))
     return user
   }
 
-  // Sign-in is passkey only: the dialog offers the passkey and nothing else, and never opens the wallet modal.
-  it('offers no wallet sign-in option', async () => {
+  function renderWithRecover() {
+    render(
+      <MemoryRouter>
+        <AccountControl />
+        <Routes>
+          <Route path="/" element={<p>Home page</p>} />
+          <Route path="/recover" element={<p>Recover page</p>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  // One step: the dialog opens straight on the passkey sign-in, with no wallet option and no extra Continue step.
+  it('opens on Sign in with one passkey button, no wallet option and no Continue step', async () => {
     renderControl()
     await openSignIn()
     const dialog = screen.getByRole('dialog', { name: 'Sign in' })
-    const buttons = [...dialog.querySelectorAll('button')].map((b) => b.textContent).filter((t) => t !== '')
-    expect(buttons).toEqual(['Continue with passkey'])
+    expect(screen.getByRole('heading', { name: 'Sign in' })).toBeTruthy()
+    const main = within(dialog).getByRole('button', { name: 'Sign in with your passkey' })
+    expect(document.activeElement).toBe(main)
+    expect(within(dialog).queryByRole('button', { name: /Continue/ })).toBeNull()
+    expect(dialog.textContent).toContain("Don't have an account? Create one now")
+    expect(dialog.textContent).toContain('Lost access to your account? Recover it now')
     expect(dialog.textContent).not.toMatch(/wallet/i)
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Continue with passkey' }))
     expect(openWallet).not.toHaveBeenCalled()
+  })
+
+  it('signs in with the existing login and closes', async () => {
+    loginPasskey.mockResolvedValue({ address: PASSKEY })
+    renderControl()
+    const user = await openSignIn()
+    await user.click(screen.getByRole('button', { name: 'Sign in with your passkey' }))
+    expect(loginPasskey).toHaveBeenCalledTimes(1)
+    expect(registerPasskey).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  // The two views are one dialog: switching changes the heading and moves focus to the new view's first control.
+  it('switches to Create your account and back, moving focus each time', async () => {
+    renderControl()
+    const user = await openCreate()
+    const dialog = screen.getByRole('dialog', { name: 'Create your account' })
+    const field = within(dialog).getByLabelText('Username')
+    expect(document.activeElement).toBe(field)
+    expect(dialog.textContent).toContain('5 to 50 letters or numbers, no spaces')
+    expect(within(dialog).getByRole('button', { name: 'Create account' })).toBeTruthy()
+    expect(within(dialog).queryByRole('button', { name: 'Sign in with your passkey' })).toBeNull()
+    expect(dialog.textContent).toContain('Already have an account? Sign in now')
+    expect(dialog.textContent).toContain('Lost access to your account? Recover it now')
+
+    await user.click(within(dialog).getByRole('button', { name: 'Sign in now' }))
+    const back = screen.getByRole('dialog', { name: 'Sign in' })
+    expect(document.activeElement).toBe(within(back).getByRole('button', { name: 'Sign in with your passkey' }))
+    expect(within(back).queryByLabelText('Username')).toBeNull()
   })
 
   // Keyboard and screen reader users stay inside the dialog, and Escape takes them back where they were.
@@ -104,45 +148,41 @@ describe('Sign in', () => {
     expect(document.activeElement).toBe(trigger)
   })
 
-  // Someone who lost every passkey needs a way back in from the place they would look for it.
-  it('links to recovery from the passkey step, and the link closes the dialog', async () => {
-    render(
-      <MemoryRouter>
-        <AccountControl />
-        <Routes>
-          <Route path="/" element={<p>Home page</p>} />
-          <Route path="/recover" element={<p>Recover page</p>} />
-        </Routes>
-      </MemoryRouter>,
-    )
-    const user = await openPasskey()
-    await user.click(screen.getByRole('link', { name: 'Lost your passkey? Recover your account' }))
-    expect(screen.getByText('Recover page')).toBeTruthy()
-    expect(screen.queryByRole('dialog')).toBeNull()
+  it('reopens on Sign in after it was closed on Create your account', async () => {
+    renderControl()
+    const user = await openCreate()
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(screen.getByRole('dialog', { name: 'Sign in' })).toBeTruthy()
   })
 
-  it('offers a new account with a username, and sign-in for a returning person', async () => {
-    renderControl()
-    await openPasskey()
-    expect(screen.getByLabelText('Name for your passkey')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Create my Fundit account' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Sign in with a passkey' })).toBeTruthy()
+  // Someone who lost every passkey needs a way back in from the place they would look for it, in both views.
+  it.each([
+    ['Sign in', openSignIn],
+    ['Create your account', openCreate],
+  ])('links to recovery from %s, and the link closes the dialog', async (_view, open) => {
+    renderWithRecover()
+    const user = await open()
+    await user.click(screen.getByRole('link', { name: 'Recover it now' }))
+    expect(screen.getByText('Recover page')).toBeTruthy()
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   // The name is stored with the passkey, so stray spaces and empty or very long names are stopped here.
   it('creates the account with the trimmed username', async () => {
     registerPasskey.mockResolvedValue({ address: PASSKEY })
     renderControl()
-    const user = await openPasskey()
-    await user.type(screen.getByLabelText('Name for your passkey'), '  ana.phone  ')
-    await user.click(screen.getByRole('button', { name: 'Create my Fundit account' }))
+    const user = await openCreate()
+    await user.type(screen.getByLabelText('Username'), '  ana.phone  ')
+    await user.click(screen.getByRole('button', { name: 'Create account' }))
     expect(registerPasskey).toHaveBeenCalledWith('ana.phone')
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('refuses an empty username with a plain message', async () => {
     renderControl()
-    const user = await openPasskey()
-    await user.click(screen.getByRole('button', { name: 'Create my Fundit account' }))
+    const user = await openCreate()
+    await user.click(screen.getByRole('button', { name: 'Create account' }))
     expect(screen.getByRole('alert').textContent).toBe('Enter a name for your account.')
     expect(registerPasskey).not.toHaveBeenCalled()
   })
@@ -156,9 +196,9 @@ describe('Sign in', () => {
     ['an accent', 'Zoë-phone'],
   ])("refuses a name with %s before Circle sees it", async (_why, name) => {
     renderControl()
-    const user = await openPasskey()
-    await user.type(screen.getByLabelText('Name for your passkey'), name)
-    await user.click(screen.getByRole('button', { name: 'Create my Fundit account' }))
+    const user = await openCreate()
+    await user.type(screen.getByLabelText('Username'), name)
+    await user.click(screen.getByRole('button', { name: 'Create account' }))
     expect(screen.getByRole('alert').textContent).toBe('Use 5 to 50 letters, numbers or _ @ . : + - (no spaces).')
     expect(registerPasskey).not.toHaveBeenCalled()
   })
@@ -166,9 +206,9 @@ describe('Sign in', () => {
   it('takes every character Circle allows', async () => {
     registerPasskey.mockResolvedValue({ address: PASSKEY })
     renderControl()
-    const user = await openPasskey()
-    await user.type(screen.getByLabelText('Name for your passkey'), 'Ana_9@home.pc:1+2-3')
-    await user.click(screen.getByRole('button', { name: 'Create my Fundit account' }))
+    const user = await openCreate()
+    await user.type(screen.getByLabelText('Username'), 'Ana_9@home.pc:1+2-3')
+    await user.click(screen.getByRole('button', { name: 'Create account' }))
     expect(registerPasskey).toHaveBeenCalledWith('Ana_9@home.pc:1+2-3')
   })
 
@@ -185,9 +225,9 @@ describe('Sign in', () => {
     })
     registerPasskey.mockRejectedValue(new UnknownRpcError(circle))
     renderControl()
-    const user = await openPasskey()
-    await user.type(screen.getByLabelText('Name for your passkey'), 'ana-phone')
-    await user.click(screen.getByRole('button', { name: 'Create my Fundit account' }))
+    const user = await openCreate()
+    await user.type(screen.getByLabelText('Username'), 'ana-phone')
+    await user.click(screen.getByRole('button', { name: 'Create account' }))
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Use 5 to 50 letters, numbers or _ @ . : + - (no spaces).')
   })
 
@@ -196,13 +236,25 @@ describe('Sign in', () => {
     registerPasskey.mockRejectedValue(new Error('network down'))
     loginPasskey.mockResolvedValue({ address: PASSKEY })
     renderControl()
-    const user = await openPasskey()
-    await user.type(screen.getByLabelText('Name for your passkey'), 'ana-phone')
-    await user.click(screen.getByRole('button', { name: 'Create my Fundit account' }))
+    const user = await openCreate()
+    await user.type(screen.getByLabelText('Username'), 'ana-phone')
+    await user.click(screen.getByRole('button', { name: 'Create account' }))
     expect(screen.getByRole('alert').textContent).toMatch(/If your browser saved a passkey, sign in with it\./)
-    await user.click(screen.getByRole('button', { name: 'Sign in with a passkey' }))
+    await user.click(screen.getByRole('button', { name: 'Sign in now' }))
+    await user.click(screen.getByRole('button', { name: 'Sign in with your passkey' }))
     expect(loginPasskey).toHaveBeenCalledTimes(1)
-    expect(screen.queryByRole('dialog', { name: 'Sign in' })).toBeNull()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  // While the browser shows its passkey steps, nothing else in the dialog may start a second request.
+  it('disables every control while busy', async () => {
+    loginPasskey.mockReturnValue(new Promise(() => {}))
+    renderControl()
+    const user = await openSignIn()
+    await user.click(screen.getByRole('button', { name: 'Sign in with your passkey' }))
+    expect(screen.getByText('Follow the steps your browser shows.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Sign in with your passkey' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Create one now' })).toHaveProperty('disabled', true)
   })
 })
 

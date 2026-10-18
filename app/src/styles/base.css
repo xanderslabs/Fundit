@@ -400,8 +400,44 @@ input[type='checkbox'] {
   gap: 12px;
 }
 
-.signin-body > a {
-  align-self: center;
+.passkey-login h2 {
+  margin: 0;
+}
+
+/* The small lines under the main button: switch view, or go to recovery. */
+.passkey-alt {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center;
+}
+
+.passkey-alt p {
+  margin: 0;
+}
+
+.passkey-alt a,
+.link-button {
+  color: var(--text);
+  font-weight: var(--weight-medium);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.link-button:disabled {
+  cursor: default;
+  opacity: 0.6;
 }
 
 .recovery-phrase {

@@ -350,7 +350,7 @@ describe('DonatePanel', () => {
     renderPanel(view('USDC'))
     expect(screen.queryByRole('button', { name: 'Give' })).toBeNull()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in to give' }))
-    expect(within(screen.getByRole('dialog', { name: 'Sign in' })).getByRole('button', { name: 'Continue with passkey' })).toBeTruthy()
+    expect(within(screen.getByRole('dialog', { name: 'Sign in' })).getByRole('button', { name: 'Sign in with your passkey' })).toBeTruthy()
     expect(open).not.toHaveBeenCalled()
   })
 

@@ -60,7 +60,7 @@ describe('AccountControl signed out', () => {
     render(ui())
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }))
     const dialog = screen.getByRole('dialog', { name: 'Sign in' })
-    expect(within(dialog).getByRole('button', { name: 'Continue with passkey' })).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Sign in with your passkey' })).toBeTruthy()
     expect(within(dialog).queryByText(/crypto wallet/i)).toBeNull()
     expect(openWallet).not.toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: /0x/ })).toBeNull()

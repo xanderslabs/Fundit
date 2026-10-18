@@ -115,7 +115,7 @@ describe('Profile', () => {
     expect(screen.getByText('Sign in to see your Fundits and the donations you made.')).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Start a Fundit' })).toBeNull()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }))
-    expect(within(screen.getByRole('dialog', { name: 'Sign in' })).getByRole('button', { name: 'Continue with passkey' })).toBeTruthy()
+    expect(within(screen.getByRole('dialog', { name: 'Sign in' })).getByRole('button', { name: 'Sign in with your passkey' })).toBeTruthy()
     expect(openWallet).not.toHaveBeenCalled()
   })
 
