@@ -3,7 +3,7 @@ import headers from '../public/_headers?raw'
 import redirects from '../public/_redirects?raw'
 import { campaignAbi } from './abi/campaign'
 import { factoryAbi } from './abi/factory'
-import { ARC_RPC_FALLBACKS, ARC_RPC_URL, CCTP_CHAINS, EXTERNAL_HOSTS, FORWARD_HOOK_DATA, TOKENS } from './config'
+import { ARC_RPC_FALLBACKS, ARC_RPC_URL, CCTP_CHAINS, EXTERNAL_HOSTS, FORWARD_HOOK_DATA, NETWORK, NETWORKS, networkHosts, TOKENS } from './config'
 import { connectSrcAllows } from './deployConfig'
 
 describe('config', () => {
@@ -38,6 +38,75 @@ describe('config', () => {
   it('generates the factory ABI with createCampaign(token, goal, backup, meta)', () => {
     const create = factoryAbi.find((x) => x.type === 'function' && x.name === 'createCampaign')
     expect(create && 'inputs' in create ? create.inputs.length : -1).toBe(4)
+  })
+})
+
+// Every chain-specific value comes from one NETWORK object. A wrong address here sends real or test money to
+// the wrong contract, so each value is pinned to the one checked on-chain (see task-1-report.md).
+describe('NETWORKS', () => {
+  it('uses mainnet when VITE_ARC_NETWORK is unset', () => {
+    expect(NETWORK).toBe(NETWORKS.mainnet)
+  })
+
+  it('resolves the Arc mainnet values the live contracts use', () => {
+    const n = NETWORKS.mainnet
+    expect(n.chain.id).toBe(5042)
+    expect(n.domain).toBe(26)
+    expect(n.rpcUrl).toBe('https://rpc.mainnet.arc.io')
+    expect(n.explorerUrl).toBe('https://explorer.arc.io')
+    expect(n.chain.blockExplorers?.default.url).toBe(n.explorerUrl)
+    expect(n.usdc).toBe('0x3600000000000000000000000000000000000000')
+    expect(n.eurc).toBe('0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1')
+    expect(n.tokenMessengerV2).toBe('0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d')
+    expect(n.memo).toBe('0x5294E9927c3306DcBaDb03fe70b92e01cCede505')
+    expect(n.gatewayWallet).toBe('0x77777777Dcc4d5A8B6E418Fd04D8997ef11000eE')
+    expect(n.gatewayMinter).toBe('0x2222222d7164433c4C09B0b0D809a9b52C04C205')
+    expect(n.irisUrl).toBe('https://iris-api.circle.com')
+    expect(n.gatewayUrl).toBe('https://gateway-api.circle.com')
+    expect(n.modularChainPath).toBe('/arc')
+    expect(n.cctpChains.map((c) => [c.key, c.chainId, c.domain])).toEqual([
+      ['Ethereum', 1, 0],
+      ['Avalanche', 43114, 1],
+      ['Optimism', 10, 2],
+      ['Arbitrum', 42161, 3],
+      ['Base', 8453, 6],
+      ['Polygon', 137, 7],
+    ])
+    expect(n.chainLabels.Arc).toBe('Arc')
+  })
+
+  it('resolves the Arc testnet values', () => {
+    const n = NETWORKS.testnet
+    expect(n.chain.id).toBe(5042002)
+    expect(n.domain).toBe(26)
+    expect(n.rpcUrl).toBe('https://rpc.testnet.arc.io')
+    expect(n.explorerUrl).toBe('https://explorer.testnet.arc.io')
+    expect(n.chain.blockExplorers?.default.url).toBe(n.explorerUrl)
+    expect(n.usdc).toBe('0x3600000000000000000000000000000000000000')
+    expect(n.eurc).toBe('0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a')
+    expect(n.tokenMessengerV2).toBe('0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA')
+    expect(n.memo).toBe('0x5294E9927c3306DcBaDb03fe70b92e01cCede505')
+    expect(n.gatewayWallet).toBe('0x0077777d7EBA4688BDeF3E311b846F25870A19B9')
+    expect(n.gatewayMinter).toBe('0x0022222ABE238Cc2C7Bb1f21003F0a260052475B')
+    expect(n.irisUrl).toBe('https://iris-api-sandbox.circle.com')
+    expect(n.gatewayUrl).toBe('https://gateway-api-testnet.circle.com')
+    expect(n.modularChainPath).toBe('/arcTestnet')
+    expect(n.cctpChains.map((c) => [c.key, c.chainId, c.domain, c.usdc, c.rpcUrl])).toEqual([
+      ['Ethereum', 11155111, 0, '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', 'https://11155111.rpc.thirdweb.com'],
+      ['Base', 84532, 6, '0x036CbD53842c5426634e7929541eC2318f3dCF7e', 'https://sepolia.base.org'],
+    ])
+    expect(n.chainLabels).toMatchObject({ Arc: 'Arc Testnet', Ethereum: 'Ethereum Sepolia', Base: 'Base Sepolia' })
+  })
+
+  // viem's arcTestnet still lists the old .arc.network hosts, which the CSP does not allow.
+  it('reads testnet Arc only through .arc.io hosts', () => {
+    const n = NETWORKS.testnet
+    expect(n.chain.rpcUrls.default.http).toEqual(['https://rpc.testnet.arc.io'])
+    expect(networkHosts(n).some((u) => u.includes('arc.network'))).toBe(false)
+  })
+
+  it.each(['mainnet', 'testnet'] as const)('lets a %s build call every host it uses', (name) => {
+    for (const url of networkHosts(NETWORKS[name])) expect(connectSrcAllows(headers, url), url).toBe(true)
   })
 })
 

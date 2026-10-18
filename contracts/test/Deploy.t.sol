@@ -58,4 +58,40 @@ contract DeployParseDomainsTest is Test {
         assertEq(d[0], type(uint32).max);
     }
 }
+
+/// @notice Token and CCTP addresses by chain. A factory deployed with another network's token addresses
+/// would hold no real balance and could never pay out, and the addresses are immutable once deployed.
+contract DeployNetworkAddressesTest is Test {
+    Deploy internal deploy;
+
+    function setUp() public {
+        deploy = new Deploy();
+    }
+
+    function test_Addresses_ArcMainnet() public view {
+        (address usdc, address eurc, address messenger) = deploy.networkAddresses(5042);
+        assertEq(usdc, 0x3600000000000000000000000000000000000000);
+        assertEq(eurc, 0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1);
+        assertEq(messenger, 0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d);
+    }
+
+    function test_Addresses_ArcTestnet() public view {
+        (address usdc, address eurc, address messenger) = deploy.networkAddresses(5042002);
+        assertEq(usdc, 0x3600000000000000000000000000000000000000);
+        assertEq(eurc, 0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a);
+        assertEq(messenger, 0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA);
+    }
+
+    function test_Addresses_RejectsOtherChains() public {
+        vm.expectRevert(bytes("Deploy: not Arc mainnet or testnet"));
+        deploy.networkAddresses(1);
+    }
+
+    /// @dev run() checks the chain before it reads any env or broadcasts.
+    function test_Run_RejectsOtherChains() public {
+        vm.chainId(84532);
+        vm.expectRevert(bytes("Deploy: not Arc mainnet or testnet"));
+        deploy.run();
+    }
+}
 // forge-lint: disable-end(unused-return)

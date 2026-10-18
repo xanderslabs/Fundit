@@ -172,6 +172,16 @@ input[type='checkbox'] {
   min-height: 72px;
 }
 
+.testnet-banner {
+  margin: 0;
+  padding: 6px 16px;
+  background: var(--accent);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: var(--weight-medium);
+  text-align: center;
+}
+
 .header-logo {
   flex: none;
   border-radius: 6px;

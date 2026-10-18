@@ -2,14 +2,14 @@ import { createAppKit } from '@reown/appkit/react'
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
 import type { AppKitNetwork } from '@reown/appkit/networks'
 import { http } from 'wagmi'
-import { arbitrum, arc, avalanche, base, mainnet, optimism, polygon } from 'viem/chains'
-import { ARC_RPC_URL, CCTP_CHAINS, REOWN_PROJECT_ID } from './config'
+import { ARC_CHAIN, ARC_RPC_URL, CCTP_CHAINS, REOWN_PROJECT_ID } from './config'
 
-const networks: [AppKitNetwork, ...AppKitNetwork[]] = [arc, mainnet, base, arbitrum, optimism, polygon, avalanche]
+// Arc first, then the network's CCTP source chains.
+const networks: [AppKitNetwork, ...AppKitNetwork[]] = [ARC_CHAIN, ...CCTP_CHAINS.map((c) => c.viemChain)]
 
 // Our public RPCs first. AppKit adds its own RPC as a fallback on the chains it supports.
 const transports = {
-  [arc.id]: http(ARC_RPC_URL),
+  [ARC_CHAIN.id]: http(ARC_RPC_URL),
   ...Object.fromEntries(CCTP_CHAINS.map((c) => [c.chainId, http(c.rpcUrl)])),
 }
 
@@ -21,7 +21,7 @@ createAppKit({
   adapters: [wagmiAdapter],
   projectId: REOWN_PROJECT_ID,
   networks,
-  defaultNetwork: arc,
+  defaultNetwork: ARC_CHAIN,
   metadata: {
     name: 'Fundit',
     description: 'Fundraising for everyone, everywhere. Each Fundit holds its money in its own on-chain escrow that only the organiser can withdraw.',

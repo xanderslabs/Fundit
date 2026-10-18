@@ -6,20 +6,32 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {CampaignFactory} from "../src/CampaignFactory.sol";
 import {ITokenMessengerV2} from "../src/interfaces/ITokenMessengerV2.sol";
 
-/// @notice Deploys CampaignFactory on Arc mainnet with the fixed token and CCTP addresses.
+/// @notice Deploys CampaignFactory on Arc mainnet (5042) or Arc testnet (5042002) with that network's fixed
+/// token and CCTP addresses. Any other chain reverts.
 /// @dev Env: OWNER, TREASURY, DONATION_FEE_BPS, WITHDRAW_FEE_BPS, EURC_PAYOUT_DOMAINS
 /// (comma-separated CCTP domains, may be empty) and optional DEPLOYER_PRIVATE_KEY. With no key
 /// the script broadcasts from the forge signer, so `--account <keystore>` or `--ledger` works.
 /// See .env.example.
 contract Deploy is Script {
-    uint256 internal constant ARC_CHAIN_ID = 5042;
+    uint256 internal constant ARC_MAINNET_CHAIN_ID = 5042;
+    uint256 internal constant ARC_TESTNET_CHAIN_ID = 5042002;
     uint32 internal constant ARC_DOMAIN = 26;
-    IERC20 internal constant USDC = IERC20(0x3600000000000000000000000000000000000000);
-    IERC20 internal constant EURC = IERC20(0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1);
-    ITokenMessengerV2 internal constant TOKEN_MESSENGER = ITokenMessengerV2(0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d);
+    // USDC is the same address on both networks.
+    address internal constant USDC = 0x3600000000000000000000000000000000000000;
+    address internal constant MAINNET_EURC = 0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1;
+    address internal constant MAINNET_TOKEN_MESSENGER = 0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d;
+    address internal constant TESTNET_EURC = 0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a;
+    address internal constant TESTNET_TOKEN_MESSENGER = 0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA;
+
+    /// @notice The USDC, EURC and TokenMessengerV2 addresses for an Arc chain id. Reverts on any other chain.
+    function networkAddresses(uint256 chainId) public pure returns (address usdc, address eurc, address messenger) {
+        if (chainId == ARC_MAINNET_CHAIN_ID) return (USDC, MAINNET_EURC, MAINNET_TOKEN_MESSENGER);
+        if (chainId == ARC_TESTNET_CHAIN_ID) return (USDC, TESTNET_EURC, TESTNET_TOKEN_MESSENGER);
+        revert("Deploy: not Arc mainnet or testnet");
+    }
 
     function run() external returns (CampaignFactory factory) {
-        require(block.chainid == ARC_CHAIN_ID, "Deploy: not Arc mainnet");
+        (address usdc, address eurc, address messenger) = networkAddresses(block.chainid);
         string memory deployerKey = vm.trim(vm.envOr("DEPLOYER_PRIVATE_KEY", string("")));
         address owner = vm.envAddress("OWNER");
         address treasury = vm.envAddress("TREASURY");
@@ -38,9 +50,9 @@ contract Deploy is Script {
         factory = new CampaignFactory(
             owner,
             treasury,
-            USDC,
-            EURC,
-            TOKEN_MESSENGER,
+            IERC20(usdc),
+            IERC20(eurc),
+            ITokenMessengerV2(messenger),
             // forge-lint: disable-next-line(unsafe-typecast)
             uint16(donationFeeBps),
             // forge-lint: disable-next-line(unsafe-typecast)

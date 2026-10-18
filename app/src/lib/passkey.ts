@@ -1,8 +1,7 @@
 import { useSyncExternalStore } from 'react'
-import { type Address, decodeErrorResult, getAddress, type Hex, isAddress, parseAbi, type TransactionReceipt, type Transport } from 'viem'
-import { arc } from 'viem/chains'
+import { type Address, decodeErrorResult, getAddress, type Hex, isAddress, numberToHex, parseAbi, type TransactionReceipt, type Transport } from 'viem'
 import { erc20Abi } from '../abi/erc20'
-import { CIRCLE_CLIENT_KEY, MODULAR_WALLETS_URL, PASSKEY_GAS_BUFFER, PASSKEYS_ENABLED, TOKENS, TX_TIMEOUT_MS } from '../config'
+import { ARC_CHAIN, CIRCLE_CLIENT_KEY, MODULAR_WALLETS_URL, NETWORK, PASSKEY_GAS_BUFFER, PASSKEYS_ENABLED, TOKENS, TX_TIMEOUT_MS } from '../config'
 import { arcClient } from './clients'
 import { formatAmount } from './format'
 import { isUserRejection, PlainError } from './errors'
@@ -12,9 +11,9 @@ import { type Call, REVERTED, type Sender, type TxResult, withGasMargin, withTim
 // first use. The WebAuthn rpId comes from Circle and is bound to the client key's domain (fundit.fun, or
 // localhost in development).
 const CLIENT_URL = `${MODULAR_WALLETS_URL}/v1/rpc/w3s/buidl`
-// The Arc mainnet path is not confirmed yet. probeModularArc checks it.
-const ARC_URL = `${CLIENT_URL}/arc`
-const ARC_CHAIN_HEX = '0x13b2'
+// /arc on mainnet (not confirmed yet) and /arcTestnet on testnet (from Circle's guide). probeModularArc checks it.
+const ARC_URL = `${CLIENT_URL}${NETWORK.modularChainPath}`
+const ARC_CHAIN_HEX = numberToHex(ARC_CHAIN.id)
 
 // Only the address and credential id are kept. Storage can throw (private windows, blocked site data),
 // so every access is wrapped; without storage the person just logs in again.
@@ -173,7 +172,7 @@ type Credential = Awaited<ReturnType<Sdk['sdk']['toWebAuthnCredential']>>
 function clients({ sdk, viem }: Sdk, key: string) {
   // The SDK pins its own viem (2.55.11), so its types differ from ours though the objects are the same.
   const transport = sdk.toModularTransport(ARC_URL, key) as unknown as Transport
-  const client = viem.createPublicClient({ chain: arc, transport })
+  const client = viem.createPublicClient({ chain: ARC_CHAIN, transport })
   return { transport, client }
 }
 
@@ -184,7 +183,7 @@ function readBundler(): Promise<ReceiptBundler> {
     const key = clientKey()
     receiptBundler = loadSdk().then((lib) => {
       const { transport } = clients(lib, key)
-      return lib.aa.createBundlerClient({ chain: arc, transport }) as unknown as ReceiptBundler
+      return lib.aa.createBundlerClient({ chain: ARC_CHAIN, transport }) as unknown as ReceiptBundler
     })
     // A failed load must not stick.
     receiptBundler.catch(() => {
@@ -211,7 +210,7 @@ async function connect(lib: Sdk, credential: Credential, key: string): Promise<L
 
 function sendingBundler({ sdk, aa }: Sdk, transport: Transport, client: ReturnType<typeof clients>['client']) {
   return aa.createBundlerClient({
-    chain: arc,
+    chain: ARC_CHAIN,
     transport,
     userOperation: {
       // Circle's own gas price for its bundler, which respects Arc's fee floor.
@@ -646,7 +645,7 @@ export async function checkPendingRecovery(account: Address): Promise<RecoveryRe
   return settleRecovery(pending, await userOperationResult(await readBundler(), pending.hash))
 }
 
-// True when Circle's Arc mainnet endpoint answers with Arc's chain id. Run by hand once a client key exists.
+// True when Circle's Arc endpoint for this network answers with that network's chain id. Run by hand once a client key exists.
 export async function probeModularArc(): Promise<boolean> {
   const { sdk } = await loadSdk()
   const transport = sdk.toModularTransport(ARC_URL, clientKey())({ chain: undefined })

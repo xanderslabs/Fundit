@@ -1,9 +1,7 @@
 import type { Address } from 'viem'
-import { arc } from 'viem/chains'
+import { EXPLORER_URL } from '../config'
 import { useName } from '../hooks/useName'
 import { shortAddress } from '../lib/names'
-
-const EXPLORER_URL = arc.blockExplorers.default.url
 
 type Props = {
   address: Address

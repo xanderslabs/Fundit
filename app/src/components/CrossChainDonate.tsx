@@ -2,9 +2,8 @@ import { useAppKit } from '@reown/appkit/react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { type Address, type EIP1193Provider, formatUnits, type Hex } from 'viem'
-import { arc } from 'viem/chains'
 import { useConnection } from 'wagmi'
-import { ARC_DOMAIN, CCTP_CHAINS, CHAIN_LABELS, type CctpChainKey } from '../config'
+import { ARC_DOMAIN, CCTP_CHAINS, EXPLORER_URL, CHAIN_LABELS, type CctpChainKey } from '../config'
 import {
   chainByKey,
   clearBridge,
@@ -290,7 +289,7 @@ function rowText(entry: PendingBridge | PendingPayout, destination: string) {
       arrived: 'arrived.',
       attested: `Circle confirmed it. Arriving on ${to} now.`,
       waiting: 'Waiting for Arc to confirm it.',
-      explorer: arc.blockExplorers.default.url,
+      explorer: EXPLORER_URL,
       thanks: null,
     }
   }

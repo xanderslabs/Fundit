@@ -1,12 +1,11 @@
 import { type Address, isAddress } from 'viem'
 import { createConfig, http, mock } from 'wagmi'
-import { arc } from 'viem/chains'
-import { ARC_RPC_URL, CCTP_CHAINS } from './config'
+import { ARC_CHAIN, ARC_RPC_URL, CCTP_CHAINS } from './config'
 
 // Test-only wagmi config, swapped in for ./wagmi by vite.config.ts in `--mode e2e`. No AppKit, no Reown.
 // The mock connector forwards eth_sendTransaction to the chain's first RPC URL, so Arc points at the
 // local fork (VITE_ARC_RPC_URL in .env.e2e). The fork's default accounts are unlocked and sign there.
-const arcLocal = { ...arc, rpcUrls: { default: { http: [ARC_RPC_URL] } } } as const
+const arcLocal = { ...ARC_CHAIN, rpcUrls: { default: { http: [ARC_RPC_URL] } } } as const
 
 // Anvil default account 1. A test picks another unlocked account by setting this key before the page loads.
 // defaultConnected plus reconnect lets a page reload keep the wallet connected after the first connect, as a real
@@ -30,7 +29,7 @@ export const wagmiConfig = createConfig({
   chains: [arcLocal, ...CCTP_CHAINS.map((c) => c.viemChain)],
   connectors: [mock({ accounts: [TEST_ACCOUNT], features: { defaultConnected: true, reconnect: true } })],
   transports: {
-    [arc.id]: http(ARC_RPC_URL),
+    [ARC_CHAIN.id]: http(ARC_RPC_URL),
     ...Object.fromEntries(CCTP_CHAINS.map((c) => [c.chainId, http(c.rpcUrl)])),
   },
 })

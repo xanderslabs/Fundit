@@ -2,13 +2,12 @@ import { useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { type Address, decodeEventLog, encodeFunctionData, type Hex, isAddressEqual, type TransactionReceipt } from 'viem'
-import { arc } from 'viem/chains'
 import { factoryAbi } from '../abi/factory'
 import { SignInButton } from '../components/AccountMenu'
 import { CampaignImage } from '../components/CampaignImage'
 import { SharePanel } from '../components/SharePanel'
 import { PASSKEY_PROCESSING, recheckResult } from '../components/TxStatus'
-import { FACTORY_ADDRESS, type TokenSymbol } from '../config'
+import { EXPLORER_URL, FACTORY_ADDRESS, type TokenSymbol } from '../config'
 import { useFactoryFees } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
 import { explainError } from '../lib/errors'
@@ -16,7 +15,6 @@ import { bpsToPercent } from '../lib/format'
 import type { Sender, TxResult } from '../lib/sender'
 import { byteLength, MAX_DESCRIPTION, MAX_LINKS, MAX_TITLE, validateCampaign } from '../lib/validate'
 
-const EXPLORER_URL = arc.blockExplorers.default.url
 
 type Phase =
   | { kind: 'idle' }

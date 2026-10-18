@@ -1,14 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router'
 import type { Address } from 'viem'
-import { arc } from 'viem/chains'
 import { SignInButton } from '../components/AccountMenu'
 import { AccountWithdraw } from '../components/AccountWithdraw'
 import { AddBackupPasskey } from '../components/AddBackupPasskey'
 import { CampaignGrid, LoadError } from '../components/CampaignGrid'
 import { Name } from '../components/Name'
 import { ShareDialog } from '../components/SharePanel'
-import { CROSSCHAIN_ENABLED } from '../config'
+import { CROSSCHAIN_ENABLED, EXPLORER_URL } from '../config'
 import { blockTimes } from '../hooks/useActivity'
 import { useCampaign } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
@@ -20,7 +19,6 @@ import { arcClient } from '../lib/clients'
 import { balancesKey, fetchAccountBalances } from '../lib/deposit'
 import { formatAmount } from '../lib/format'
 
-const EXPLORER_URL = arc.blockExplorers.default.url
 
 function DonationRow({ item, time }: { item: DonationItem; time: bigint | undefined }) {
   // Only factory campaigns reach this list, and their token never changes, so the symbol is safe to read here.

@@ -1,7 +1,7 @@
 import { cleanup, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Layout } from './Layout'
+import { Layout, TestnetBanner } from './Layout'
 
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: () => {} }) }))
 vi.mock('wagmi', () => ({ useDisconnect: () => ({ mutate: () => {} }) }))
@@ -49,5 +49,23 @@ describe('Layout', () => {
       expect(a.getAttribute('target')).toBe('_blank')
       expect(a.getAttribute('rel')).toBe('noopener noreferrer')
     }
+  })
+})
+
+// Test tokens look like real USDC. On a testnet build every page says so, and a mainnet build never does.
+describe('TestnetBanner', () => {
+  it('says test tokens have no value on testnet', () => {
+    render(<TestnetBanner network="testnet" />)
+    expect(screen.getByText('Test network. Tokens here have no value.')).toBeTruthy()
+  })
+
+  it('shows nothing on mainnet', () => {
+    const { container } = render(<TestnetBanner network="mainnet" />)
+    expect(container.textContent).toBe('')
+  })
+
+  it('shows nothing in the default (mainnet) layout', () => {
+    renderLayout()
+    expect(screen.queryByText(/Test network/)).toBeNull()
   })
 })

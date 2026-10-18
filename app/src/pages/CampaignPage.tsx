@@ -1,6 +1,5 @@
 import { Link, useParams } from 'react-router'
 import { type Address, isAddress, isAddressEqual } from 'viem'
-import { arc } from 'viem/chains'
 import { ActivityList } from '../components/ActivityList'
 import { BackupBanner } from '../components/BackupBanner'
 import { CampaignImage } from '../components/CampaignImage'
@@ -9,14 +8,13 @@ import { Name } from '../components/Name'
 import { Progress } from '../components/Progress'
 import { SharePanel } from '../components/SharePanel'
 import { StatusBadge } from '../components/StatusBadge'
+import { EXPLORER_URL } from '../config'
 import { useCampaign } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
 import type { CampaignView } from '../lib/campaigns'
 import { bpsToPercent, formatAmount } from '../lib/format'
 import { shortAddress } from '../lib/names'
 import { safeHttpsUrl } from '../lib/urls'
-
-const EXPLORER_URL = arc.blockExplorers.default.url
 
 function NotACampaign() {
   return (

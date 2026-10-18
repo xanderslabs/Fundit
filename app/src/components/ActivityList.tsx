@@ -1,8 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { type Address, encodeFunctionData } from 'viem'
-import { arc } from 'viem/chains'
+import { type Address, encodeFunctionData, zeroAddress } from 'viem'
 import { campaignAbi } from '../abi/campaign'
-import type { TokenSymbol } from '../config'
+import { EXPLORER_URL, type TokenSymbol } from '../config'
 import { useActivity } from '../hooks/useActivity'
 import { useSender } from '../hooks/useSender'
 import type { ActivityItem } from '../lib/activity'
@@ -11,9 +10,6 @@ import { arcClient } from '../lib/clients'
 import { formatAmount } from '../lib/format'
 import { Name } from './Name'
 import { TxStatus, useTx } from './TxStatus'
-
-const EXPLORER_URL = arc.blockExplorers.default.url
-const ZERO = '0x0000000000000000000000000000000000000000'
 
 function Who({ address }: { address: Address }) {
   return <Name address={address} avatar={false} />
@@ -58,7 +54,7 @@ function Line({ item, symbol }: { item: ActivityItem; symbol: TokenSymbol }) {
     case 'sweep':
       return <p>Tokens sent here by mistake were returned to <Who address={d.to as Address} />.</p>
     case 'backup':
-      return d.backup === ZERO ? (
+      return d.backup === zeroAddress ? (
         <p>Organiser removed the backup address.</p>
       ) : (
         <p>

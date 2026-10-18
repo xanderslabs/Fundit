@@ -1,11 +1,9 @@
 import { useRef, useState } from 'react'
 import type { Hex } from 'viem'
-import { arc } from 'viem/chains'
-import { TX_TIMEOUT_MS } from '../config'
+import { EXPLORER_URL, TX_TIMEOUT_MS } from '../config'
 import { explainError, PlainError } from '../lib/errors'
 import { arcReceipts, type Call, type Sender, type TxResult, waitForResult } from '../lib/sender'
 
-const EXPLORER_URL = arc.blockExplorers.default.url
 
 export type TxPhase =
   | { kind: 'idle' }

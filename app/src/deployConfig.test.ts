@@ -1,7 +1,7 @@
 import { zeroAddress } from 'viem'
 import { describe, expect, it } from 'vitest'
 import headers from '../public/_headers?raw'
-import { checkBuildEnv, loadConfig } from './deployConfig'
+import { checkBuildEnv, loadConfig, parseArcNetwork } from './deployConfig'
 
 const FACTORY = '0x1111111111111111111111111111111111111111'
 const prodEnv = { PROD: true, VITE_FACTORY_ADDRESS: FACTORY, VITE_FACTORY_DEPLOY_BLOCK: '26280000', VITE_REOWN_PROJECT_ID: 'abc123' }
@@ -69,5 +69,46 @@ describe('checkBuildEnv', () => {
 
   it('checks nothing outside production', () => {
     expect(() => checkBuildEnv({ PROD: false, VITE_PASSKEYS: '1', VITE_ARC_RPC_URL: 'http://127.0.0.1:8545' }, headers)).not.toThrow()
+  })
+})
+
+describe('parseArcNetwork', () => {
+  it('defaults to mainnet when VITE_ARC_NETWORK is unset or empty', () => {
+    expect(parseArcNetwork(undefined)).toBe('mainnet')
+    expect(parseArcNetwork('')).toBe('mainnet')
+  })
+
+  it('accepts mainnet and testnet', () => {
+    expect(parseArcNetwork('mainnet')).toBe('mainnet')
+    expect(parseArcNetwork('testnet')).toBe('testnet')
+  })
+
+  // A typo must not quietly build a mainnet (or testnet) site.
+  it('throws on any other value', () => {
+    expect(() => parseArcNetwork('Testnet')).toThrow(/VITE_ARC_NETWORK/)
+    expect(() => parseArcNetwork('sepolia')).toThrow(/VITE_ARC_NETWORK/)
+  })
+})
+
+// fundit.fun holds real money. A testnet bundle shipped there would show worthless test tokens as gifts and
+// send people's passkey accounts to the wrong chain, so a production testnet build needs an explicit opt-in.
+describe('checkBuildEnv network guard', () => {
+  it('refuses a production build with VITE_ARC_NETWORK=testnet', () => {
+    expect(() => checkBuildEnv({ PROD: true, VITE_ARC_NETWORK: 'testnet' }, headers)).toThrow(/VITE_ALLOW_TESTNET_BUILD/)
+  })
+
+  it('allows a production testnet build only with VITE_ALLOW_TESTNET_BUILD=1', () => {
+    expect(() => checkBuildEnv({ PROD: true, VITE_ARC_NETWORK: 'testnet', VITE_ALLOW_TESTNET_BUILD: '1' }, headers)).not.toThrow()
+    expect(() => checkBuildEnv({ PROD: true, VITE_ARC_NETWORK: 'testnet', VITE_ALLOW_TESTNET_BUILD: 'true' }, headers)).toThrow(/VITE_ALLOW_TESTNET_BUILD/)
+  })
+
+  it('allows a production mainnet build, and testnet outside production', () => {
+    expect(() => checkBuildEnv({ PROD: true }, headers)).not.toThrow()
+    expect(() => checkBuildEnv({ PROD: true, VITE_ARC_NETWORK: 'mainnet' }, headers)).not.toThrow()
+    expect(() => checkBuildEnv({ PROD: false, VITE_ARC_NETWORK: 'testnet' }, headers)).not.toThrow()
+  })
+
+  it('fails any build on an unknown network name', () => {
+    expect(() => checkBuildEnv({ PROD: false, VITE_ARC_NETWORK: 'devnet' }, headers)).toThrow(/VITE_ARC_NETWORK/)
   })
 })

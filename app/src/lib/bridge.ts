@@ -1,5 +1,5 @@
 import { type Address, type Chain, createPublicClient, type EIP1193Provider, getAddress, type Hex, http, isAddress, isHex, parseUnits, UserRejectedRequestError } from 'viem'
-import { ARC_DOMAIN, ARC_RPC_URL, CCTP_CHAINS, CHAIN_LABELS, type CctpChain, type CctpChainKey } from '../config'
+import { ARC_CHAIN_ID, ARC_DOMAIN, ARC_RPC_URL, CCTP_CHAINS, CHAIN_LABELS, type CctpChain, type CctpChainKey } from '../config'
 import { isUserRejection } from './errors'
 
 // One localStorage key holds everything that must survive a reload: cross-chain transfers on their way
@@ -326,7 +326,7 @@ async function setup(p: CrossChainParams) {
 }
 
 function rpcFor(chainId: number): string | undefined {
-  if (chainId === 5042) return ARC_RPC_URL
+  if (chainId === ARC_CHAIN_ID) return ARC_RPC_URL
   return CCTP_CHAINS.find((c) => c.chainId === chainId)?.rpcUrl
 }
 

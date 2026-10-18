@@ -1,10 +1,22 @@
 import { Link, Outlet } from 'react-router'
-import { SOCIAL_LINKS } from '../config'
+import { NETWORK, SOCIAL_LINKS } from '../config'
+import type { ArcNetwork } from '../deployConfig'
 import { AccountControl } from './AccountMenu'
+
+// Shown on every page of a testnet build, so nobody mistakes test tokens for real money.
+export function TestnetBanner({ network }: { network: ArcNetwork }) {
+  if (network !== 'testnet') return null
+  return (
+    <p className="testnet-banner" role="note">
+      Test network. Tokens here have no value.
+    </p>
+  )
+}
 
 export function Layout() {
   return (
     <div className="layout">
+      <TestnetBanner network={NETWORK.name} />
       <header className="header">
         <Link to="/" className="header-logo" aria-label="Fundit home">
           <img src="/images/fundit-logo.svg" alt="Fundit" width={139} height={32} />

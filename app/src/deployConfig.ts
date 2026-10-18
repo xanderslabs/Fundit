@@ -11,8 +11,20 @@ export type DeployEnv = {
 
 export type DeployConfig = { factoryAddress: Address; factoryDeployBlock: bigint; reownProjectId: string }
 
+export type ArcNetwork = 'mainnet' | 'testnet'
+
+// VITE_ARC_NETWORK: unset or empty means mainnet. Any other value than the two names fails, so a typo
+// cannot build a site for the wrong network.
+export function parseArcNetwork(value: string | undefined): ArcNetwork {
+  if (!value || value === 'mainnet') return 'mainnet'
+  if (value === 'testnet') return 'testnet'
+  throw new Error(`VITE_ARC_NETWORK must be mainnet or testnet, not "${value}"`)
+}
+
 export type BuildEnv = {
   PROD: boolean
+  VITE_ARC_NETWORK?: string
+  VITE_ALLOW_TESTNET_BUILD?: string
   VITE_PASSKEYS?: string
   VITE_CIRCLE_CLIENT_KEY?: string
   VITE_ARC_RPC_URL?: string
@@ -44,8 +56,16 @@ export function connectSrcAllows(headers: string, url: string): boolean {
 // Production build checks, run by vite.config.ts with the text of public/_headers. A site that fails one of
 // these builds fine but cannot work: a passkey sign-in with no client key, or an RPC the browser blocks.
 // The default RPCs are not set here; config.test.ts checks them against the same connect-src.
+//
+// The deploy for fundit.fun is a plain production build (npm run build), so a production build is taken to be
+// for fundit.fun. It refuses VITE_ARC_NETWORK=testnet unless VITE_ALLOW_TESTNET_BUILD=1 says the build is
+// meant for a test site. That flag must never be set where the fundit.fun build runs.
 export function checkBuildEnv(env: BuildEnv, headers: string): void {
+  const network = parseArcNetwork(env.VITE_ARC_NETWORK)
   if (!env.PROD) return
+  if (network === 'testnet' && env.VITE_ALLOW_TESTNET_BUILD !== '1') {
+    throw new Error('VITE_ARC_NETWORK=testnet is refused in a production build, which is for fundit.fun. Set VITE_ALLOW_TESTNET_BUILD=1 only for a test site.')
+  }
   if (env.VITE_PASSKEYS === '1' && !env.VITE_CIRCLE_CLIENT_KEY) {
     throw new Error('VITE_CIRCLE_CLIENT_KEY is required when VITE_PASSKEYS=1 in a production build')
   }

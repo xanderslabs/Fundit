@@ -1,9 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { type EIP1193Provider, formatUnits, type Hex } from 'viem'
-import { arc } from 'viem/chains'
 import { useConnection } from 'wagmi'
-import { CHAIN_LABELS, TX_TIMEOUT_MS } from '../config'
+import { CHAIN_LABELS, EXPLORER_URL, TX_TIMEOUT_MS } from '../config'
 import {
   ANOTHER_PENDING,
   blockingEntry,
@@ -31,7 +30,6 @@ import {
   staticReserves,
 } from '../lib/unified'
 
-const EXPLORER_URL = arc.blockExplorers.default.url
 const GATEWAY_DOCS = 'https://developers.circle.com/gateway'
 const NO_REFERENCE_NOTE =
   "We have no reference from Circle to check this transfer. Look at the Fundit's raised amount and your unified balance before you give again."

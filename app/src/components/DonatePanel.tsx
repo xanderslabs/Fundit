@@ -3,9 +3,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import type { Hex } from 'viem'
-import { arc } from 'viem/chains'
 import { useConnection } from 'wagmi'
-import { CROSSCHAIN_ENABLED, PASSKEY_GAS_BUFFER } from '../config'
+import { CROSSCHAIN_ENABLED, EXPLORER_URL, PASSKEY_GAS_BUFFER } from '../config'
 import { useSender } from '../hooks/useSender'
 import {
   type BlockingEntry,
@@ -31,7 +30,6 @@ import { CrossChainDonate, PendingBridgeTracker } from './CrossChainDonate'
 import { PASSKEY_LOGIN_TO_CHECK, PASSKEY_PROCESSING, recheckResult } from './TxStatus'
 import { UnifiedDonate } from './UnifiedDonate'
 
-const EXPLORER_URL = arc.blockExplorers.default.url
 const QUICK_AMOUNTS = ['10', '25', '50', '100'] as const
 const TIP_PERCENTS = [0, 5, 10, 15] as const
 const DAY_MS = 24 * 60 * 60 * 1000
