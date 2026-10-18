@@ -1,0 +1,72 @@
+/* The tabs share the row equally and wrap their labels, so the list never scrolls sideways. The base line is an
+   inset shadow, so the selected tab's underline sits on top of it. */
+.ui-tab-list {
+  display: flex;
+  gap: var(--space-1);
+  box-shadow: inset 0 -1px 0 var(--line);
+}
+
+.ui-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: none;
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  line-height: var(--text-sm-line);
+  text-align: center;
+  cursor: pointer;
+  transition:
+    color var(--duration) var(--ease),
+    border-color var(--duration) var(--ease);
+}
+
+/* Two lines at most. A longer label is cut with an ellipsis rather than growing the row. */
+.ui-tab-label {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+
+.ui-tab:hover {
+  color: var(--text);
+}
+
+.ui-tab[aria-selected='true'] {
+  border-bottom-color: var(--attention);
+  color: var(--text);
+  font-weight: var(--weight-bold);
+}
+
+.ui-tab:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.ui-tab-panel {
+  padding-top: var(--space-5);
+}
+
+.ui-tab-panel:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
+@media (max-width: 480px) {
+  .ui-tab {
+    padding: var(--space-3) var(--space-1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-tab {
+    transition: none;
+  }
+}

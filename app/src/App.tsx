@@ -13,6 +13,9 @@ import { Terms } from './pages/Terms'
 
 // Loaded on demand: most visits never open it.
 const Recover = lazy(() => import('./pages/Recover').then((m) => ({ default: m.Recover })))
+// Development only. A production build replaces import.meta.env.DEV with false, so this import and the route are
+// dropped and the style guide is not in the bundle.
+const StyleGuide = import.meta.env.DEV ? lazy(() => import('./pages/StyleGuide').then((m) => ({ default: m.StyleGuide }))) : null
 
 export function App() {
   return (
@@ -34,6 +37,16 @@ export function App() {
         <Route path="me" element={<Profile />} />
         <Route path="terms" element={<Terms />} />
         <Route path="privacy" element={<Privacy />} />
+        {import.meta.env.DEV && StyleGuide && (
+          <Route
+            path="styleguide"
+            element={
+              <Suspense fallback={<p className="muted">Loading...</p>}>
+                <StyleGuide />
+              </Suspense>
+            }
+          />
+        )}
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

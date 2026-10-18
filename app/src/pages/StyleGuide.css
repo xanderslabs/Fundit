@@ -1,0 +1,173 @@
+.sg {
+  width: 100%;
+  max-width: var(--page-wide);
+  margin: 0 auto;
+  padding: var(--space-6) var(--gutter) var(--space-9);
+}
+
+.sg-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6) 0;
+  border-top: 1px solid var(--line);
+}
+
+.sg-heading {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--text-xl-line);
+  letter-spacing: var(--tracking-heading);
+}
+
+.sg-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.sg-label {
+  flex: 0 0 8rem;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.sg-items {
+  display: flex;
+  flex: 1 1 16rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.sg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(18rem, 100%), 1fr));
+  gap: var(--space-4);
+}
+
+.sg-section > .sg-items {
+  flex: none;
+}
+
+.sg-flat {
+  margin: 0;
+}
+
+.sg-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(10rem, 100%), 1fr));
+  gap: var(--space-3);
+}
+
+.sg-swatch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.sg-swatch-chip {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.sg-display {
+  margin: 0;
+  font-size: var(--text-display);
+  font-weight: var(--weight-display);
+  line-height: var(--text-display-line);
+  letter-spacing: var(--tracking-display);
+}
+
+.sg-type {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.sg-type code {
+  margin-right: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.sg-weight-regular {
+  font-weight: var(--weight-regular);
+}
+
+.sg-weight-medium {
+  font-weight: var(--weight-medium);
+}
+
+.sg-weight-bold {
+  font-weight: var(--weight-bold);
+}
+
+.sg-space {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.sg-space code {
+  flex: 0 0 6rem;
+}
+
+.sg-space-bar {
+  height: 16px;
+  background: var(--attention);
+}
+
+.sg-radius {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 8rem;
+  height: 5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  font-size: var(--text-xs);
+}
+
+.sg-shadow-1 {
+  box-shadow: var(--shadow-1);
+}
+
+.sg-shadow-pop {
+  box-shadow: var(--shadow-pop);
+}
+
+/* The hover look, shown without a pointer. It repeats the :hover rules in Button.css. */
+.sg-hover.ui-btn-primary,
+.sg-hover.ui-btn-danger {
+  box-shadow: var(--shadow-1);
+}
+
+.sg-hover.ui-btn-secondary,
+.sg-hover.ui-btn-ghost {
+  background: var(--surface);
+}
+
+.sg-account {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  min-width: 0;
+}
+
+.sg-username {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

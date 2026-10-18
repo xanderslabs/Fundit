@@ -1,0 +1,78 @@
+.ui-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.ui-field-label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  line-height: var(--text-sm-line);
+}
+
+.ui-field-hint,
+.ui-field-error {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-line);
+  overflow-wrap: anywhere;
+}
+
+.ui-field-hint {
+  color: var(--text-muted);
+}
+
+.ui-field-error {
+  color: var(--danger-ink);
+  font-weight: var(--weight-medium);
+}
+
+/* Every text control in a Field gets one look. The type is 17px, so iOS does not zoom into the field. A select
+   keeps the app-wide .select class (base.css), which the select guardrail test requires. */
+.ui-field > :is(input, textarea),
+.ui-input {
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-md);
+  line-height: var(--text-md-line);
+  transition: border-color var(--duration) var(--ease);
+}
+
+.ui-field > [aria-invalid='true'],
+.ui-field .ui-input[aria-invalid='true'] {
+  border-color: var(--danger-ink);
+}
+
+.ui-amount {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.ui-amount-input {
+  padding-right: var(--space-9);
+  font-variant-numeric: tabular-nums;
+}
+
+.ui-amount-currency {
+  position: absolute;
+  right: var(--space-4);
+  color: var(--text-muted);
+  font-weight: var(--weight-medium);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-field > :is(input, textarea),
+  .ui-input {
+    transition: none;
+  }
+}

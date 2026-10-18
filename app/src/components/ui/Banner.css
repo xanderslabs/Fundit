@@ -1,0 +1,48 @@
+.ui-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  font-size: var(--text-md);
+  line-height: var(--text-md-line);
+}
+
+.ui-banner-info {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.ui-banner-attention {
+  border-color: var(--attention);
+  background: var(--attention-bg);
+  color: var(--text);
+}
+
+.ui-banner-text {
+  flex: 1 1 16rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ui-banner-text > p {
+  margin: 0;
+}
+
+.ui-banner-action {
+  flex: none;
+  max-width: 100%;
+}
+
+@media (max-width: 480px) {
+  .ui-banner {
+    padding: var(--space-4);
+  }
+
+  .ui-banner-action {
+    flex: 1 1 100%;
+  }
+}

@@ -1,0 +1,36 @@
+.ui-status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--text-md);
+  line-height: var(--text-md-line);
+  overflow-wrap: anywhere;
+}
+
+.ui-status > p {
+  margin: 0;
+}
+
+.ui-status a {
+  text-decoration: underline;
+}
+
+.ui-status-info {
+  border-color: var(--attention);
+}
+
+.ui-status-success {
+  border-color: var(--action);
+  background: var(--success-bg);
+}
+
+.ui-status-error {
+  border-color: var(--danger);
+  color: var(--danger-ink);
+}

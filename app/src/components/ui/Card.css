@@ -1,0 +1,22 @@
+.ui-card {
+  min-width: 0;
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  overflow-wrap: anywhere;
+}
+
+.ui-card-raised {
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+}
+
+.ui-card-muted {
+  border: 1px solid transparent;
+  background: var(--surface);
+}
+
+@media (max-width: 480px) {
+  .ui-card {
+    padding: var(--space-4);
+  }
+}

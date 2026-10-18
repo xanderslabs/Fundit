@@ -1,0 +1,26 @@
+.ui-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-7) var(--space-5);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.ui-empty-text {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.ui-empty-text > p {
+  margin: 0;
+}
+
+@media (max-width: 480px) {
+  .ui-empty {
+    padding: var(--space-6) var(--space-4);
+  }
+}

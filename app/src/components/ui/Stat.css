@@ -1,0 +1,35 @@
+.ui-stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+/* Figures: tabular digits, weight 700, no letter spacing. A long amount wraps rather than overflow. */
+.ui-stat-value {
+  font-size: var(--text-xl);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-bold);
+  line-height: var(--text-xl-line);
+  letter-spacing: var(--tracking-body);
+  overflow-wrap: anywhere;
+}
+
+.ui-stat-lg .ui-stat-value {
+  font-size: var(--text-2xl);
+  line-height: var(--text-2xl-line);
+}
+
+.ui-stat-label {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  line-height: var(--text-sm-line);
+}
+
+@media (max-width: 480px) {
+  .ui-stat-lg .ui-stat-value {
+    font-size: var(--text-xl);
+    line-height: var(--text-xl-line);
+  }
+}
