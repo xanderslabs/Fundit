@@ -324,7 +324,7 @@ describe('Backup prompt after sign-up', () => {
 })
 
 describe('Account menu with a passkey session', () => {
-  it('has no wallet switch, and keeps the spec order around the Add money link', async () => {
+  it('has no wallet switch, and keeps the spec order with no Add money item', async () => {
     state.session = { address: PASSKEY, credentialId: 'cred-1' }
     renderControl()
     await openMenu('0x0000...00cc')
@@ -333,9 +333,8 @@ describe('Account menu with a passkey session', () => {
     expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual([
       'Start a Fundit',
       'My page',
-      'Add money',
       'Sign out',
     ])
-    expect(screen.getByRole('menuitem', { name: 'Add money' }).getAttribute('href')).toBe('/me?add=1')
+    expect(screen.queryByRole('menuitem', { name: 'Add money' })).toBeNull()
   })
 })

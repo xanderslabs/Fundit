@@ -311,11 +311,6 @@ function AccountMenu({ address, onSignedOut }: { address: Address; onSignedOut: 
               </Link>
             </li>
             <li role="none">
-              <Link role="menuitem" tabIndex={-1} to={ADD_MONEY_PATH} onClick={() => close(false)}>
-                Add money
-              </Link>
-            </li>
-            <li role="none">
               <button type="button" role="menuitem" tabIndex={-1} onClick={signOut}>
                 Sign out
               </button>

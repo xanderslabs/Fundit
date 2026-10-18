@@ -89,13 +89,14 @@ describe('AccountControl signed in', () => {
   })
 
   // Start a Fundit lives here because only signed-in people can start one. The order is the product spec.
-  it('opens a menu with Start a Fundit, My page, Add money and Sign out, in that order, and focuses the first item', async () => {
+  it('opens a menu with Start a Fundit, My page and Sign out, in that order, and focuses the first item', async () => {
     state.session = ACCOUNT
     render(ui())
     await userEvent.setup().click(pill())
     expect(pill().getAttribute('aria-expanded')).toBe('true')
     const items = screen.getAllByRole('menuitem').map((i) => i.textContent)
-    expect(items).toEqual(['Start a Fundit', 'My page', 'Add money', 'Sign out'])
+    expect(items).toEqual(['Start a Fundit', 'My page', 'Sign out'])
+    expect(screen.queryByRole('menuitem', { name: 'Add money' })).toBeNull()
     expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Start a Fundit' }))
   })
 
@@ -106,7 +107,7 @@ describe('AccountControl signed in', () => {
     await user.click(pill())
     await user.keyboard('{ArrowDown}')
     expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'My page' }))
-    await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}')
+    await user.keyboard('{ArrowDown}{ArrowDown}')
     expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Start a Fundit' }))
     await user.keyboard('{ArrowUp}')
     expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Sign out' }))
@@ -150,17 +151,6 @@ describe('AccountControl signed in', () => {
     await user.click(screen.getByRole('menuitem', { name: 'My page' }))
     expect(screen.getByText('My page content')).toBeTruthy()
     expect(screen.queryByRole('menu')).toBeNull()
-  })
-
-  // The Add money page is gone. The item opens My page with its Add money panel open.
-  it('Add money opens My page with the Add money panel', async () => {
-    state.session = ACCOUNT
-    render(ui())
-    const user = userEvent.setup()
-    await user.click(pill())
-    expect(screen.getByRole('menuitem', { name: 'Add money' }).getAttribute('href')).toBe('/me?add=1')
-    await user.click(screen.getByRole('menuitem', { name: 'Add money' }))
-    expect(screen.getByText('My page content')).toBeTruthy()
   })
 
   it('Start a Fundit goes to /create', async () => {
