@@ -205,6 +205,12 @@
   align-self: stretch;
 }
 
+/* Signed out, Sign in to give sits outside the form's flex column, so it is sized here to match Give. */
+.donate > .donate-submit {
+  width: 100%;
+  margin-top: 16px;
+}
+
 .donate-actions {
   display: flex;
   flex-wrap: wrap;

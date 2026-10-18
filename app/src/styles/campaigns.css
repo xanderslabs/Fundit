@@ -460,10 +460,15 @@
   gap: 28px;
 }
 
-/* The column gap sets the spacing, so the sections' own top margins go. */
+/* The column gap sets the spacing, so the sections' own outer margins go. */
 .campaign-body > .links,
+.campaign-body > .facts,
 .campaign-body > .activity {
   margin-top: 0;
+}
+
+.campaign-body .description {
+  margin-bottom: 0;
 }
 
 .campaign-body h2 {
