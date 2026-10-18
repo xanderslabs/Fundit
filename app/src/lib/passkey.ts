@@ -230,10 +230,13 @@ function sendingBundler({ sdk, aa }: Sdk, transport: Transport, client: ReturnTy
   })
 }
 
-// Circle's own gas price for its bundler, which respects Arc's fee floor.
+// Circle's own gas price for its bundler (circle_getUserOperationGasPrice), the low tier. Circle's tiers sit far
+// above Arc's own price: on Arc testnet on 2026-10-18, low was 723.58 gwei max and 683.58 gwei priority (medium
+// 731.38 and 691.38) against a 20 gwei base fee. A user operation priced at Arc's own fee (base fee plus the
+// node's 5 gwei tip) was accepted by the bundler but never mined, so no tier lower than Circle's is used.
 async function userOperationFees(sdk: Sdk['sdk'], client: unknown) {
-  const { medium } = await sdk.getUserOperationGasPrice(client as never)
-  return { maxFeePerGas: BigInt(medium.maxFeePerGas), maxPriorityFeePerGas: BigInt(medium.maxPriorityFeePerGas) }
+  const { low } = await sdk.getUserOperationGasPrice(client as never)
+  return { maxFeePerGas: BigInt(low.maxFeePerGas), maxPriorityFeePerGas: BigInt(low.maxPriorityFeePerGas) }
 }
 
 async function credentialFor(mode: 'Register' | 'Login', opts: { username?: string; credentialId?: string }): Promise<Live> {

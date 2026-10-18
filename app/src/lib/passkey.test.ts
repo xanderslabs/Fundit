@@ -909,3 +909,23 @@ describe('passkeyReserve', () => {
     expect(await passkeyReserve(ADDRESS, [SEND])).toBe(RESERVE_FALLBACK - 100_000n)
   })
 })
+
+// Circle's bundler sets no fee of its own: the app picks the tier. low is the cheapest Circle suggests. A fee at
+// Arc's own price was accepted but never mined on testnet, so nothing below Circle's tiers is used.
+describe('user operation fees', () => {
+  afterEach(() => clearPasskeySession())
+
+  it("uses Circle's low tier", async () => {
+    kit.createBundlerClient.mockClear()
+    kit.sdk.getUserOperationGasPrice.mockResolvedValueOnce({
+      low: { maxFeePerGas: '723580000000', maxPriorityFeePerGas: '683580000000' },
+      medium: { maxFeePerGas: '731380000000', maxPriorityFeePerGas: '691380000000' },
+      high: { maxFeePerGas: '731380000000', maxPriorityFeePerGas: '691380000000' },
+    })
+    await loginPasskey()
+    const sending = kit.createBundlerClient.mock.calls
+      .map((c) => (c as unknown as [{ userOperation?: { estimateFeesPerGas?: () => Promise<unknown> } }])[0])
+      .find((o) => o.userOperation?.estimateFeesPerGas)!
+    expect(await sending.userOperation!.estimateFeesPerGas!()).toEqual({ maxFeePerGas: 723_580_000_000n, maxPriorityFeePerGas: 683_580_000_000n })
+  })
+})
