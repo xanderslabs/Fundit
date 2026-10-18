@@ -10,7 +10,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "npm run lint:css && vitest run",
+    "lint:css": "stylelint \"src/**/*.css\"",
     "e2e": "playwright test",
     "abis": "node scripts/gen-abis.mjs"
   },
@@ -39,6 +40,8 @@
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.1",
     "jsdom": "30.1.1",
+    "stylelint": "17.16.0",
+    "stylelint-declaration-strict-value": "1.12.1",
     "typescript": "6.0.3",
     "vite": "8.3.2",
     "vitest": "5.0.3"

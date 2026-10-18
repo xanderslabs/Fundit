@@ -8,35 +8,98 @@
 :root {
   color-scheme: light;
 
-  /* Brand, from the legacy CSS */
-  --primary: #586283;
-  --ink: #101928;
-  --surface: #eceff1;
-  --accent: #ff7c0a;
-  --success: #19b820;
-  --error: #ff3b30;
-
-  /* Darker shades of the brand colours, for text on white where the brand colour itself is below WCAG AA. */
-  --success-ink: #0f7a14;
-  --error-ink: #c0150b;
-
+  /* Colour. The brand colours are fixed; these semantic tokens carry them.
+     Every text and background pair meets WCAG AA (see tokens.test.ts). */
   --bg: #ffffff;
-  --text: var(--ink);
-  --muted: var(--primary);
-  --card: var(--surface);
+  --surface: #eceff1;
+  --surface-raised: #ffffff;
+  --text: #101928;
+  --text-muted: #586283;
   --border: #d5dade;
   --line: #e4e8eb;
-  --hover: #e2e6e9;
-  --shadow-pop: 0 14px 36px rgb(16 25 40 / 0.14), 0 2px 6px rgb(16 25 40 / 0.06);
+  --action: #19b820;
+  /* Darker green for text, because the brand green is below AA on white. */
+  --action-ink: #0f7a14;
+  --attention: #ff7c0a;
+  --attention-bg: #fff1e5;
+  --danger: #ff3b30;
+  /* Darker red for text, because the brand red is below AA on white. */
+  --danger-ink: #c0150b;
+  --success-bg: #e8f7e9;
+  --focus: #586283;
 
+  /* Type. Each size has a fixed line height. */
   --font: 'Outfit', system-ui, sans-serif;
+  --text-xs: 13px;
+  --text-xs-line: 18px;
+  --text-sm: 15px;
+  --text-sm-line: 22px;
+  --text-md: 17px;
+  --text-md-line: 26px;
+  --text-lg: 20px;
+  --text-lg-line: 28px;
+  --text-xl: 26px;
+  --text-xl-line: 32px;
+  --text-2xl: 36px;
+  --text-2xl-line: 42px;
+  --text-display: clamp(44px, 7vw, 88px);
+  --text-display-line: 0.98;
   --weight-regular: 400;
   --weight-medium: 500;
   --weight-bold: 700;
+  /* Display text only. Never for figures. */
   --weight-display: 800;
-  --weight-display-heavy: 900;
+  --tracking-body: 0;
+  --tracking-heading: -0.01em;
+  --tracking-display: -0.03em;
 
-  --radius: 16px;
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-9: 96px;
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
   --radius-pill: 999px;
-  --page-width: 1200px;
+
+  /* Depth and motion */
+  --shadow-1: 0 4px 12px rgb(16 25 40 / 0.08), 0 1px 2px rgb(16 25 40 / 0.06);
+  --shadow-pop: 0 14px 36px rgb(16 25 40 / 0.14), 0 2px 6px rgb(16 25 40 / 0.06);
+  --duration: 150ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Layout */
+  --page-narrow: 640px;
+  --page: 960px;
+  --page-wide: 1200px;
+  --gutter: 16px;
+
+  /* Old names, kept as aliases until every page moves to the tokens above (plan 6, task 7). */
+  --primary: var(--text-muted);
+  --ink: var(--text);
+  --accent: var(--attention);
+  --success: var(--action);
+  --error: var(--danger);
+  --success-ink: var(--action-ink);
+  --error-ink: var(--danger-ink);
+  --muted: var(--text-muted);
+  --card: var(--surface);
+  --hover: #e2e6e9;
+  --weight-display-heavy: 900;
+  --radius: var(--radius-lg);
+  --page-width: var(--page-wide);
+}
+
+@media (min-width: 768px) {
+  :root {
+    --gutter: 24px;
+  }
 }
