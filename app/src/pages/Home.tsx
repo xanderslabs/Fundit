@@ -11,7 +11,8 @@ import { useSender } from '../hooks/useSender'
 const NEWEST_COUNT = 6
 
 // What people raise money for. Photos from Unsplash, credited in public/images/landing/CREDITS.md.
-const CAUSES = [
+// position: where to anchor the crop when the subject is off centre.
+const CAUSES: { title: string; image: string; alt: string; position?: string }[] = [
   {
     title: 'Medical',
     image: '/images/landing/medical.webp',
@@ -36,6 +37,17 @@ const CAUSES = [
     title: 'People in need',
     image: '/images/landing/people.webp',
     alt: 'One person holds another person\'s hands across a table in comfort.',
+  },
+  {
+    title: 'Personal goals',
+    image: '/images/landing/personal-goals.webp',
+    alt: 'A young woman studies at her desk, writing in a notebook next to her laptop.',
+    position: '68% center',
+  },
+  {
+    title: 'Big moments',
+    image: '/images/landing/big-moments.webp',
+    alt: 'Friends stand and clap as two brides sign their marriage papers at a table on the beach.',
   },
 ]
 
@@ -161,11 +173,6 @@ export function Home() {
     <>
       <section className="hero" aria-labelledby="hero-title">
         <h1 id="hero-title">Fundraising for everyone, everywhere.</h1>
-        <p>
-          Raise money for a cause, a person in need or a public good, and get gifts from anyone in the world in
-          digital dollars or euros. Every gift goes straight into the Fundit, and only the organiser can take it
-          out.
-        </p>
         <div className="hero-actions">
           <Link to="/explore" className="btn btn-lg">
             Donate to a Fundit
@@ -189,6 +196,7 @@ export function Home() {
                   height={800}
                   loading={i === 0 ? 'eager' : 'lazy'}
                   decoding="async"
+                  style={c.position ? { objectPosition: c.position } : undefined}
                 />
                 <span className="cause-title">{c.title}</span>
               </Link>

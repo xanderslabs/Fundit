@@ -57,10 +57,11 @@ describe.each(['terms', 'privacy'] as const)('%s page', (page) => {
     expect(text(page)).toMatch(/Gateway/)
   })
 
-  it('gives hello@fundit.xyz as the contact, keeps the draft notice and the governing law placeholder', () => {
+  // fundit.xyz is not our domain, so mail sent there would reach a stranger.
+  it('gives hello@fundit.fun as the contact, keeps the draft notice and the governing law placeholder', () => {
     const t = text(page)
-    expect(t).toMatch(/hello@fundit\.xyz/)
-    expect(t).not.toMatch(/mail@fundit\.fun/)
+    expect(t).toMatch(/hello@fundit\.fun/)
+    expect(t).not.toMatch(/fundit\.xyz/)
     if (page === 'terms') expect(t).toMatch(/\[to be set before launch\]/)
   })
 })

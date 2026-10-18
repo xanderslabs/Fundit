@@ -57,10 +57,12 @@ const faq = () => screen.getByRole('region', { name: 'Questions people ask' })
 describe('Home hero', () => {
   const hero = () => screen.getByRole('region', { name: 'Fundraising for everyone, everywhere.' })
 
-  it('has the centred headline, the supporting line and the two buttons', () => {
+  // The headline and the two buttons say it all, so the hero has no supporting paragraph.
+  it('has only the centred headline and the two buttons', () => {
     renderHome()
     expect(hero().classList.contains('hero')).toBe(true)
-    expect(within(hero()).getByText(/get gifts from anyone in the world in digital dollars/)).toBeTruthy()
+    expect(hero().querySelector('p')).toBeNull()
+    expect(within(hero()).queryByText(/Raise money for a cause/)).toBeNull()
     const actions = hero().querySelector('.hero-actions')!
     expect([...actions.querySelectorAll('a, button')].map((el) => el.textContent)).toEqual([
       'Donate to a Fundit',
@@ -105,17 +107,30 @@ describe('Home hero', () => {
     expect(screen.queryByText('Create page')).toBeNull()
   })
 
-  it('shows the five causes with alt text, each linking to Explore', () => {
+  it('shows the seven causes with alt text, each linking to Explore', () => {
     renderHome()
     const causes = screen.getByRole('region', { name: 'What people raise for' })
     const imgs = within(causes).getAllByRole('img')
-    expect(imgs).toHaveLength(5)
+    expect(imgs).toHaveLength(7)
     for (const img of imgs) {
       expect((img.getAttribute('alt') ?? '').length).toBeGreaterThan(20)
       expect(img.getAttribute('src')).toMatch(/^\/images\/landing\/.+\.webp$/)
     }
-    expect(imgs.map((i) => i.getAttribute('loading'))).toEqual(['eager', 'lazy', 'lazy', 'lazy', 'lazy'])
+    expect(imgs.map((i) => i.getAttribute('loading'))).toEqual(['eager', 'lazy', 'lazy', 'lazy', 'lazy', 'lazy', 'lazy'])
     for (const link of within(causes).getAllByRole('link')) expect(link.getAttribute('href')).toBe('/explore')
+  })
+
+  // People should see they can raise for themselves too, not only for causes and others in need.
+  it('includes Personal goals and Big moments, each with a described photo', () => {
+    renderHome()
+    const causes = screen.getByRole('region', { name: 'What people raise for' })
+    for (const [title, alt] of [
+      ['Personal goals', /studies at her desk/],
+      ['Big moments', /marriage/],
+    ] as const) {
+      const link = within(causes).getByText(title).closest('a')!
+      expect(within(link).getByRole('img', { name: alt }).getAttribute('loading')).toBe('lazy')
+    }
   })
 
   it('has no Start a Fundit link for a signed-out visitor', () => {

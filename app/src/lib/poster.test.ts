@@ -71,11 +71,11 @@ describe('renderPoster', () => {
 
   it('draws a 1080 x 1350 PNG with the title, "Scan to give" and the short link', async () => {
     const { ctx, texts, size } = fakeCanvas()
-    const blob = await renderPoster({ title: 'Clean water', url: 'https://fundit.xyz/c/0xabc', qr, logo: null })
+    const blob = await renderPoster({ title: 'Clean water', url: 'https://fundit.fun/c/0xabc', qr, logo: null })
     expect(size()).toEqual({ w: POSTER_WIDTH, h: POSTER_HEIGHT })
     expect([POSTER_WIDTH, POSTER_HEIGHT]).toEqual([1080, 1350])
     expect(blob.type).toBe('image/png')
-    expect(texts).toEqual(['Clean water', 'Scan to give', 'fundit.xyz/c/0xabc'])
+    expect(texts).toEqual(['Clean water', 'Scan to give', 'fundit.fun/c/0xabc'])
     // White background first, then one square per dark module.
     expect(ctx.fillRect.mock.calls[0]).toEqual([0, 0, 1080, 1350])
     expect(ctx.fillRect).toHaveBeenCalledTimes(1 + Math.ceil((21 * 21) / 2))
@@ -84,7 +84,7 @@ describe('renderPoster', () => {
   it('draws the logo when it loaded', async () => {
     const { ctx } = fakeCanvas()
     const logo = new Image()
-    await renderPoster({ title: 'x', url: 'https://fundit.xyz/c/0x1', qr, logo })
+    await renderPoster({ title: 'x', url: 'https://fundit.fun/c/0x1', qr, logo })
     expect(ctx.drawImage).toHaveBeenCalledWith(logo, expect.any(Number), expect.any(Number), 278, 64)
   })
 })

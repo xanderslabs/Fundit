@@ -6,7 +6,7 @@ import { isUserRejection } from './errors'
 import { type Call, REVERTED, type Sender, type TxResult, withGasMargin, withTimeout } from './sender'
 
 // Circle Modular Wallets. The SDK is large and only passkey users need it, so it loads with import() on
-// first use. The WebAuthn rpId comes from Circle and is bound to the client key's domain (fundit.xyz, or
+// first use. The WebAuthn rpId comes from Circle and is bound to the client key's domain (fundit.fun, or
 // localhost in development).
 const CLIENT_URL = `${MODULAR_WALLETS_URL}/v1/rpc/w3s/buidl`
 // The Arc mainnet path is not confirmed yet. probeModularArc checks it.

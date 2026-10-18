@@ -93,7 +93,7 @@ export function Privacy() {
 
       <h2>9. Contact</h2>
       <p>
-        Questions about privacy: hello@fundit.xyz. See also our <Link to="/terms">Terms of Service</Link>.
+        Questions about privacy: hello@fundit.fun. See also our <Link to="/terms">Terms of Service</Link>.
       </p>
     </article>
   )

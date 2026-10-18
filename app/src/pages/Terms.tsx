@@ -130,7 +130,7 @@ export function Terms() {
 
       <h2>13. Contact</h2>
       <p>
-        Questions about these terms: hello@fundit.xyz. See also our{' '}
+        Questions about these terms: hello@fundit.fun. See also our{' '}
         <Link to="/privacy">Privacy Policy</Link>.
       </p>
     </article>

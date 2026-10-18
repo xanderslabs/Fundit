@@ -1,7 +1,7 @@
 {
-  "name": "Fundit",
+  "name": "Fundit: Fundraising for everyone, everywhere",
   "short_name": "Fundit",
-  "description": "Crowdfunding on Arc with USDC and EURC.",
+  "description": "Raise money for anything and get gifts from anyone in the world, in digital dollars or euros. Each Fundit has its own on-chain escrow on Arc and only the organiser can withdraw.",
   "icons": [
     { "src": "/images/web-app-manifest-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
     { "src": "/images/web-app-manifest-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }

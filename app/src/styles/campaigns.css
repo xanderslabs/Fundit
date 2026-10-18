@@ -230,27 +230,18 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 56px 0 48px;
+  padding: 72px 0 64px;
   text-align: center;
 }
 
-/* The one loud thing on the page: a big, tight, centred headline. Everything around it stays quiet. */
+/* The one loud thing on the page: a big, tight, centred headline with the two buttons right under it. */
 .hero h1 {
   max-width: 13ch;
-  margin: 0 0 24px;
+  margin: 0;
   font-size: clamp(44px, 7.4vw, 92px);
   line-height: 0.96;
   letter-spacing: -0.045em;
   text-wrap: balance;
-}
-
-.hero p {
-  max-width: 56ch;
-  margin: 0;
-  color: var(--muted);
-  font-size: clamp(17px, 1.6vw, 20px);
-  line-height: 1.5;
-  text-wrap: pretty;
 }
 
 .hero-actions {
@@ -258,17 +249,18 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: 12px;
-  margin-top: 32px;
+  margin-top: 40px;
 }
 
-/* What people raise for: five photos in a gentle stagger, each a way into Explore. */
+/* What people raise for: seven photos, each a way into Explore. Four portrait tiles in a gentle stagger, then
+   three wider ones that fill the second row, so no tile sits alone. */
 .causes {
   margin: 8px 0 64px;
 }
 
 .cause-list {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 16px;
   align-items: start;
   margin: 0;
@@ -276,8 +268,20 @@
   list-style: none;
 }
 
-.cause:nth-child(even) {
+.cause {
+  grid-column: span 3;
+}
+
+.cause:nth-child(-n + 4):nth-child(even) {
   margin-top: 40px;
+}
+
+.cause:nth-child(n + 5) {
+  grid-column: span 4;
+}
+
+.cause:nth-child(n + 5) img {
+  aspect-ratio: 4 / 3;
 }
 
 .cause-link {
@@ -533,15 +537,28 @@
 
 @media (max-width: 900px) {
   .hero {
-    padding: 24px 0 36px;
+    padding: 40px 0 40px;
+  }
+
+  .hero-actions {
+    margin-top: 32px;
   }
 
   .cause-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .cause:nth-child(even) {
+  .cause,
+  .cause:nth-child(n + 5) {
+    grid-column: auto;
+  }
+
+  .cause:nth-child(-n + 4):nth-child(even) {
     margin-top: 0;
+  }
+
+  .cause:nth-child(n + 5) img {
+    aspect-ratio: 4 / 5;
   }
 
   .cause:last-child {

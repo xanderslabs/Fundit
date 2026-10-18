@@ -7,5 +7,10 @@
 		"directory": "./dist/",
 		// Unknown paths serve /index.html with 200, so React Router handles them.
 		"not_found_handling": "single-page-application"
-	}
+	},
+	// fundit.fun is the permanent home (also the Circle passkey domain).
+	"routes": [
+		{ "pattern": "fundit.fun", "custom_domain": true },
+		{ "pattern": "www.fundit.fun", "custom_domain": true }
+	]
 }

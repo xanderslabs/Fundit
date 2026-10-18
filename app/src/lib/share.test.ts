@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { embedSnippet, funditUrl, shareMessage, shareTargets } from './share'
 
-const ORIGIN = 'https://fundit.xyz'
+const ORIGIN = 'https://fundit.fun'
 const ADDRESS = '0x00000000000000000000000000000000000000a1'
 const URL_ = funditUrl(ORIGIN, ADDRESS)
 // Spaces, "&", "#", "?" and an emoji: each would cut or corrupt a share link if it went in unencoded.
@@ -24,7 +24,7 @@ function param(href: string, name: string) {
 
 describe('share links', () => {
   it('uses the canonical Fundit URL with no tracking parameters', () => {
-    expect(URL_).toBe(`https://fundit.xyz/c/${ADDRESS}`)
+    expect(URL_).toBe(`https://fundit.fun/c/${ADDRESS}`)
   })
 
   it('writes the visitor message for anyone who is not the organiser', () => {
@@ -81,7 +81,7 @@ describe('share links', () => {
 describe('embed snippet', () => {
   it('points at the embed page with the agreed size and attributes', () => {
     expect(embedSnippet(ORIGIN, ADDRESS, 'Clean water')).toBe(
-      `<iframe src="https://fundit.xyz/embed/c/${ADDRESS}" width="360" height="220" style="border:0;border-radius:16px" title="Clean water on Fundit" loading="lazy"></iframe>`,
+      `<iframe src="https://fundit.fun/embed/c/${ADDRESS}" width="360" height="220" style="border:0;border-radius:16px" title="Clean water on Fundit" loading="lazy"></iframe>`,
     )
   })
 

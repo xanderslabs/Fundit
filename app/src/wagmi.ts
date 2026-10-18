@@ -24,8 +24,8 @@ createAppKit({
   defaultNetwork: arc,
   metadata: {
     name: 'Fundit',
-    description: 'Crowdfunding on Arc. Funds stay in an on-chain escrow that only the creator can withdraw.',
-    // Wallets compare this with the page origin, so use the real one (fundit.xyz in production).
+    description: 'Fundraising for everyone, everywhere. Each Fundit holds its money in its own on-chain escrow that only the organiser can withdraw.',
+    // Wallets compare this with the page origin, so use the real one (fundit.fun in production).
     url: window.location.origin,
     icons: [`${window.location.origin}/images/web-app-manifest-192x192.png`],
   },

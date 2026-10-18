@@ -15,7 +15,7 @@ vi.mock('@reown/appkit/react', () => {
 })
 
 const ADDRESS = '0x00000000000000000000000000000000000000a1' as Address
-const ORIGIN = 'https://fundit.xyz'
+const ORIGIN = 'https://fundit.fun'
 
 function summary(over: Partial<Summary> = {}, title = 'Clean water'): Summary {
   return {
