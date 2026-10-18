@@ -11,8 +11,9 @@ export function Privacy() {
 
       <h2>1. Introduction</h2>
       <p>
-        This policy explains what data Fundit uses and where it goes. Fundit has no accounts, no sign-up form and no
-        server of its own that stores your data. The website runs in your browser and reads public blockchains.
+        This policy explains what data Fundit uses and where it goes. Fundit has no server of its own that stores your
+        data. You sign in with a Fundit account: a smart account on the Arc blockchain, secured by a passkey on your
+        device. The website runs in your browser and reads public blockchains.
       </p>
 
       <h2>2. Data on the blockchain</h2>
@@ -21,11 +22,19 @@ export function Privacy() {
         if you use a cross-chain transfer. This record is public and permanent. It includes:
       </p>
       <ul>
-        <li>Your wallet address.</li>
-        <li>The amounts you send, receive or withdraw.</li>
+        <li>Your Fundit account address.</li>
+        <li>The amounts you add, send, receive or withdraw.</li>
         <li>Anything you write into a fundraiser, such as its title, description, image link and links.</li>
         <li>Any message you add to a donation.</li>
+        <li>
+          The public keys of your passkeys and the address of your recovery key, which are listed as owners of your
+          Fundit account.
+        </li>
       </ul>
+      <p>
+        If you tick "Give anonymously", Fundit does not show your name next to the gift on its own pages. The gift is
+        still public on the blockchain, with your account address, the amount and any message.
+      </p>
       <p>
         We cannot change or delete data on a blockchain, and neither can anyone else. Do not put personal information in
         a fundraiser or a message unless you are happy for it to be public forever.
@@ -34,14 +43,26 @@ export function Privacy() {
       <h2>3. Data stored in your browser</h2>
       <p>Fundit sets no cookies. It uses your browser's local storage only for:</p>
       <ul>
-        <li>Reminders of transactions you started that have not finished yet, so the page can check on them.</li>
-        <li>Your passkey wallet session, if you use a passkey wallet.</li>
         <li>
-          Your wallet connection, which the wallet connection tools (wagmi, Reown and WalletConnect) save so you stay
-          connected after a reload.
+          Reminders of transfers, recovery key backups and account recoveries you started that have not finished yet,
+          so the page can check on them. A recovery in progress also keeps the new passkey's credential ID and public
+          key.
+        </li>
+        <li>
+          Your Fundit account session: your account address and your passkey's credential ID. It never holds a private
+          key or the words of your recovery key.
+        </li>
+        <li>A note that you saved a recovery key for your account, so Fundit does not ask you again.</li>
+        <li>
+          Your wallet connection, only if you connect a wallet to add money. The wallet connection tools (wagmi, Reown
+          and WalletConnect) save it so you stay connected after a reload.
         </li>
       </ul>
       <p>This data stays on your device. You can remove it at any time by clearing your browser's site data.</p>
+      <p>
+        Your passkey is kept by your device or password manager, not by Fundit. Your recovery key stays in your
+        browser while you save or use it. Fundit never stores it and never sends it anywhere.
+      </p>
 
       <h2>4. Names and avatars</h2>
       <p>
@@ -59,9 +80,10 @@ export function Privacy() {
       <ul>
         <li>Public RPC providers for Arc, Ethereum and the other supported chains, to read and send transactions.</li>
         <li>
-          Circle, for cross-chain transfers (CCTP) and passkey wallets.
+          Circle, for your Fundit account and passkeys (Modular Wallets and its bundler), and for cross-chain transfers
+          (CCTP, Bridge Kit and the Forwarding Service).
         </li>
-        <li>Reown and WalletConnect, to connect your wallet.</li>
+        <li>Reown and WalletConnect, only when you connect a wallet to add money.</li>
         <li>The sites that host fundraiser images and avatars.</li>
       </ul>
       <p>Fundit does not use analytics or advertising trackers.</p>
@@ -75,8 +97,9 @@ export function Privacy() {
 
       <h2>7. Security</h2>
       <p>
-        No website or network is fully secure. Keep your wallet and devices safe, and check every transaction in your
-        wallet before you approve it.
+        No website or network is fully secure. Keep your devices, passkeys and recovery key safe, and check every
+        transaction before you confirm it with your passkey. If you connect a wallet to add money, check each
+        transaction in that wallet too.
       </p>
 
       <h2>8. Changes to this policy</h2>

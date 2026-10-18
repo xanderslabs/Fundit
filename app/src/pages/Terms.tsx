@@ -19,7 +19,8 @@ export function Terms() {
       <p>
         Fundit is a website for raising money in USDC or EURC on the Arc blockchain. Each fundraiser is its own smart
         contract, created by the Fundit factory contract. Donations go straight into that contract. Fundit is
-        non-custodial: we never hold your money and we have no deposit wallets.
+        non-custodial: we never hold your money and we have no deposit wallets. Money in your Fundit account is held by
+        that account on Arc, and only your passkeys or your recovery key can move it.
       </p>
       <ul>
         <li>Only the organiser of a fundraiser can withdraw its money.</li>
@@ -34,11 +35,28 @@ export function Terms() {
         You must be at least 18 years old and able to enter a binding contract. By using Fundit you confirm that you
         meet these requirements.
       </p>
-      <h3>3.2 Your wallet</h3>
+      <h3>3.2 Your Fundit account</h3>
       <p>
-        To start a fundraiser or donate you connect a wallet you control, or use a Circle passkey wallet. You are
-        responsible for keeping your wallet, keys and devices safe. We cannot recover a lost wallet or reverse a
+        To start a fundraiser or donate you sign in with a Fundit account. It is a Circle Modular Wallets smart account
+        on Arc, secured by a passkey such as Face ID, Touch ID, Windows Hello or your phone. You cannot sign in with a
+        wallet.
+      </p>
+      <p>
+        You can save a 12-word recovery key. It is added to your account as a second owner. With the recovery key and
+        a new passkey you can recover your account at <Link to="/recover">/recover</Link>. Fundit never sees your
+        recovery key: it stays in your browser.
+      </p>
+      <p>
+        You are responsible for keeping your devices, passkeys and recovery key safe. If you lose every passkey and
+        your recovery key, nobody can recover your account, including Fundit and Circle. We cannot reverse a
         transaction.
+      </p>
+      <h3>3.3 Adding and sending money</h3>
+      <p>
+        You add money to your Fundit account by sending USDC or EURC on Arc to its address, from a wallet you connect,
+        or from another chain through Circle's Cross-Chain Transfer Protocol (CCTP) where Fundit offers it. You connect
+        a wallet only to add money. You can send money out on Arc, or send USDC to another supported chain through
+        CCTP. EURC moves on Arc only.
       </p>
 
       <h2>4. Fundraisers</h2>
@@ -68,6 +86,8 @@ export function Terms() {
         fixed when the fundraiser is created and stay the same for its whole life, even if Fundit changes the rates for
         new fundraisers later. The fundraiser page shows its rates. Donors can also add an optional tip for Fundit.
         Network fees (gas) and any bridge fees are separate and are paid to the network or to Circle, not to Fundit.
+        Your Fundit account pays network fees in USDC from its own balance, and nobody pays them for you. Fundit keeps
+        at least 0.05 USDC in your account for these fees.
       </p>
 
       <h2>6. Donations</h2>
@@ -78,8 +98,13 @@ export function Terms() {
           There are no refunds. The money goes to the fundraiser, and only its organiser decides how to use it. Fundit
           cannot return a donation.
         </li>
+        <li>Your gift comes from your Fundit account balance.</li>
         <li>You pay the network fees for your own transactions.</li>
-        <li>Your wallet address, the amount and any message you add are public on the blockchain.</li>
+        <li>Your Fundit account address, the amount and any message you add are public on the blockchain.</li>
+        <li>
+          "Give anonymously" hides your name on Fundit only. The gift, your account address, the amount and any message
+          stay public on the blockchain.
+        </li>
       </ul>
       <p>
         Fundit does not check fundraisers or organisers. Before you give, decide for yourself whether you trust the
@@ -88,8 +113,9 @@ export function Terms() {
 
       <h2>7. Third-party services</h2>
       <p>
-        Fundit relies on services we do not run: the Arc blockchain, Circle (USDC, EURC, CCTP and passkey wallets),
-        Reown and WalletConnect for connecting wallets, and public RPC providers for reading blockchain data.
+        Fundit relies on services we do not run: the Arc blockchain, Circle (USDC, EURC, CCTP, Modular Wallets and
+        passkeys, and the bundler that sends your account's transactions), Reown and WalletConnect for connecting a
+        wallet to add money, and public RPC providers for reading blockchain data.
         Their own terms apply to your use of them, and we are not responsible for their availability or errors.
       </p>
 
@@ -116,7 +142,8 @@ export function Terms() {
         <li>Loss of profits, data or other intangible losses.</li>
         <li>Bugs or failures in smart contracts.</li>
         <li>Problems with the Arc network, other blockchains or bridges.</li>
-        <li>Problems connecting your wallet.</li>
+        <li>Problems with your passkeys or devices, or with connecting a wallet to add money.</li>
+        <li>Loss of your Fundit account if you lose every passkey and your recovery key.</li>
         <li>What an organiser does with the money raised.</li>
       </ul>
 

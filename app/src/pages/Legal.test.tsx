@@ -37,9 +37,16 @@ describe.each(['terms', 'privacy'] as const)('%s page', (page) => {
     expect(screen.getByText('Draft: review before launch.')).toBeTruthy()
   })
 
-  // Every account is a Fundit account (a Circle passkey wallet), so the policy always describes it.
+  // Every account is a Fundit account secured by a passkey, so the policy always describes it.
   it('always mentions passkeys', () => {
     expect(text(page)).toMatch(/passkey/i)
+  })
+
+  // Sign-in is a Fundit account only. The old "passkey wallet" wording read as one wallet option among others.
+  it('says Fundit account, never passkey wallet', () => {
+    const t = text(page)
+    expect(t).toMatch(/Fundit account/)
+    expect(t).not.toMatch(/passkey wallet/i)
   })
 
   // Gateway unified balances are no longer used anywhere, so the policy must not name them.
