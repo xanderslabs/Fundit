@@ -1,11 +1,12 @@
 import { useAppKit } from '@reown/appkit/react'
-import { type KeyboardEvent, type Ref, type RefObject, useEffect, useId, useRef, useState } from 'react'
+import { type KeyboardEvent, type ReactNode, type Ref, type RefObject, useEffect, useId, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import type { Address } from 'viem'
 import { useDisconnect } from 'wagmi'
 import { PASSKEYS_ENABLED } from '../config'
 import { useWalletChoice } from '../hooks/useSender'
-import { logoutPasskey, usePasskeySession } from '../lib/passkey'
+import { dismissBackupPrompt, logoutPasskey, type StoredPasskey, useBackupPrompt, usePasskeySession } from '../lib/passkey'
+import { AddBackupPasskey } from './AddBackupPasskey'
 import { Name } from './Name'
 import { PasskeyLogin } from './PasskeyLogin'
 
@@ -24,16 +25,16 @@ function useOutsideClose(open: boolean, root: RefObject<HTMLElement | null>, clo
 type SignInProps = {
   className?: string
   label?: string
-  // Runs when the person starts signing in: the wallet modal or the sign-in panel opens.
+  // Runs when the person starts signing in: the wallet modal or the sign-in dialog opens.
   onStart?: () => void
-  // Runs when the sign-in panel closes without a sign-in (Escape, a click outside, or the button again).
+  // Runs when the sign-in dialog closes without a sign-in (Escape, a click on the backdrop, or Close).
   onDismiss?: () => void
   // Runs after a passkey sign-in. The top bar sends a new passkey user to fund their wallet.
   onPasskeyDone?: () => void
   buttonRef?: Ref<HTMLButtonElement>
 }
 
-// Without passkeys, Sign in opens the wallet modal. With passkeys, it opens a small panel that offers both.
+// Without passkeys, Sign in opens the wallet modal. With passkeys, it opens a dialog that offers both.
 export function SignInButton(props: SignInProps) {
   const { open: openWallet } = useAppKit()
   const { className = 'btn', label = 'Sign in', onStart, buttonRef } = props
@@ -52,33 +53,99 @@ export function SignInButton(props: SignInProps) {
       </button>
     )
   }
-  return <SignInPopover {...props} className={className} label={label} />
+  return <SignInDialog {...props} className={className} label={label} />
 }
 
-function SignInPopover({ className, label, onStart, onDismiss, onPasskeyDone, buttonRef }: SignInProps) {
+const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+
+// A modal dialog. Focus moves to its first control and stays inside: Tab wraps at the ends. Escape, a click on
+// the backdrop and the Close button all call onClose.
+function ModalDialog({ labelledBy, onClose, children }: { labelledBy: string; onClose: () => void; children: ReactNode }) {
+  const dialog = useRef<HTMLDialogElement>(null)
+
+  useEffect(() => {
+    const d = dialog.current
+    if (!d) return
+    if (typeof d.showModal === 'function' && !d.open) d.showModal()
+    else d.setAttribute('open', '')
+    d.querySelector<HTMLElement>(FOCUSABLE)?.focus()
+  }, [])
+
+  // The native dialog is closed first, so the page behind is no longer inert when focus goes back to it.
+  function close() {
+    const d = dialog.current
+    if (d?.open && typeof d.close === 'function') d.close()
+    onClose()
+  }
+
+  function onKeyDown(e: KeyboardEvent<HTMLDialogElement>) {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      close()
+      return
+    }
+    if (e.key !== 'Tab' || !dialog.current) return
+    const list = [...dialog.current.querySelectorAll<HTMLElement>(FOCUSABLE)]
+    const first = list[0]
+    const last = list[list.length - 1]
+    if (!first || !last) return
+    const active = document.activeElement as HTMLElement | null
+    const inside = active !== null && list.includes(active)
+    if (e.shiftKey && (active === first || !inside)) {
+      e.preventDefault()
+      last.focus()
+    } else if (!e.shiftKey && (active === last || !inside)) {
+      e.preventDefault()
+      first.focus()
+    }
+  }
+
+  return (
+    <dialog
+      ref={dialog}
+      className="share-dialog signin-dialog"
+      aria-labelledby={labelledBy}
+      onKeyDown={onKeyDown}
+      onCancel={(e) => {
+        e.preventDefault()
+        close()
+      }}
+      // A click on the backdrop lands on the dialog element itself.
+      onClick={(e) => {
+        if (e.target === dialog.current) close()
+      }}
+    >
+      <div className="share-dialog-body">
+        {children}
+        <button type="button" className="share-close" aria-label="Close" onClick={close}>
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        </button>
+      </div>
+    </dialog>
+  )
+}
+
+// The Fundit account (a passkey) comes first. A crypto wallet opens the existing wallet modal.
+function SignInDialog({ className, label, onStart, onDismiss, onPasskeyDone, buttonRef }: SignInProps) {
   const { open: openWallet } = useAppKit()
   const [open, setOpen] = useState(false)
-  const root = useRef<HTMLDivElement>(null)
+  const [step, setStep] = useState<'choose' | 'passkey'>('choose')
   const trigger = useRef<HTMLButtonElement | null>(null)
-  const panel = useRef<HTMLDivElement>(null)
-  const panelId = useId()
+  const body = useRef<HTMLDivElement>(null)
+  const headingId = useId()
 
   function dismiss() {
     setOpen(false)
+    trigger.current?.focus()
     onDismiss?.()
   }
-  useOutsideClose(open, root, dismiss)
 
-  // Focus moves into the panel when it opens, to its first control.
+  // The Continue button goes away on the passkey step, so focus moves to the username field.
   useEffect(() => {
-    if (open) panel.current?.querySelector<HTMLElement>('button, input')?.focus()
-  }, [open])
-
-  function onKeyDown(e: KeyboardEvent) {
-    if (e.key !== 'Escape' || !open) return
-    dismiss()
-    trigger.current?.focus()
-  }
+    if (open && step === 'passkey') body.current?.querySelector<HTMLElement>('input')?.focus()
+  }, [open, step])
 
   function setTrigger(el: HTMLButtonElement | null) {
     trigger.current = el
@@ -87,15 +154,15 @@ function SignInPopover({ className, label, onStart, onDismiss, onPasskeyDone, bu
   }
 
   return (
-    <div ref={root} className="popover-anchor" onKeyDown={onKeyDown}>
+    <>
       <button
         ref={setTrigger}
         type="button"
         className={className}
+        aria-haspopup="dialog"
         aria-expanded={open}
-        aria-controls={open ? panelId : undefined}
         onClick={() => {
-          if (open) return dismiss()
+          setStep('choose')
           setOpen(true)
           onStart?.()
         }}
@@ -103,29 +170,45 @@ function SignInPopover({ className, label, onStart, onDismiss, onPasskeyDone, bu
         {label}
       </button>
       {open && (
-        <div ref={panel} id={panelId} className="popover signin-panel">
-          <button
-            type="button"
-            className="btn signin-wallet"
-            onClick={() => {
-              setOpen(false)
-              void openWallet()
-            }}
-          >
-            Use a wallet
-          </button>
-          <p className="signin-or" aria-hidden="true">
-            or
-          </p>
-          <PasskeyLogin
-            onDone={() => {
-              setOpen(false)
-              onPasskeyDone?.()
-            }}
-          />
-        </div>
+        <ModalDialog labelledBy={headingId} onClose={dismiss}>
+          <div ref={body} className="signin-body">
+            <h2 id={headingId}>Sign in</h2>
+            {step === 'choose' ? (
+              <button type="button" className="btn" onClick={() => setStep('passkey')}>
+                Continue with passkey
+              </button>
+            ) : (
+              <PasskeyLogin
+                onDone={() => {
+                  setOpen(false)
+                  onPasskeyDone?.()
+                }}
+              />
+            )}
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => {
+                setOpen(false)
+                void openWallet()
+              }}
+            >
+              Use a crypto wallet instead
+            </button>
+          </div>
+        </ModalDialog>
       )}
-    </div>
+    </>
+  )
+}
+
+// Right after sign-up: the backup prompt as a dialog over whatever page the person is on.
+function BackupDialog({ stored }: { stored: StoredPasskey }) {
+  const headingId = useId()
+  return (
+    <ModalDialog labelledBy={headingId} onClose={dismissBackupPrompt}>
+      <AddBackupPasskey stored={stored} headingId={headingId} onLater={dismissBackupPrompt} />
+    </ModalDialog>
   )
 }
 
@@ -139,6 +222,7 @@ const ChevronDown = () => (
 export function AccountControl() {
   const choice = useWalletChoice()
   const session = usePasskeySession()
+  const backupPrompt = useBackupPrompt(session)
   const navigate = useNavigate()
   const signIn = useRef<HTMLButtonElement>(null)
   const [focusSignIn, setFocusSignIn] = useState(false)
@@ -155,7 +239,12 @@ export function AccountControl() {
   if (!address) {
     return <SignInButton buttonRef={signIn} onPasskeyDone={() => navigate('/fund')} />
   }
-  return <AccountMenu address={address} onSignedOut={() => setFocusSignIn(true)} />
+  return (
+    <>
+      <AccountMenu address={address} onSignedOut={() => setFocusSignIn(true)} />
+      {PASSKEYS_ENABLED && session && backupPrompt && <BackupDialog stored={session} />}
+    </>
+  )
 }
 
 function AccountMenu({ address, onSignedOut }: { address: Address; onSignedOut: () => void }) {

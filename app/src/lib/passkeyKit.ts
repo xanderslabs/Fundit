@@ -4,3 +4,4 @@
 export * as sdk from '@circle-fin/modular-wallets-core'
 export { createPublicClient } from 'viem'
 export { createBundlerClient, toWebAuthnAccount } from 'viem/account-abstraction'
+export { english, generateMnemonic, mnemonicToAccount } from 'viem/accounts'

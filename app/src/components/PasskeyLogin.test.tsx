@@ -18,18 +18,27 @@ const state: { session: StoredPasskey | null; external: Address | null; active: 
 const setActive = vi.fn()
 const disconnect = vi.fn()
 const logoutPasskey = vi.fn()
+const openWallet = vi.fn()
+const registerPasskey = vi.fn()
+const loginPasskey = vi.fn()
+const dismissBackupPrompt = vi.fn()
+const prompt = { value: false }
 
 vi.mock('../config', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../config')>()),
   PASSKEYS_ENABLED: true,
 }))
-vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: () => {} }) }))
+vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: openWallet }) }))
 vi.mock('wagmi', () => ({ useDisconnect: () => ({ mutate: disconnect }) }))
 vi.mock('../hooks/useName', () => ({ useName: () => ({ data: undefined }) }))
 vi.mock('../lib/passkey', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/passkey')>()),
   usePasskeySession: () => state.session,
   logoutPasskey: () => logoutPasskey(),
+  registerPasskey: (name: string) => registerPasskey(name),
+  loginPasskey: () => loginPasskey(),
+  useBackupPrompt: () => prompt.value,
+  dismissBackupPrompt: () => dismissBackupPrompt(),
 }))
 vi.mock('../hooks/useSender', () => ({
   useWalletChoice: (): WalletChoice => ({
@@ -48,6 +57,11 @@ afterEach(() => {
   setActive.mockReset()
   disconnect.mockReset()
   logoutPasskey.mockReset()
+  openWallet.mockReset()
+  registerPasskey.mockReset()
+  loginPasskey.mockReset()
+  dismissBackupPrompt.mockReset()
+  prompt.value = false
 })
 
 function renderControl() {
@@ -65,20 +79,119 @@ async function openMenu(name: string) {
 }
 
 describe('Sign in with passkeys on', () => {
-  // Keyboard and screen reader users land in the sign-in panel, and Escape takes them back where they were.
-  it('moves focus into the panel on open, and Escape closes it and returns focus to Sign in', async () => {
-    renderControl()
+  async function openSignIn() {
     const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+    return user
+  }
+
+  async function openPasskey() {
+    const user = await openSignIn()
+    await user.click(screen.getByRole('button', { name: 'Continue with passkey' }))
+    return user
+  }
+
+  // The Fundit account is the main way in. A crypto wallet is still one tap away for people who have one.
+  it('shows Continue with passkey first and Use a crypto wallet instead second, which opens the wallet modal', async () => {
+    renderControl()
+    const user = await openSignIn()
+    const dialog = screen.getByRole('dialog', { name: 'Sign in' })
+    const buttons = [...dialog.querySelectorAll('button')].map((b) => b.textContent).filter((t) => t !== '')
+    expect(buttons.indexOf('Continue with passkey')).toBeLessThan(buttons.indexOf('Use a crypto wallet instead'))
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Continue with passkey' }))
+    await user.click(screen.getByRole('button', { name: 'Use a crypto wallet instead' }))
+    expect(openWallet).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  // Keyboard and screen reader users stay inside the dialog, and Escape takes them back where they were.
+  it('keeps focus inside the dialog, and Escape closes it and returns focus to Sign in', async () => {
+    renderControl()
     const trigger = screen.getByRole('button', { name: 'Sign in' })
-    await user.click(trigger)
+    const user = await openSignIn()
     expect(trigger.getAttribute('aria-expanded')).toBe('true')
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Use a wallet' }))
-    expect(screen.getByLabelText('Name for your passkey')).toBeTruthy()
+    const dialog = screen.getByRole('dialog', { name: 'Sign in' })
+    for (let i = 0; i < 6; i++) {
+      await user.tab()
+      expect(dialog.contains(document.activeElement)).toBe(true)
+    }
+    await user.tab({ shift: true })
+    expect(dialog.contains(document.activeElement)).toBe(true)
 
     await user.keyboard('{Escape}')
-    expect(screen.queryByLabelText('Name for your passkey')).toBeNull()
+    expect(screen.queryByRole('dialog')).toBeNull()
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
     expect(document.activeElement).toBe(trigger)
+  })
+
+  it('offers a new account with a username, and sign-in for a returning person', async () => {
+    renderControl()
+    await openPasskey()
+    expect(screen.getByLabelText('Name for your passkey')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Create my Fundit account' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Sign in with a passkey' })).toBeTruthy()
+  })
+
+  // The name is stored with the passkey, so stray spaces and empty or very long names are stopped here.
+  it('creates the account with the trimmed username', async () => {
+    registerPasskey.mockResolvedValue({ address: PASSKEY })
+    renderControl()
+    const user = await openPasskey()
+    await user.type(screen.getByLabelText('Name for your passkey'), '  ana  ')
+    await user.click(screen.getByRole('button', { name: 'Create my Fundit account' }))
+    expect(registerPasskey).toHaveBeenCalledWith('ana')
+  })
+
+  it('refuses an empty or over-32-character username with a plain message', async () => {
+    renderControl()
+    const user = await openPasskey()
+    await user.click(screen.getByRole('button', { name: 'Create my Fundit account' }))
+    expect(screen.getByRole('alert').textContent).toBe('Enter a name for your account.')
+    await user.type(screen.getByLabelText('Name for your passkey'), 'a'.repeat(33))
+    await user.click(screen.getByRole('button', { name: 'Create my Fundit account' }))
+    expect(screen.getByRole('alert').textContent).toBe('Keep the name to 32 characters.')
+    expect(registerPasskey).not.toHaveBeenCalled()
+  })
+
+  // Sign-up can fail after the browser already saved the passkey. The person must be able to use it.
+  it('login works after an interrupted register', async () => {
+    registerPasskey.mockRejectedValue(new Error('network down'))
+    loginPasskey.mockResolvedValue({ address: PASSKEY })
+    renderControl()
+    const user = await openPasskey()
+    await user.type(screen.getByLabelText('Name for your passkey'), 'ana')
+    await user.click(screen.getByRole('button', { name: 'Create my Fundit account' }))
+    expect(screen.getByRole('alert').textContent).toMatch(/If your browser saved a passkey, sign in with it\./)
+    await user.click(screen.getByRole('button', { name: 'Sign in with a passkey' }))
+    expect(loginPasskey).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('dialog', { name: 'Sign in' })).toBeNull()
+  })
+})
+
+describe('Backup prompt after sign-up', () => {
+  // Shown once, right after a new account exists, as a dialog over whatever page the person lands on.
+  it('shows the backup dialog for a new account, and Later dismisses it for this visit', async () => {
+    state.session = { address: PASSKEY, credentialId: 'cred-1' }
+    prompt.value = true
+    renderControl()
+    const dialog = screen.getByRole('dialog', { name: 'Add a backup' })
+    expect(dialog.textContent).toContain('If you lose every device with your passkey, nobody can recover your Fundit account.')
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Later' }))
+    expect(dismissBackupPrompt).toHaveBeenCalledTimes(1)
+  })
+
+  it('Escape also means Later', async () => {
+    state.session = { address: PASSKEY, credentialId: 'cred-1' }
+    prompt.value = true
+    renderControl()
+    await userEvent.setup().keyboard('{Escape}')
+    expect(dismissBackupPrompt).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not show for a returning account', () => {
+    state.session = { address: PASSKEY, credentialId: 'cred-1' }
+    renderControl()
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 })
 

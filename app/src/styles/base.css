@@ -331,19 +331,53 @@ input[type='checkbox'] {
   border-top: 1px solid var(--line);
 }
 
-.signin-panel {
+/* Sign in and backup dialogs use the share dialog's frame, narrower. */
+.signin-dialog {
+  width: min(420px, calc(100vw - 32px));
+}
+
+.signin-body,
+.backup-prompt {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  width: min(360px, calc(100vw - 32px));
-  padding: 16px;
 }
 
-.signin-or {
+.signin-body h2,
+.backup-prompt h2 {
   margin: 0;
-  color: var(--muted);
-  font-size: 14px;
-  text-align: center;
+  padding-right: 48px;
+  font-size: 22px;
+}
+
+.backup-prompt p {
+  margin: 0;
+}
+
+.link-button {
+  align-self: center;
+  padding: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.recovery-phrase {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding-left: 24px;
+  font-weight: var(--weight-medium);
 }
 
 .passkey-login,

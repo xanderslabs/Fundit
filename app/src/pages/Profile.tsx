@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import type { Address } from 'viem'
 import { arc } from 'viem/chains'
 import { SignInButton } from '../components/AccountMenu'
+import { AddBackupPasskey } from '../components/AddBackupPasskey'
 import { CampaignGrid, LoadError } from '../components/CampaignGrid'
 import { Name } from '../components/Name'
 import { ShareDialog } from '../components/SharePanel'
@@ -13,6 +14,7 @@ import { useSender } from '../hooks/useSender'
 import { type DonationItem, recentDonationsBy } from '../lib/activity'
 import { readMessage } from '../lib/anon'
 import { myCampaigns } from '../lib/campaigns'
+import { useBackupNeeded, usePasskeySession } from '../lib/passkey'
 import { arcClient } from '../lib/clients'
 import { formatAmount } from '../lib/format'
 
@@ -119,6 +121,10 @@ function MyDonations({ address }: { address: Address }) {
 
 export function Profile() {
   const sender = useSender()
+  const session = usePasskeySession()
+  // Only for the passkey account, and only while it is the one acting. Later never hides it here.
+  const passkey = sender?.kind === 'passkey' ? session : null
+  const backupNeeded = useBackupNeeded(passkey)
 
   if (!sender) {
     return (
@@ -141,6 +147,11 @@ export function Profile() {
           Start a Fundit
         </Link>
       </section>
+      {passkey && backupNeeded && (
+        <section className="section notice">
+          <AddBackupPasskey stored={passkey} />
+        </section>
+      )}
       <MyFundraisers address={sender.address} />
       <MyDonations address={sender.address} />
     </>

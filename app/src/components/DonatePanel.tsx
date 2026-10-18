@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useRef, useState } from 'react'
 import type { Hex } from 'viem'
 import { arc } from 'viem/chains'
 import { useConnection } from 'wagmi'
-import { CROSSCHAIN_ENABLED } from '../config'
+import { CROSSCHAIN_ENABLED, PASSKEY_GAS_BUFFER } from '../config'
 import { useSender } from '../hooks/useSender'
 import {
   type BlockingEntry,
@@ -33,8 +33,6 @@ const EXPLORER_URL = arc.blockExplorers.default.url
 const QUICK_AMOUNTS = ['10', '25', '50', '100'] as const
 const TIP_PERCENTS = [0, 5, 10, 15] as const
 const DAY_MS = 24 * 60 * 60 * 1000
-// A passkey wallet pays its network fee in USDC from the balance it donates from. This much stays free for it.
-const PASSKEY_GAS_BUFFER = 50_000n
 const START_OVER_WARNING =
   'The earlier transaction may still go through. If it does and you give again, you will give twice. Start a new donation anyway?'
 

@@ -1,8 +1,11 @@
 import { useSyncExternalStore } from 'react'
 import { type Address, type Hex, isAddress, type TransactionReceipt, type Transport } from 'viem'
 import { arc } from 'viem/chains'
-import { CIRCLE_CLIENT_KEY, MODULAR_WALLETS_URL, PASSKEYS_ENABLED, TX_TIMEOUT_MS } from '../config'
-import { isUserRejection } from './errors'
+import { erc20Abi } from '../abi/erc20'
+import { CIRCLE_CLIENT_KEY, MODULAR_WALLETS_URL, PASSKEY_GAS_BUFFER, PASSKEYS_ENABLED, TOKENS, TX_TIMEOUT_MS } from '../config'
+import { arcClient } from './clients'
+import { formatAmount } from './format'
+import { isUserRejection, PlainError } from './errors'
 import { type Call, REVERTED, type Sender, type TxResult, withGasMargin, withTimeout } from './sender'
 
 // Circle Modular Wallets. The SDK is large and only passkey users need it, so it loads with import() on
@@ -48,6 +51,7 @@ export function savePasskeySession(s: StoredPasskey) {
 export function clearPasskeySession() {
   live = null
   liveSession = null
+  newAccount = null
   try {
     localStorage.removeItem(KEY)
   } catch {
@@ -237,9 +241,12 @@ function start(next: Live) {
   savePasskeySession({ address: next.account.address, credentialId: next.credentialId })
 }
 
-// Creates a new passkey on this device and the smart account it owns on Arc.
+// Creates a new passkey on this device and the smart account it owns on Arc. If this fails after the browser
+// saved the passkey, loginPasskey with that passkey opens the same account.
 export async function registerPasskey(username: string): Promise<PasskeySession> {
   start(await credentialFor('Register', { username }))
+  newAccount = live!.account.address.toLowerCase()
+  notify()
   return { address: live!.account.address, username }
 }
 
@@ -277,6 +284,89 @@ export function storedPasskeySender(stored: StoredPasskey): Sender {
     // Reading a receipt needs no signature, so this never asks for the passkey.
     recheck: async (hash) => userOperationResult(await readBundler(), hash),
   }
+}
+
+// Account safety. Losing every passkey loses the account, so a new account is asked to add a recovery key
+// (Circle's recovery support: the key's address becomes an extra owner of the account). The app cannot read
+// that back from Circle, so "saved" is remembered per account in this browser.
+const BACKUP_KEY = 'fundit.backup.'
+// The account created on this page load, until the person picks Later. Never stored.
+let newAccount: string | null = null
+// Accounts marked saved on this page load, for when storage throws.
+const savedThisLoad = new Set<string>()
+
+function backupSaved(address: Address): boolean {
+  const a = address.toLowerCase()
+  try {
+    return localStorage.getItem(BACKUP_KEY + a) === '1' || savedThisLoad.has(a)
+  } catch {
+    return savedThisLoad.has(a)
+  }
+}
+
+// The person confirmed they wrote the recovery key down.
+export function markBackupSaved(address: Address) {
+  const a = address.toLowerCase()
+  savedThisLoad.add(a)
+  try {
+    localStorage.setItem(BACKUP_KEY + a, '1')
+  } catch {
+    // Storage is unavailable. My page asks again after a reload.
+  }
+  notify()
+}
+
+// Later: the prompt after sign-up goes away for this visit. My page keeps asking.
+export function dismissBackupPrompt() {
+  newAccount = null
+  notify()
+}
+
+// True while this account has no saved backup in this browser. My page shows the prompt then.
+export function useBackupNeeded(stored: StoredPasskey | null): boolean {
+  const get = () => stored !== null && !backupSaved(stored.address)
+  return useSyncExternalStore(subscribe, get, () => false)
+}
+
+// True right after sign-up, until the person adds a backup or picks Later.
+export function useBackupPrompt(stored: StoredPasskey | null): boolean {
+  const get = () => stored !== null && newAccount === stored.address.toLowerCase() && !backupSaved(stored.address)
+  return useSyncExternalStore(subscribe, get, () => false)
+}
+
+// 12 words from the browser's secure random source. They are shown to the person once and never stored.
+export async function newRecoveryPhrase(): Promise<string> {
+  const kit = await import('./passkeyKit')
+  return kit.generateMnemonic(kit.english)
+}
+
+// Registers the recovery phrase's address as a recovery owner of the account, with Circle's
+// registerRecoveryAddress. The account pays the gas in USDC (no paymaster), so it needs the gas buffer first.
+export async function addBackupPasskey(stored: StoredPasskey, recoveryPhrase: string): Promise<void> {
+  const usdc = await arcClient.readContract({ address: TOKENS.USDC.address, abi: erc20Abi, functionName: 'balanceOf', args: [stored.address] })
+  if (usdc < PASSKEY_GAS_BUFFER) {
+    throw new PlainError(
+      `Add at least ${formatAmount(PASSKEY_GAS_BUFFER, 'USDC')} to your Fundit account first. It pays the network fee for the backup.`,
+    )
+  }
+  const { account, bundler } = await ensureLive(stored)
+  const kit = await import('./passkeyKit')
+  const recovery = kit.mnemonicToAccount(recoveryPhrase)
+  type Client = Parameters<typeof kit.sdk.recoveryActions>[0]
+  type Params = Parameters<ReturnType<typeof kit.sdk.recoveryActions>['registerRecoveryAddress']>[0]
+  let hash: Hex
+  try {
+    hash = await kit.sdk.recoveryActions(bundler as unknown as Client).registerRecoveryAddress({
+      account: account as unknown as Params['account'],
+      recoveryAddress: recovery.address,
+    } as Params)
+  } catch (err) {
+    if (isUserRejection(err)) throw new PlainError('You cancelled the request. No backup was added.')
+    throw err
+  }
+  const res = await userOperationResult(bundler, hash)
+  if (res.status === 'timeout') throw new PlainError('The backup is taking a while to confirm. Try again in a minute.')
+  if (res.status !== 'success') throw new PlainError('The backup did not go through. Nothing was added. Try again.')
 }
 
 // True when Circle's Arc mainnet endpoint answers with Arc's chain id. Run by hand once a client key exists.

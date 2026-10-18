@@ -4,13 +4,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TX_TIMEOUT_MS } from '../config'
 import { pickWallet, setActiveWallet, useSender, useWalletChoice } from '../hooks/useSender'
 import {
+  addBackupPasskey,
   clearPasskeySession,
+  dismissBackupPrompt,
   loginPasskey,
+  markBackupSaved,
+  newRecoveryPhrase,
   type PasskeyBundler,
   passkeySender,
   readPasskeySession,
+  registerPasskey,
   savePasskeySession,
   storedPasskeySender,
+  useBackupNeeded,
+  useBackupPrompt,
   usePasskeySession,
 } from './passkey'
 import type { Call } from './sender'
@@ -25,13 +32,19 @@ vi.mock('../config', async (importOriginal) => ({
 // A fake of the lazily loaded SDK module. toWebAuthnCredential is the passkey prompt.
 const kit = vi.hoisted(() => {
   const bundler = { waitForUserOperationReceipt: vi.fn(), estimateUserOperationGas: vi.fn(), sendUserOperation: vi.fn() }
+  const registerRecoveryAddress = vi.fn()
   return {
     bundler,
+    registerRecoveryAddress,
+    generateMnemonic: vi.fn(() => 'one two three four five six seven eight nine ten eleven twelve'),
+    english: [],
+    mnemonicToAccount: vi.fn(() => ({ address: '0x00000000000000000000000000000000000000Ee' })),
     sdk: {
+      recoveryActions: vi.fn(() => ({ registerRecoveryAddress })),
       toWebAuthnCredential: vi.fn(async () => ({ id: 'cred-live', publicKey: '0x', raw: {} })),
       toPasskeyTransport: vi.fn(() => ({})),
       toModularTransport: vi.fn(() => ({})),
-      toCircleSmartAccount: vi.fn(async () => ({ address: '0x00000000000000000000000000000000000000cC' })),
+      toCircleSmartAccount: vi.fn(async () => ({ address: '0x00000000000000000000000000000000000000cc' })),
       getUserOperationGasPrice: vi.fn(),
       WebAuthnMode: { Register: 'Register', Login: 'Login' },
     },
@@ -41,6 +54,9 @@ const kit = vi.hoisted(() => {
   }
 })
 vi.mock('./passkeyKit', () => kit)
+// The account's USDC balance, read before a backup is added.
+const balance = vi.hoisted(() => ({ value: 1_000_000n }))
+vi.mock('./clients', () => ({ arcClient: { readContract: async () => balance.value } }))
 vi.mock('wagmi', () => ({
   useConfig: () => ({}),
   useConnection: () => ({ address: '0x9999999999999999999999999999999999999999', isConnected: true }),
@@ -206,7 +222,7 @@ describe('passkey session store', () => {
     await act(async () => {
       await loginPasskey()
     })
-    expect(result.current).toEqual({ address: '0x00000000000000000000000000000000000000cC', credentialId: 'cred-live' })
+    expect(result.current).toEqual({ address: '0x00000000000000000000000000000000000000cc', credentialId: 'cred-live' })
     act(() => clearPasskeySession())
     expect(result.current).toBeNull()
   })
@@ -253,5 +269,87 @@ describe('pickWallet', () => {
     expect(pickWallet({ passkey: P, external: null, prefer: 'external' })).toBe('passkey')
     expect(pickWallet({ passkey: null, external: E, prefer: 'passkey' })).toBe('external')
     expect(pickWallet({ passkey: null, external: null, prefer: 'passkey' })).toBeNull()
+  })
+})
+
+describe('interrupted sign-up', () => {
+  // The passkey can be saved in the browser and on Circle's side before the account fails to load. The person
+  // must be able to sign in with that passkey afterwards, not be stuck with a passkey that opens nothing.
+  it('login works after an interrupted register', async () => {
+    kit.sdk.toCircleSmartAccount.mockRejectedValueOnce(new Error('network down'))
+    await expect(registerPasskey('ana')).rejects.toThrow('network down')
+    expect(readPasskeySession()).toBeNull()
+    await loginPasskey()
+    expect(readPasskeySession()).toEqual({ address: '0x00000000000000000000000000000000000000cc', credentialId: 'cred-live' })
+  })
+})
+
+describe('backup prompt', () => {
+  afterEach(() => localStorage.clear())
+
+  // Losing the only passkey loses the account for good, so a new account is asked straight away, and My page
+  // keeps asking until a recovery key is saved, even after Later.
+  it('asks a new account once, and keeps the backup needed until it is saved', async () => {
+    const { result } = renderHook(() => {
+      const stored = usePasskeySession()
+      return { needed: useBackupNeeded(stored), prompt: useBackupPrompt(stored) }
+    })
+    expect(result.current).toEqual({ needed: false, prompt: false })
+    await act(async () => {
+      await registerPasskey('ana')
+    })
+    expect(result.current).toEqual({ needed: true, prompt: true })
+    act(() => dismissBackupPrompt())
+    expect(result.current).toEqual({ needed: true, prompt: false })
+    act(() => markBackupSaved('0x00000000000000000000000000000000000000cc'))
+    expect(result.current).toEqual({ needed: false, prompt: false })
+  })
+
+  // Signing in to an account that already exists is not the moment to interrupt. My page still asks.
+  it('does not interrupt a returning sign-in', async () => {
+    const { result } = renderHook(() => useBackupPrompt(usePasskeySession()))
+    await act(async () => {
+      await loginPasskey()
+    })
+    expect(result.current).toBe(false)
+  })
+})
+
+describe('addBackupPasskey', () => {
+  const stored = { address: getAddress('0x00000000000000000000000000000000000000cc') as Address, credentialId: 'cred-live' }
+
+  beforeEach(() => {
+    balance.value = 1_000_000n
+    kit.registerRecoveryAddress.mockReset()
+    kit.registerRecoveryAddress.mockResolvedValue(OP_HASH)
+    kit.bundler.waitForUserOperationReceipt.mockResolvedValue(receipt(true))
+  })
+
+  it('makes a 12-word recovery phrase', async () => {
+    expect((await newRecoveryPhrase()).split(' ')).toHaveLength(12)
+  })
+
+  // Circle's recovery support: the phrase's address becomes a recovery owner of the account. No paymaster: the
+  // account pays the gas, and the call only counts once the user operation succeeds.
+  it('registers the phrase address as the recovery address with no paymaster', async () => {
+    await addBackupPasskey(stored, 'one two three')
+    expect(kit.mnemonicToAccount).toHaveBeenCalledWith('one two three')
+    expect(kit.registerRecoveryAddress).toHaveBeenCalledTimes(1)
+    const args = kit.registerRecoveryAddress.mock.calls[0]![0]
+    expect(args.recoveryAddress).toBe('0x00000000000000000000000000000000000000Ee')
+    expect(args.account.address).toBe('0x00000000000000000000000000000000000000cc')
+    expect(args.paymaster).toBeUndefined()
+  })
+
+  // The gas comes out of the account's USDC. Below the buffer the bundler would refuse with a code nobody can read.
+  it('refuses with a plain message when the account cannot pay the gas', async () => {
+    balance.value = 49_999n
+    await expect(addBackupPasskey(stored, 'one two three')).rejects.toThrow('Add at least 0.05 USDC')
+    expect(kit.registerRecoveryAddress).not.toHaveBeenCalled()
+  })
+
+  it('fails when the user operation reverts', async () => {
+    kit.bundler.waitForUserOperationReceipt.mockResolvedValue(receipt(false))
+    await expect(addBackupPasskey(stored, 'one two three')).rejects.toThrow()
   })
 })

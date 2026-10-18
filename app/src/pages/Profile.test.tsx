@@ -23,12 +23,19 @@ vi.mock('../lib/campaigns', async (importOriginal) => ({
 }))
 vi.mock('../hooks/useActivity', () => ({ blockTimes: async () => new Map() }))
 vi.mock('../hooks/useName', () => ({ useName: () => ({ data: undefined }) }))
+const backup = vi.hoisted(() => ({ needed: false }))
+vi.mock('../lib/passkey', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/passkey')>()),
+  usePasskeySession: () => (backup.needed ? { address: '0x00000000000000000000000000000000000000cC', credentialId: 'c' } : null),
+  useBackupNeeded: () => backup.needed,
+}))
 
 afterEach(() => {
   cleanup()
   state.sender = null
   state.mine = null
   state.gifts = null
+  backup.needed = false
 })
 
 function renderProfile() {
@@ -42,6 +49,22 @@ function renderProfile() {
 }
 
 describe('Profile', () => {
+  // Later only puts off the prompt after sign-up. My page keeps asking until a recovery key is saved.
+  it('shows the backup prompt for a passkey account without a backup, with no Later', () => {
+    backup.needed = true
+    state.sender = { kind: 'passkey', address: '0x00000000000000000000000000000000000000cC', send: vi.fn() }
+    renderProfile()
+    expect(screen.getByRole('heading', { name: 'Add a backup' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Add a backup' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Later' })).toBeNull()
+  })
+
+  it('shows no backup prompt once a backup exists', () => {
+    state.sender = { kind: 'passkey', address: '0x00000000000000000000000000000000000000cC', send: vi.fn() }
+    renderProfile()
+    expect(screen.queryByRole('heading', { name: 'Add a backup' })).toBeNull()
+  })
+
   // With no wallet there is no address to look up, so the page asks to connect instead of loading forever.
   it('asks to sign in when no wallet is connected', () => {
     renderProfile()
