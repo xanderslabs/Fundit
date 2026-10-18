@@ -1,4 +1,4 @@
-import { Link, useParams } from 'react-router'
+import { useParams } from 'react-router'
 import { type Address, isAddress, isAddressEqual } from 'viem'
 import { ActivityList } from '../components/ActivityList'
 import { BackupBanner } from '../components/BackupBanner'
@@ -8,6 +8,7 @@ import { Name } from '../components/Name'
 import { Progress } from '../components/Progress'
 import { SharePanel } from '../components/SharePanel'
 import { StatusBadge } from '../components/StatusBadge'
+import { Button, ButtonLink, Card, PageHeader, Stat } from '../components/ui'
 import { EXPLORER_URL } from '../config'
 import { useCampaign } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
@@ -16,17 +17,16 @@ import { bpsToPercent, formatAmount } from '../lib/format'
 import { shortAddress } from '../lib/names'
 import { safeHttpsUrl } from '../lib/urls'
 import { NotFound } from './NotFound'
+import './CampaignPage.css'
 
+// .stats is a test hook for the page order.
 function CampaignStats({ view }: { view: CampaignView }) {
   const { summary, symbol } = view
   return (
-    <div className="stats">
-      <p className="stats-raised">
-        <strong>{formatAmount(summary.raised, symbol)}</strong>
-        <span>raised of {formatAmount(summary.goal, symbol)} goal</span>
-      </p>
+    <Card className="stats campaign-stats">
+      <Stat size="lg" value={formatAmount(summary.raised, symbol)} label={`raised of ${formatAmount(summary.goal, symbol)} goal`} />
       <Progress raised={summary.raised} goal={summary.goal} size="lg" />
-      <dl className="stats-list">
+      <dl className="campaign-facts">
         <div>
           <dt>Currency</dt>
           <dd>{symbol} on Arc</dd>
@@ -36,7 +36,7 @@ function CampaignStats({ view }: { view: CampaignView }) {
           <dd>{bpsToPercent(summary.withdrawFeeBps)}</dd>
         </div>
       </dl>
-    </div>
+    </Card>
   )
 }
 
@@ -44,7 +44,7 @@ function CampaignLinks({ links }: { links: readonly string[] }) {
   const safe = links.map(safeHttpsUrl).filter((u): u is string => u !== null)
   if (safe.length === 0) return null
   return (
-    <section className="links">
+    <section className="campaign-section campaign-links">
       <h2>Links</h2>
       <ul>
         {safe.map((url, i) => (
@@ -61,7 +61,7 @@ function CampaignLinks({ links }: { links: readonly string[] }) {
 
 function CreatorLine({ creator, address }: { creator: Address; address: Address }) {
   return (
-    <dl className="facts">
+    <dl className="campaign-facts campaign-organiser">
       <div>
         <dt>Organiser</dt>
         <dd>
@@ -91,40 +91,43 @@ function CampaignBody({ view }: { view: CampaignView }) {
   })
   return (
     <article className="campaign">
-      <header className="campaign-head">
-        <div className="card-tags">
-          <StatusBadge summary={summary} />
-          <span className="muted">Started {created}</span>
-        </div>
-        <h1>{summary.meta.title || 'Untitled Fundit'}</h1>
-        {isCreator && (
-          <div className="campaign-actions">
-            <Link to={`/manage/${view.address}`} className="btn btn-outline">
+      <PageHeader
+        width="wide"
+        title={summary.meta.title || 'Untitled Fundit'}
+        subtitle={
+          <span className="campaign-meta">
+            <StatusBadge summary={summary} />
+            <span>Started {created}</span>
+          </span>
+        }
+        actions={
+          isCreator && (
+            <ButtonLink to={`/manage/${view.address}`} variant="secondary">
               Manage this Fundit
-            </Link>
-          </div>
-        )}
-      </header>
+            </ButtonLink>
+          )
+        }
+      />
       <BackupBanner view={view} />
       {/* DOM order is the narrow-screen and screen reader order. Wide screens place stats and Give in the
           right column with grid areas, so the left column runs on without gaps. */}
       <div className="campaign-grid">
         <CampaignImage url={summary.meta.imageUrl} title={summary.meta.title} className="campaign-hero" />
         <aside className="campaign-side">
-          <div className="panel">
-            <CampaignStats view={view} />
-          </div>
+          <CampaignStats view={view} />
           <DonatePanel view={view} />
         </aside>
         <div className="campaign-body">
-          <section>
+          <section className="campaign-section">
             <h2>About</h2>
-            <p className="description">{summary.meta.description || 'The organiser has not added a description.'}</p>
+            <p className="campaign-description">{summary.meta.description || 'The organiser has not added a description.'}</p>
           </section>
           <CampaignLinks links={summary.meta.links} />
           <CreatorLine creator={summary.creator} address={view.address} />
-          <section className="panel" aria-labelledby="share-heading">
-            <SharePanel address={view.address} title={summary.meta.title} isCreator={isCreator} headingId="share-heading" />
+          <section aria-labelledby="share-heading">
+            <Card as="div">
+              <SharePanel address={view.address} title={summary.meta.title} isCreator={isCreator} headingId="share-heading" />
+            </Card>
           </section>
           <ActivityList campaign={view.address} createdAtBlock={summary.createdAtBlock} symbol={view.symbol} />
         </div>
@@ -142,19 +145,19 @@ export function CampaignPage() {
   if (!valid || query.data === 'not-a-campaign') return <NotFound fundit />
   if (query.isError) {
     return (
-      <section className="notice">
+      <section className="campaign-notice">
         <h1>Could not load this Fundit</h1>
         <p>The Arc network did not answer. Check your connection and try again.</p>
-        <button type="button" className="btn" onClick={() => query.refetch()}>
+        <Button variant="secondary" onClick={() => query.refetch()}>
           Try again
-        </button>
+        </Button>
       </section>
     )
   }
   if (query.isPending || !query.data) {
     return (
-      <section className="notice" aria-busy="true">
-        <p className="muted">Loading Fundit...</p>
+      <section className="campaign-notice" aria-busy="true">
+        <p className="campaign-muted">Loading Fundit...</p>
       </section>
     )
   }

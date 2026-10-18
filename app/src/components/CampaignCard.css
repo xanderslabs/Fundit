@@ -1,0 +1,112 @@
+/* A Fundit in a grid: the image, the tags, the title, the organiser and the progress. The whole card is a link. */
+.fundit-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  color: var(--text);
+  text-decoration: none;
+  transition: box-shadow var(--duration) var(--ease);
+}
+
+a.fundit-card:hover {
+  box-shadow: var(--shadow-1);
+}
+
+a.fundit-card:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.fundit-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5) var(--space-5);
+}
+
+.fundit-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.fundit-card-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  line-height: var(--text-lg-line);
+  letter-spacing: var(--tracking-heading);
+  overflow-wrap: anywhere;
+}
+
+.fundit-card-by,
+.fundit-card-amounts {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-line);
+}
+
+.fundit-card-text {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow-wrap: anywhere;
+}
+
+.fundit-card-amounts {
+  overflow-wrap: anywhere;
+}
+
+.fundit-card-amounts strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-bold);
+}
+
+.fundit-card-skeleton .fundit-card-image,
+.fundit-skeleton-line {
+  background: var(--surface);
+  animation: fundit-pulse 1.4s ease-in-out infinite;
+}
+
+.fundit-skeleton-line {
+  height: var(--space-4);
+  border-radius: var(--radius-sm);
+}
+
+.fundit-skeleton-short {
+  width: 60%;
+}
+
+@keyframes fundit-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@media (max-width: 480px) {
+  .fundit-card-body {
+    padding: var(--space-4);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fundit-card {
+    transition: none;
+  }
+
+  .fundit-card-skeleton .fundit-card-image,
+  .fundit-skeleton-line {
+    animation: none;
+  }
+}

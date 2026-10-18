@@ -1,4 +1,4 @@
-/* Donate panel on the campaign page */
+/* Legacy form classes still used by Add money, Send money out, Manage and TxStatus until they move to the system. */
 .donate-form {
   display: flex;
   flex-direction: column;
@@ -48,18 +48,10 @@
   font-weight: var(--weight-bold);
 }
 
-.donate-quick,
 .donate-options {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.donate-quick .btn {
-  flex: 1 1 0;
-  min-width: 56px;
-  padding-left: 8px;
-  padding-right: 8px;
 }
 
 /* The four tip choices always share one row, down to a 320px screen. */
@@ -93,82 +85,6 @@
 }
 
 .donate-fields:disabled .donate-option {
-  cursor: default;
-  opacity: 0.6;
-}
-
-/* The Hide my name switch and the byte counter share the line under the message box. */
-.donate-message-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px 16px;
-}
-
-.donate-message-meta .counter {
-  align-self: center;
-}
-
-.switch {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-}
-
-/* The real checkbox sits over the track, invisible, so it keeps its role, focus and clicks. */
-.donate-form .switch input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  opacity: 0;
-  cursor: inherit;
-}
-
-.switch-track {
-  position: relative;
-  flex: none;
-  width: 40px;
-  height: 24px;
-  border-radius: var(--radius-pill);
-  background: var(--border);
-  transition: background 0.15s;
-}
-
-.switch-track::after {
-  content: '';
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--bg);
-  box-shadow: 0 1px 2px rgb(16 25 40 / 0.2);
-  transition: transform 0.15s;
-}
-
-.switch input:checked + .switch-track {
-  background: var(--primary);
-}
-
-.switch input:checked + .switch-track::after {
-  transform: translateX(16px);
-}
-
-.switch input:focus-visible + .switch-track {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
-
-.donate-fields:disabled .switch {
   cursor: default;
   opacity: 0.6;
 }
@@ -207,16 +123,6 @@
 
 .status-success {
   border-color: var(--success);
-}
-
-.donate-submit {
-  align-self: stretch;
-}
-
-/* Signed out, Sign in to give sits outside the form's flex column, so it is sized here to match Give. */
-.donate > .donate-submit {
-  width: 100%;
-  margin-top: 16px;
 }
 
 .donate-actions {

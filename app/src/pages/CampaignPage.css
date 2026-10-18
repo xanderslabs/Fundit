@@ -1,0 +1,180 @@
+/* The Fundit page. Wide screens: the story on the left, stats and Give in a sticky column on the right. */
+.campaign-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-line);
+}
+
+.campaign > .backup-banner {
+  margin-bottom: var(--space-5);
+}
+
+.campaign-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  /* The side column spans both rows. The second row takes any extra height, so a tall side column never
+     pushes About away from the image. */
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    'hero side'
+    'body side';
+  gap: var(--space-6) var(--space-7);
+  align-items: start;
+}
+
+.campaign-hero {
+  grid-area: hero;
+  border-radius: var(--radius-lg);
+}
+
+.campaign-side {
+  grid-area: side;
+  position: sticky;
+  top: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.campaign-body {
+  grid-area: body;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.campaign-body h2 {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--text-xl-line);
+  letter-spacing: var(--tracking-heading);
+}
+
+/* Inside the Share card the heading is a card title, set by SharePanel.css. */
+.campaign-body .share-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  line-height: var(--text-lg-line);
+}
+
+.campaign-description {
+  margin: 0;
+  font-size: var(--text-md);
+  line-height: var(--text-md-line);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.campaign-links ul {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.campaign-links a,
+.campaign-facts a {
+  color: var(--text-muted);
+  text-decoration: underline;
+  overflow-wrap: anywhere;
+}
+
+.campaign-links a:hover,
+.campaign-facts a:hover {
+  color: var(--text);
+}
+
+/* Stats: the raised figure, the bar, then the currency and the fee. */
+.campaign-stats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.campaign-facts {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-line);
+}
+
+.campaign-facts div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.campaign-facts dt {
+  color: var(--text-muted);
+}
+
+.campaign-facts dd {
+  min-width: 0;
+  margin: 0;
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.campaign-organiser {
+  max-width: 420px;
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--line);
+}
+
+.campaign-notice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  max-width: var(--page-narrow);
+  margin: var(--space-7) auto;
+  text-align: center;
+}
+
+.campaign-notice > * {
+  margin: 0;
+}
+
+.campaign-notice h1 {
+  font-size: var(--text-2xl);
+  line-height: var(--text-2xl-line);
+  letter-spacing: var(--tracking-heading);
+}
+
+.campaign-muted {
+  color: var(--text-muted);
+}
+
+@media (max-width: 900px) {
+  .campaign-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    grid-template-areas:
+      'hero'
+      'side'
+      'body';
+    gap: var(--space-5);
+  }
+
+  .campaign-side {
+    position: static;
+  }
+}
+
+@media (max-width: 480px) {
+  .campaign-body h2,
+  .campaign-notice h1 {
+    font-size: var(--text-lg);
+    line-height: var(--text-lg-line);
+  }
+}

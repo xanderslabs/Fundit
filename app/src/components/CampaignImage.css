@@ -1,0 +1,19 @@
+/* The class names stay: Create's image preview and the card skeleton use .campaign-image too. */
+.campaign-image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background: var(--surface);
+}
+
+/* No image: the first letter of the title on a brand tile. */
+.campaign-image-empty {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--text-muted), var(--text));
+  color: var(--bg);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--text-2xl-line);
+}

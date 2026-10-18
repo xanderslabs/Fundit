@@ -1,4 +1,5 @@
 import { progressPercent, realPercent } from '../lib/format'
+import './Progress.css'
 
 type Props = { raised: bigint; goal: bigint; size?: 'sm' | 'lg' }
 

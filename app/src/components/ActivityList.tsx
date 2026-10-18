@@ -10,6 +10,8 @@ import { arcClient } from '../lib/clients'
 import { formatAmount } from '../lib/format'
 import { Name } from './Name'
 import { TxStatus, useTx } from './TxStatus'
+import { Button, StatusBox } from './ui'
+import './ActivityList.css'
 
 function Who({ address }: { address: Address }) {
   return <Name address={address} avatar={false} />
@@ -26,7 +28,7 @@ function Line({ item, symbol }: { item: ActivityItem; symbol: TokenSymbol }) {
         <>
           <p>
             {anonymous ? <span className="name-text">Anonymous</span> : <Who address={d.donor as Address} />} gave <strong>{amount(d.amount)}</strong>
-            {(d.tip as bigint) > 0n && <span className="muted"> and tipped Fundit {amount(d.tip)}</span>}
+            {(d.tip as bigint) > 0n && <span className="activity-muted"> and tipped Fundit {amount(d.tip)}</span>}
           </p>
           {text !== '' && <p className="activity-message">{text}</p>}
         </>
@@ -42,7 +44,7 @@ function Line({ item, symbol }: { item: ActivityItem; symbol: TokenSymbol }) {
       return (
         <p>
           Organiser withdrew <strong>{amount(d.amount)}</strong>
-          <span className="muted"> ({amount(d.net)} after fees)</span>
+          <span className="activity-muted"> ({amount(d.net)} after fees)</span>
         </p>
       )
     case 'edit':
@@ -106,18 +108,18 @@ function Unaccounted({ campaign, symbol }: { campaign: Address; symbol: TokenSym
   }
 
   return (
-    <div className="status-box activity-unaccounted">
+    <StatusBox className="activity-unaccounted">
       {amount > 0n && (
         <>
           <p>
             <strong>{formatAmount(amount, symbol)} from other chains, not counted yet</strong>
           </p>
           {sender ? (
-            <button type="button" className="btn btn-outline" disabled={tx.locked} onClick={count}>
+            <Button variant="secondary" className="activity-count" disabled={tx.locked} onClick={count}>
               {tx.busy ? 'Counting...' : 'Count it now'}
-            </button>
+            </Button>
           ) : (
-            <p className="muted">Sign in with any Fundit account to count it.</p>
+            <p className="activity-muted">Sign in with any Fundit account to count it.</p>
           )}
         </>
       )}
@@ -127,7 +129,7 @@ function Unaccounted({ campaign, symbol }: { campaign: Address; symbol: TokenSym
         successText="Counted. It now shows in the list."
         startOverWarning="The earlier transaction may still go through. Try again anyway?"
       />
-    </div>
+    </StatusBox>
   )
 }
 
@@ -140,23 +142,23 @@ export function ActivityList({ campaign, createdAtBlock, symbol }: { campaign: A
     <section className="activity" aria-label="Activity">
       <h2>Activity</h2>
       <Unaccounted campaign={campaign} symbol={symbol} />
-      {query.isPending && <p className="muted">Loading activity...</p>}
+      {query.isPending && <p className="activity-muted">Loading activity...</p>}
       {query.isError && items.length === 0 && (
-        <p className="muted">
+        <p className="activity-muted activity-retry">
           Could not load activity.{' '}
-          <button type="button" className="btn btn-outline" onClick={() => query.refetch()}>
+          <Button variant="secondary" onClick={() => query.refetch()}>
             Try again
-          </button>
+          </Button>
         </p>
       )}
-      {query.isSuccess && items.length === 0 && <p className="muted">No activity yet.</p>}
+      {query.isSuccess && items.length === 0 && <p className="activity-muted">No activity yet.</p>}
       {items.length > 0 && (
         <ol className="activity-list">
           {items.map(({ item, time }) => (
             <li key={`${item.txHash}-${item.logIndex}`}>
               <Line item={item} symbol={symbol} />
               <a
-                className="muted activity-time"
+                className="activity-time"
                 href={`${EXPLORER_URL}/tx/${item.txHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -168,16 +170,11 @@ export function ActivityList({ campaign, createdAtBlock, symbol }: { campaign: A
         </ol>
       )}
       {query.hasNextPage && (
-        <button
-          type="button"
-          className="btn btn-outline"
-          disabled={query.isFetchingNextPage}
-          onClick={() => query.fetchNextPage()}
-        >
+        <Button variant="secondary" className="activity-more" disabled={query.isFetchingNextPage} onClick={() => query.fetchNextPage()}>
           {query.isFetchingNextPage ? 'Loading...' : 'Load more'}
-        </button>
+        </Button>
       )}
-      {query.isFetchNextPageError && <p className="muted">Could not load more. Try again.</p>}
+      {query.isFetchNextPageError && <p className="activity-muted">Could not load more. Try again.</p>}
     </section>
   )
 }

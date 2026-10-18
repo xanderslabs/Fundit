@@ -2,6 +2,8 @@ import { type KeyboardEvent, type MouseEvent, useEffect, useId, useRef, useState
 import { createPoster, downloadBlob, posterFilename } from '../lib/poster'
 import { qrMatrix, qrPath } from '../lib/qr'
 import { embedSnippet, funditUrl, shareMessage, shareTargets } from '../lib/share'
+import { Button } from './ui'
+import './SharePanel.css'
 
 type Props = { address: string; title: string; isCreator: boolean }
 
@@ -51,9 +53,9 @@ function PosterButton({ address, title, url }: { address: string; title: string;
   }
   return (
     <>
-      <button type="button" className="btn btn-outline" onClick={download} disabled={state === 'busy'}>
+      <Button variant="secondary" onClick={download} disabled={state === 'busy'}>
         {state === 'busy' ? 'Making poster...' : 'Download poster'}
-      </button>
+      </Button>
       <span className="share-note" role="status">
         {state === 'failed' && 'Could not make the poster in this browser.'}
       </span>
@@ -73,9 +75,9 @@ function EmbedCode({ snippet }: { snippet: string }) {
       </label>
       <textarea id={id} className="share-code" readOnly rows={4} value={snippet} onFocus={(e) => e.currentTarget.select()} />
       <div className="share-row">
-        <button type="button" className="btn btn-outline" onClick={async () => setCopied((await copyText(snippet)) ? 'copied' : 'failed')}>
+        <Button variant="secondary" onClick={async () => setCopied((await copyText(snippet)) ? 'copied' : 'failed')}>
           Copy code
-        </button>
+        </Button>
         <span className="share-note" role="status">
           {copied === 'copied' && 'Code copied'}
           {copied === 'failed' && 'Select the code above and copy it.'}
@@ -113,7 +115,7 @@ export function SharePanel({ address, title, isCreator, headingId }: Props & { h
 
   return (
     <div className="share-panel">
-      <h2 id={headingId}>Share this Fundit</h2>
+      <h2 id={headingId} className="share-title">Share this Fundit</h2>
       <p className="share-message">{message}</p>
 
       <div className="share-row">
@@ -121,9 +123,7 @@ export function SharePanel({ address, title, isCreator, headingId }: Props & { h
           Link to this Fundit
         </label>
         <input id={linkId} className="share-url" readOnly value={url} onFocus={(e) => e.currentTarget.select()} />
-        <button type="button" className="btn" onClick={copyLink}>
-          Copy link
-        </button>
+        <Button onClick={copyLink}>Copy link</Button>
       </div>
       <p className="share-note" role="status">
         {copied === 'copied' && 'Link copied'}
@@ -131,9 +131,9 @@ export function SharePanel({ address, title, isCreator, headingId }: Props & { h
       </p>
 
       {canShare && (
-        <button type="button" className="btn btn-outline share-native" onClick={nativeShare}>
+        <Button variant="secondary" className="share-native" onClick={nativeShare}>
           Share from this device
-        </button>
+        </Button>
       )}
 
       <ul className="share-targets" aria-label="Share on a network">
@@ -206,16 +206,15 @@ export function ShareDialog(props: Props) {
 
   return (
     <>
-      <button
+      <Button
         ref={trigger}
-        type="button"
-        className="btn btn-outline"
+        variant="secondary"
         aria-haspopup="dialog"
         aria-label={`Share ${props.title.trim() || 'this Fundit'}`}
         onClick={() => setOpen(true)}
       >
         Share
-      </button>
+      </Button>
       {open && (
         <dialog ref={dialog} className="share-dialog" aria-labelledby={headingId} onKeyDown={onKeyDown} onClick={onClick} onClose={close}>
           <div className="share-dialog-body">

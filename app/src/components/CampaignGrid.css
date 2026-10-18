@@ -1,0 +1,30 @@
+.fundit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-5);
+}
+
+/* My page: a card with its buttons under it, outside the card's link. */
+.fundit-grid-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.fundit-grid-item > .fundit-card {
+  flex: 1;
+}
+
+.fundit-grid-action {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+@media (max-width: 480px) {
+  .fundit-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import type { CampaignView } from '../lib/campaigns'
 import { CampaignCard, CardSkeleton } from './CampaignCard'
+import { Button, EmptyState } from './ui'
+import './CampaignGrid.css'
 
 // action renders below each card, outside the card's link (My page puts a Share button there).
 type Props = {
@@ -14,21 +16,21 @@ type Props = {
 export function CampaignGrid({ views, loading, empty, skeletons = 6, action }: Props) {
   if (loading) {
     return (
-      <div className="grid" aria-busy="true">
+      <div className="fundit-grid" aria-busy="true">
         {Array.from({ length: skeletons }, (_, i) => (
           <CardSkeleton key={i} />
         ))}
       </div>
     )
   }
-  if (!views || views.length === 0) return <div className="empty">{empty}</div>
+  if (!views || views.length === 0) return <EmptyState>{empty}</EmptyState>
   return (
-    <div className="grid">
+    <div className="fundit-grid">
       {views.map((v) =>
         action ? (
-          <div key={v.address} className="card-wrap">
+          <div key={v.address} className="fundit-grid-item">
             <CampaignCard view={v} />
-            <div className="card-action">{action(v)}</div>
+            <div className="fundit-grid-action">{action(v)}</div>
           </div>
         ) : (
           <CampaignCard key={v.address} view={v} />
@@ -40,11 +42,14 @@ export function CampaignGrid({ views, loading, empty, skeletons = 6, action }: P
 
 export function LoadError({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className="empty">
+    <EmptyState
+      action={
+        <Button variant="secondary" onClick={onRetry}>
+          Try again
+        </Button>
+      }
+    >
       <p>We could not reach the Arc network.</p>
-      <button type="button" className="btn btn-outline" onClick={onRetry}>
-        Try again
-      </button>
-    </div>
+    </EmptyState>
   )
 }

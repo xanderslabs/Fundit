@@ -299,7 +299,7 @@ describe('DonatePanel', () => {
       expect(toggle().checked).toBe(false)
       expect(screen.queryByLabelText('Give anonymously')).toBeNull()
       const box = screen.getByLabelText('Message (optional)')
-      const field = box.closest('.form-field')!
+      const field = box.closest('.give-message')!
       expect(field.contains(toggle())).toBe(true)
       expect(box.compareDocumentPosition(toggle()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     })

@@ -1,0 +1,287 @@
+/* Give, on the Fundit page. */
+.give {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.give-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  line-height: var(--text-lg-line);
+  letter-spacing: var(--tracking-heading);
+}
+
+.give-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.give-fields,
+.give-tips {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.give-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.give-amount,
+.give-message {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.give-message textarea {
+  resize: vertical;
+}
+
+.give-error,
+.give-hint {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-line);
+  overflow-wrap: anywhere;
+}
+
+.give-error {
+  color: var(--danger-ink);
+  font-weight: var(--weight-medium);
+}
+
+.give-error a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.give-hint {
+  color: var(--text-muted);
+}
+
+/* The four quick amounts and the four tip choices each share one row, down to a 320px screen. */
+.give-quick,
+.give-tip-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.give-quick .ui-btn {
+  padding-right: var(--space-2);
+  padding-left: var(--space-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.give-legend {
+  margin-bottom: var(--space-2);
+  padding: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  line-height: var(--text-sm-line);
+}
+
+.give-tip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-2) var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--duration) var(--ease),
+    border-color var(--duration) var(--ease);
+}
+
+.give-tip:hover {
+  background: var(--surface);
+}
+
+.give-tip input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--text);
+}
+
+.give-tip:has(input:checked) {
+  border-color: var(--text);
+  background: var(--surface);
+  font-weight: var(--weight-bold);
+}
+
+.give-tip:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.give-fields:disabled .give-tip,
+.give-fields:disabled .give-switch {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* The Hide my name switch and the byte counter share the line under the message box. */
+.give-message-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+
+.give-counter {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--text-xs-line);
+}
+
+.give-counter-over {
+  color: var(--danger-ink);
+  font-weight: var(--weight-bold);
+}
+
+.give-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  line-height: var(--text-sm-line);
+  cursor: pointer;
+}
+
+/* The real checkbox sits over the whole switch, invisible, so it keeps its role, focus and clicks. */
+.give-switch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+
+.give-switch-track {
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 24px;
+  border-radius: var(--radius-pill);
+  background: var(--border);
+  transition: background-color var(--duration) var(--ease);
+}
+
+.give-switch-track::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-pill);
+  background: var(--bg);
+  box-shadow: var(--shadow-1);
+  transition: transform var(--duration) var(--ease);
+}
+
+.give-switch input:checked + .give-switch-track {
+  background: var(--text-muted);
+}
+
+.give-switch input:checked + .give-switch-track::after {
+  transform: translateX(16px);
+}
+
+.give-switch input:focus-visible + .give-switch-track {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Where the money goes. Figures line up on the right. */
+.give-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-line);
+}
+
+.give-breakdown div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.give-breakdown dt,
+.give-breakdown dd {
+  margin: 0;
+}
+
+.give-breakdown dd {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.give-total {
+  margin-top: var(--space-1);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+  font-weight: var(--weight-bold);
+}
+
+/* Not hidden when empty: a live region must be in the page before its text arrives to be read out. */
+.give-status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.give-status > p {
+  margin: 0;
+}
+
+.give-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+@media (max-width: 480px) {
+  .give-tip {
+    font-size: var(--text-sm);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .give-tip,
+  .give-switch-track,
+  .give-switch-track::after {
+    transition: none;
+  }
+}

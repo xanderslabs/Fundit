@@ -149,6 +149,17 @@ describe('CampaignPage', () => {
     expect(side.contains(screen.getByRole('heading', { name: 'Share this Fundit' }))).toBe(false)
   })
 
+  // The raised amount is the page's main figure, so it uses the large Stat (tabular, weight 700), and the status
+  // is a shared Badge, so it reads the same here as on the cards.
+  it('shows the raised amount as a large Stat and the status as a Badge', () => {
+    hookState.current = { data: view({}), isPending: false, isError: false }
+    const { container } = renderPage()
+    const stat = container.querySelector('.stats .ui-stat-lg')!
+    expect(stat.querySelector('.ui-stat-value')!.textContent).toBe('250.00 USDC')
+    expect(stat.querySelector('.ui-stat-label')!.textContent).toBe('raised of 1,000.00 USDC goal')
+    expect(screen.getByText('Open').className).toBe('ui-badge ui-badge-success')
+  })
+
   // A closed campaign reverts every donation, so the page must not offer one.
   it('disables donating on a closed campaign', () => {
     hookState.current = { data: view({}, true), isPending: false, isError: false }

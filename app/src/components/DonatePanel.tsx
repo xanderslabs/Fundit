@@ -26,6 +26,8 @@ import { ADD_MONEY_PATH } from '../lib/urls'
 import { byteLength } from '../lib/validate'
 import { SignInButton } from './AccountMenu'
 import { AddMoneyLink, PASSKEY_LOGIN_TO_CHECK, PASSKEY_PROCESSING, recheckResult } from './TxStatus'
+import { AmountInput, Button, Card, Field, StatusBox } from './ui'
+import './DonatePanel.css'
 
 const QUICK_AMOUNTS = ['10', '25', '50', '100'] as const
 const TIP_PERCENTS = [0, 5, 10, 15] as const
@@ -278,60 +280,57 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   }
 
   return (
-    <section className="panel donate" aria-label="Give">
-      <h2>Give</h2>
-      {closed && <p className="field-error">This Fundit is closed.</p>}
-      <form className="donate-form" onSubmit={submit} noValidate>
-        <fieldset className="donate-fields" disabled={closed || locked}>
-          <div className="form-field">
-            <label htmlFor="donate-amount">Amount</label>
-            <div className="donate-amount">
-              <input
+    <Card className="give" label="Give">
+      <h2 className="give-title">Give</h2>
+      {closed && <p className="give-error">This Fundit is closed.</p>}
+      <form className="give-form" onSubmit={submit} noValidate>
+        <fieldset className="give-fields" disabled={closed || locked}>
+          <div className="give-amount">
+            <Field label="Amount" id="donate-amount">
+              <AmountInput
                 id="donate-amount"
-                inputMode="decimal"
-                autoComplete="off"
+                currency={symbol}
                 placeholder="25"
                 value={amountText}
                 onChange={(e) => setAmountText(e.target.value)}
                 aria-invalid={parsed && !parsed.ok ? true : undefined}
                 aria-describedby="donate-amount-error donate-balance"
               />
-              <span className="donate-symbol">{symbol}</span>
-            </div>
-            <div className="donate-quick" role="group" aria-label="Quick amounts">
+            </Field>
+            <div className="give-quick" role="group" aria-label="Quick amounts">
               {QUICK_AMOUNTS.map((q) => (
-                <button key={q} type="button" className="btn btn-outline" onClick={() => setAmountText(q)}>
+                <Button key={q} variant="secondary" onClick={() => setAmountText(q)}>
                   {q}
-                </button>
+                </Button>
               ))}
             </div>
             {parsed && !parsed.ok && (
-              <p id="donate-amount-error" className="field-error" role="alert">
+              <p id="donate-amount-error" className="give-error" role="alert">
                 {parsed.error}
               </p>
             )}
             {overBalance && balance !== undefined && (
-              <p className="field-error" role="alert">
+              <p className="give-error" role="alert">
                 {notEnough(balance)} <Link to={ADD_MONEY_PATH}>Add money</Link>
               </p>
             )}
             {noGas && reserve !== undefined && (
-              <p className="field-error" role="alert">
+              <p className="give-error" role="alert">
                 {addAtLeast(reserve)} <Link to={ADD_MONEY_PATH}>Add money</Link>
               </p>
             )}
             {balanceNote && (
-              <p id="donate-balance" className="hint">
+              <p id="donate-balance" className="give-hint">
                 {balanceNote}
               </p>
             )}
           </div>
 
-          <fieldset className="form-field">
-            <legend>Tip Fundit (optional)</legend>
-            <div className="donate-options">
+          <fieldset className="give-tips">
+            <legend className="give-legend">Tip Fundit (optional)</legend>
+            <div className="give-tip-options">
               {TIP_PERCENTS.map((pct) => (
-                <label key={pct} className="donate-option">
+                <label key={pct} className="give-tip">
                   <input type="radio" name="donate-tip" checked={tipPercent === pct} onChange={() => setTipPercent(pct)} />
                   <span>{`${pct}%`}</span>
                 </label>
@@ -339,23 +338,23 @@ export function DonatePanel({ view }: { view: CampaignView }) {
             </div>
           </fieldset>
 
-          <div className="form-field">
-            <label htmlFor="donate-message">Message (optional)</label>
-            <textarea
-              id="donate-message"
-              rows={3}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              aria-invalid={messageTooLong ? true : undefined}
-              aria-describedby="donate-message-count"
-            />
-            <div className="donate-message-meta">
-              <label className="switch">
+          <div className="give-message">
+            <Field label="Message (optional)" id="donate-message">
+              <textarea
+                rows={3}
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                aria-invalid={messageTooLong ? true : undefined}
+                aria-describedby="donate-message-count"
+              />
+            </Field>
+            <div className="give-message-meta">
+              <label className="give-switch">
                 <input type="checkbox" role="switch" checked={anonymous} onChange={(e) => setAnonymous(e.target.checked)} />
-                <span className="switch-track" aria-hidden="true" />
+                <span className="give-switch-track" aria-hidden="true" />
                 <span>Hide my name</span>
               </label>
-              <span id="donate-message-count" className={messageTooLong ? 'counter counter-over' : 'counter'}>
+              <span id="donate-message-count" className={messageTooLong ? 'give-counter give-counter-over' : 'give-counter'}>
                 {messageBytes} of {limit} bytes
               </span>
             </div>
@@ -364,7 +363,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
         </fieldset>
 
         {breakdown && (
-          <dl className="donate-breakdown" aria-label="Breakdown">
+          <dl className="give-breakdown" aria-label="Breakdown">
             <div>
               <dt>To the Fundit</dt>
               <dd>{formatExact(breakdown.toCampaign, symbol)}</dd>
@@ -377,7 +376,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
               <dt>Tip for Fundit</dt>
               <dd>{formatExact(breakdown.tip, symbol)}</dd>
             </div>
-            <div className="donate-total">
+            <div className="give-total">
               <dt>Total you pay</dt>
               <dd>{formatExact(breakdown.total, symbol)}</dd>
             </div>
@@ -391,52 +390,49 @@ export function DonatePanel({ view }: { view: CampaignView }) {
           </dl>
         )}
 
-        <div className="donate-status" aria-live="polite">
+        {/* status-error stays on the error boxes: the e2e suite finds a failed send by it. */}
+        <div className="give-status" aria-live="polite">
           {phase.kind === 'sending' && <p>Confirm with your passkey, then wait for the network. This can take a few seconds.</p>}
           {phase.kind === 'checking' && <p>Checking the transaction again...</p>}
           {phase.kind === 'success' && (
-            <div className="status-box status-success">
+            <StatusBox tone="success">
               <p>
                 <strong>Thank you. Your donation went through.</strong>
               </p>
               <p>
                 <ExplorerLink hash={phase.hash} />
               </p>
-            </div>
+            </StatusBox>
           )}
           {phase.kind === 'timeout' && (
-            <div className="status-box">
+            <StatusBox>
               <p>
                 <strong>Your {phase.approve ? 'approval' : 'donation'} is not confirmed yet.</strong> It may still go
                 through. Check it before you try again, so you do not give twice.
               </p>
               <p>{phase.userop ? PASSKEY_PROCESSING : <ExplorerLink hash={phase.hash} />}</p>
-              {phase.note && <p className="field-error">{phase.note}</p>}
-              {phase.userop && !sender?.recheck && <p className="field-error">{PASSKEY_LOGIN_TO_CHECK}</p>}
-              <div className="donate-actions">
+              {phase.note && <p className="give-error">{phase.note}</p>}
+              {phase.userop && !sender?.recheck && <p className="give-error">{PASSKEY_LOGIN_TO_CHECK}</p>}
+              <div className="give-actions">
                 {(!phase.userop || sender?.recheck) && (
-                  <button
-                    type="button"
-                    className="btn btn-outline"
-                    onClick={() => checkAgain(phase.hash, phase.approve, phase.userop === true)}
-                  >
+                  <Button variant="secondary" onClick={() => checkAgain(phase.hash, phase.approve, phase.userop === true)}>
                     Check again
-                  </button>
+                  </Button>
                 )}
-                <button type="button" className="btn btn-outline" onClick={startOver}>
+                <Button variant="secondary" onClick={startOver}>
                   Start over
-                </button>
+                </Button>
               </div>
-            </div>
+            </StatusBox>
           )}
           {phase.kind === 'partial' && (
-            <div className="status-box status-error">
+            <StatusBox tone="error" className="status-error">
               <p>Your approval went through, but the donation was not sent.</p>
               {phase.error && <p>{phase.error}</p>}
-            </div>
+            </StatusBox>
           )}
           {phase.kind === 'error' && (
-            <div className="status-box status-error">
+            <StatusBox tone="error" className="status-error">
               <p>
                 {phase.message}
                 {phase.addMoney && (
@@ -451,22 +447,24 @@ export function DonatePanel({ view }: { view: CampaignView }) {
                   <ExplorerLink hash={phase.hash} />
                 </p>
               )}
-            </div>
+            </StatusBox>
           )}
         </div>
 
         {/* Signed out, the sign-in button sits after the form: its dialog holds a form of its own. */}
         {unconfirmed || (!sender && !closed) ? null : phase.kind === 'partial' ? (
-          <button type="submit" className="btn btn-lg donate-submit" disabled={!canSubmit}>
+          <Button type="submit" size="lg" block disabled={!canSubmit}>
             Finish donation
-          </button>
+          </Button>
         ) : (
-          <button type="submit" className="btn btn-lg donate-submit" disabled={!canSubmit}>
+          <Button type="submit" size="lg" block disabled={!canSubmit}>
             {busy ? 'Giving...' : 'Give'}
-          </button>
+          </Button>
         )}
       </form>
-      {!unconfirmed && !sender && !closed && <SignInButton className="btn btn-lg donate-submit" label="Sign in to give" />}
-    </section>
+      {!unconfirmed && !sender && !closed && (
+        <SignInButton className="ui-btn ui-btn-primary ui-btn-lg ui-btn-block give-signin" label="Sign in to give" />
+      )}
+    </Card>
   )
 }

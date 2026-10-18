@@ -1,0 +1,218 @@
+/* Share panel: the link, device share, network links, the QR poster and the embed code. */
+.share-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.share-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  line-height: var(--text-lg-line);
+  letter-spacing: var(--tracking-heading);
+}
+
+/* The message the network links prefill, shown so the person knows what they will post. */
+.share-message {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--attention);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  background: var(--surface);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-line);
+  overflow-wrap: anywhere;
+}
+
+.share-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* 17px type, so iOS does not zoom into the field. */
+.share-url {
+  flex: 1 1 180px;
+  min-width: 0;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg);
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: var(--text-md);
+  line-height: var(--text-md-line);
+  text-overflow: ellipsis;
+}
+
+.share-url:focus-visible {
+  border-color: var(--focus);
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.share-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-line);
+  overflow-wrap: anywhere;
+}
+
+.share-note:empty {
+  display: none;
+}
+
+.share-native {
+  align-self: flex-start;
+}
+
+.share-targets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.share-target {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--hit-target);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  line-height: var(--text-sm-line);
+  text-align: center;
+  text-decoration: none;
+  transition: background-color var(--duration) var(--ease);
+}
+
+.share-target:hover {
+  background: var(--surface);
+}
+
+.share-target:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* A small copy of the poster: the QR code people scan, on a card shaped like the download. */
+.share-poster {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.share-ticket {
+  display: flex;
+  flex: 0 0 116px;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  aspect-ratio: 4 / 5;
+  padding: var(--space-3) var(--space-2) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  box-shadow: var(--shadow-1);
+  transform: rotate(-2deg);
+}
+
+.share-ticket img {
+  width: 56px;
+  height: auto;
+}
+
+.share-ticket span {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  line-height: var(--text-xs-line);
+}
+
+.share-qr {
+  display: block;
+  width: 100%;
+  max-width: 104px;
+  aspect-ratio: 1;
+}
+
+.share-qr-loading {
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.share-poster-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.share-poster-text p {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-line);
+}
+
+.share-embed summary {
+  font-weight: var(--weight-bold);
+  cursor: pointer;
+}
+
+.share-embed summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.share-embed[open] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.share-embed > p {
+  margin: 0;
+}
+
+.share-code {
+  width: 100%;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--text-xs);
+  line-height: var(--text-xs-line);
+  resize: none;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 420px) {
+  .share-poster {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .share-ticket {
+    align-self: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .share-target {
+    transition: none;
+  }
+}

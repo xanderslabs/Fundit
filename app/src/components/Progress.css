@@ -1,0 +1,44 @@
+/* The class names stay as they are: the embed card styles the same markup in embed.css. */
+.progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.progress-track {
+  flex: 1;
+  height: 8px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--border);
+}
+
+.progress-lg .progress-track {
+  height: 12px;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--attention);
+  transition: width var(--duration) var(--ease);
+}
+
+.progress-done {
+  background: var(--action);
+}
+
+.progress-label {
+  min-width: 3ch;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-bold);
+  line-height: var(--text-sm-line);
+  letter-spacing: var(--tracking-body);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-fill {
+    transition: none;
+  }
+}

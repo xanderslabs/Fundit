@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { safeHttpsUrl } from '../lib/urls'
+import './CampaignImage.css'
 
 type Props = { url: string; title: string; className?: string }
 
