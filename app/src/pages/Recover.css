@@ -1,0 +1,134 @@
+/* Recover: the 12 words as a numbered grid, 3 across on wide screens and 2 on phones. */
+.recover {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  max-width: var(--page-narrow);
+  margin: 0 auto;
+}
+
+.recover > .ui-page-header {
+  margin-bottom: 0;
+}
+
+.recover-card,
+.recover-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.recover-card > p {
+  margin: 0;
+}
+
+.recover-words {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.recover-words legend {
+  margin-bottom: var(--space-3);
+  padding: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+  line-height: var(--text-md-line);
+}
+
+/* Each word is a Field drawn as one box: the number inside on the left, then the input. */
+.recover-words > .ui-field {
+  flex-direction: row;
+  align-items: center;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  transition: border-color var(--duration) var(--ease);
+}
+
+.recover-words > .ui-field:focus-within {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent);
+}
+
+.recover-words > .ui-field > .ui-field-label {
+  flex: none;
+  width: var(--space-6);
+  padding-left: var(--space-3);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.recover .recover-words > .ui-field > input,
+.recover .recover-words > .ui-field > input:focus,
+.recover .recover-words > .ui-field > input:focus-visible {
+  flex: 1;
+  padding-right: var(--space-2);
+  padding-left: var(--space-1);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.recover-words:disabled > .ui-field {
+  background: var(--surface);
+}
+
+.recover-form > .ui-btn {
+  align-self: flex-start;
+}
+
+.recover-fund-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.recover-fund-body .fund-qr {
+  flex: none;
+  width: 140px;
+  height: 140px;
+}
+
+.recover-fund-body .fund-address {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.recover-hint {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-line);
+}
+
+.recover-back {
+  margin: 0;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+@media (max-width: 480px) {
+  .recover-words {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .recover-form > .ui-btn {
+    align-self: stretch;
+  }
+
+  .recover-fund-body {
+    justify-content: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recover-words > .ui-field {
+    transition: none;
+  }
+}

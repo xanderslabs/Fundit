@@ -5,6 +5,7 @@ import { SignInButton } from '../components/AccountMenu'
 import { AddressQr, CopyAddress } from '../components/AddressTools'
 import { AddBackupPasskey } from '../components/AddBackupPasskey'
 import { usernameError } from '../components/PasskeyLogin'
+import { Button, Card, Field, PageHeader, StatusBox } from '../components/ui'
 import { explainError } from '../lib/errors'
 import {
   checkPendingRecovery,
@@ -15,6 +16,7 @@ import {
   type StoredPasskey,
   usePasskeySession,
 } from '../lib/passkey'
+import './Recover.css'
 
 const WORDS = 12
 const INVALID = "Those words don't form a valid recovery key. Check the order and spelling."
@@ -127,57 +129,57 @@ export function Recover() {
 
   if (recovered) {
     return (
-      <section className="manage recover">
-        <header className="page-head">
-          <h1>Your account is back.</h1>
-          <p className="muted">
-            This device has a new passkey for your Fundit account. Add a new recovery key now. Your old one still works, so keep it safe or
-            destroy it.
-          </p>
-        </header>
-        <div className="panel manage-section">
+      <section className="recover">
+        <PageHeader
+          width="narrow"
+          title="Your account is back."
+          subtitle={
+            <p>
+              This device has a new passkey for your Fundit account. Add a new recovery key now. Your old one still works, so keep it safe or
+              destroy it.
+            </p>
+          }
+        />
+        <Card>
           <AddBackupPasskey stored={recovered} />
-        </div>
+        </Card>
       </section>
     )
   }
 
   return (
-    <section className="manage recover">
-      <header className="page-head">
-        <h1>Recover your Fundit account</h1>
-        <p className="muted">Enter the 12 words of your recovery key. We'll make a new passkey on this device and move your account to it.</p>
-      </header>
+    <section className="recover">
+      <PageHeader
+        width="narrow"
+        title="Recover your Fundit account"
+        subtitle={<p>Enter the 12 words of your recovery key. We'll make a new passkey on this device and move your account to it.</p>}
+      />
 
-      <div className="panel manage-section">
+      <Card className="recover-card">
         {pending ? (
           <>
             <p>Your recovery is still confirming. Check again in a minute.</p>
             {stuck && <p>This is taking longer than usual. You can start over with your recovery key.</p>}
             <div className="backup-actions">
-              <button type="button" className="btn" disabled={busy} onClick={check}>
+              <Button disabled={busy} onClick={check}>
                 Check again
-              </button>
+              </Button>
               {stuck && (
-                <button type="button" className="btn btn-outline" disabled={busy} onClick={startOver}>
+                <Button variant="secondary" disabled={busy} onClick={startOver}>
                   Start over
-                </button>
+                </Button>
               )}
             </div>
           </>
         ) : (
-          <form className="backup-confirm" onSubmit={submit} noValidate>
+          <form className="recover-form" onSubmit={submit} noValidate>
             <fieldset className="recover-words" disabled={busy}>
               <legend>Your recovery key</legend>
               {words.map((w, i) => (
-                <div className="recover-word" key={i}>
-                  {/* The visible label is the number. The input's own name says "Word 1" to screen readers. */}
-                  <label htmlFor={`recover-word-${i + 1}`}>
-                    <span className="recover-num">{i + 1}</span>
-                  </label>
+                // The visible label is the number. The input's own name says "Word 1" to screen readers.
+                <Field key={i} id={`recover-word-${i + 1}`} label={`${i + 1}`}>
                   <input
                     aria-label={`Word ${i + 1}`}
-                    id={`recover-word-${i + 1}`}
                     autoComplete="off"
                     autoCapitalize="none"
                     autoCorrect="off"
@@ -186,44 +188,35 @@ export function Recover() {
                     onChange={(e) => setWords((all) => all.map((old, j) => (j === i ? e.target.value : old)))}
                     onPaste={(e) => onPaste(i, e)}
                   />
-                </div>
+                </Field>
               ))}
             </fieldset>
-            <div className="form-field">
-              <label htmlFor="recover-username">Name for your new passkey</label>
-              <input
-                id="recover-username"
-                autoComplete="off"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                disabled={busy}
-                aria-invalid={nameError ? true : undefined}
-              />
-              {nameError && <p className="field-error">{nameError}</p>}
-            </div>
+            <Field id="recover-username" label="Name for your new passkey" error={nameError ?? undefined}>
+              <input autoComplete="off" value={username} onChange={(e) => setUsername(e.target.value)} disabled={busy} />
+            </Field>
             {needsFunds && (
-              <div className="recover-fund status-box">
+              <StatusBox>
                 <p>{needsFunds.message}</p>
                 <div className="recover-fund-body">
                   <AddressQr address={needsFunds.account} label="QR code of your account address" />
                   <CopyAddress address={needsFunds.account} />
                 </div>
-              </div>
+              </StatusBox>
             )}
-            <button type="submit" className="btn" disabled={busy}>
+            <Button type="submit" size="lg" disabled={busy}>
               Recover my account
-            </button>
+            </Button>
           </form>
         )}
-        {busy && <p className="hint">Follow the steps your browser shows.</p>}
+        {busy && <p className="recover-hint">Follow the steps your browser shows.</p>}
         {error && (
-          <p className="field-error" role="alert">
+          <p className="ui-field-error" role="alert">
             {error}
           </p>
         )}
-      </div>
+      </Card>
       {!session && (
-        <p className="recover-back muted">
+        <p className="recover-back">
           Still have your passkey? <SignInButton className="link-button" label="Back to sign in" onPasskeyDone={() => navigate('/me')} />
         </p>
       )}

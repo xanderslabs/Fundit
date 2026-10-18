@@ -1,0 +1,72 @@
+/* The sign-in dialog: Sign in, or Create your account. */
+.passkey-login,
+.passkey-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.passkey-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Room on the right for the dialog's Close button. */
+.passkey-title {
+  margin: 0;
+  padding-right: var(--space-7);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--text-xl-line);
+  letter-spacing: var(--tracking-heading);
+}
+
+.passkey-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-line);
+}
+
+/* The small lines under the main button: switch view, or go to recovery. */
+.passkey-alt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-line);
+  text-align: center;
+}
+
+.passkey-alt p {
+  margin: 0;
+}
+
+/* A button that reads as a link. Recover's Back to sign in uses it too. */
+.passkey-alt a,
+.link-button {
+  color: var(--text);
+  font-weight: var(--weight-medium);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.link-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.link-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}

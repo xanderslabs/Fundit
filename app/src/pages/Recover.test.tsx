@@ -106,7 +106,7 @@ describe('Recover', () => {
       expect(input.getAttribute('autocapitalize')).toBe('none')
       // Screen readers announce each box by its number. The visible label is the number alone.
       expect(within(grid).getByRole('textbox', { name: `Word ${i + 1}` })).toBe(input)
-      expect(grid.querySelector(`label[for="${input.id}"] .recover-num`)?.textContent).toBe(`${i + 1}`)
+      expect(grid.querySelector(`label[for="${input.id}"]`)?.textContent).toBe(`${i + 1}`)
     })
   })
 

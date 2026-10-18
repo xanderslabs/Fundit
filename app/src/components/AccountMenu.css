@@ -1,0 +1,120 @@
+/* The top bar account pill and its menu. */
+.popover-anchor {
+  position: relative;
+  flex: none;
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  z-index: 20;
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+  box-shadow: var(--shadow-pop);
+}
+
+.account-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: min(240px, calc(100vw - 200px));
+  min-height: var(--hit-target);
+  padding: var(--space-2) var(--space-4);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  line-height: var(--text-md-line);
+  transition: background-color var(--duration) var(--ease);
+}
+
+.account-pill:hover,
+.account-pill[aria-expanded='true'] {
+  background: var(--line);
+}
+
+.account-pill:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.account-pill .name {
+  min-width: 0;
+}
+
+/* A passkey username can be 50 characters. It is cut with an ellipsis here. My page shows it in full. */
+.account-pill .name-text {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-chevron {
+  flex: none;
+  color: var(--text-muted);
+  transition: transform var(--duration) var(--ease);
+}
+
+.account-pill[aria-expanded='true'] .account-chevron {
+  transform: rotate(180deg);
+}
+
+.account-popover {
+  min-width: 220px;
+}
+
+.account-menu {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.account-menu [role='menuitem'] {
+  display: block;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  line-height: var(--text-md-line);
+  text-align: left;
+}
+
+.account-menu [role='menuitem']:hover,
+.account-menu [role='menuitem']:focus {
+  background: var(--surface);
+}
+
+.account-menu [role='menuitem']:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.account-menu li:last-child {
+  margin-top: var(--space-1);
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 480px) {
+  .account-pill .name-text {
+    max-width: 130px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .account-pill,
+  .account-chevron {
+    transition: none;
+  }
+}

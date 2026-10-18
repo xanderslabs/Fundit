@@ -1,4 +1,4 @@
-import { type KeyboardEvent, type ReactNode, type Ref, type RefObject, useCallback, useEffect, useId, useRef, useState } from 'react'
+import { type KeyboardEvent, type Ref, type RefObject, useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import type { Address } from 'viem'
 import { useDisconnect } from 'wagmi'
@@ -7,6 +7,8 @@ import { ADD_MONEY_PATH } from '../lib/urls'
 import { AddBackupPasskey, confirmLeave } from './AddBackupPasskey'
 import { Name } from './Name'
 import { PasskeyLogin } from './PasskeyLogin'
+import { Dialog } from './ui'
+import './AccountMenu.css'
 
 // Closes an open popover when a pointer goes down outside it.
 function useOutsideClose(open: boolean, root: RefObject<HTMLElement | null>, close: () => void) {
@@ -28,99 +30,26 @@ type SignInProps = {
   buttonRef?: Ref<HTMLButtonElement>
 }
 
-const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
-
-// A modal dialog. Focus moves to its first control and stays inside: Tab wraps at the ends. Escape, a click on
-// the backdrop and the Close button all call onClose, unless canClose returns false.
-function ModalDialog({
-  labelledBy,
-  onClose,
-  canClose,
-  children,
-}: {
-  labelledBy: string
-  onClose: () => void
-  canClose?: () => boolean
-  children: ReactNode
-}) {
-  const dialog = useRef<HTMLDialogElement>(null)
-
-  useEffect(() => {
-    const d = dialog.current
-    if (!d) return
-    if (typeof d.showModal === 'function' && !d.open) d.showModal()
-    else d.setAttribute('open', '')
-    d.querySelector<HTMLElement>(FOCUSABLE)?.focus()
-  }, [])
-
-  // The native dialog is closed first, so the page behind is no longer inert when focus goes back to it.
-  function close() {
-    if (canClose && !canClose()) return
-    const d = dialog.current
-    if (d?.open && typeof d.close === 'function') d.close()
-    onClose()
-  }
-
-  function onKeyDown(e: KeyboardEvent<HTMLDialogElement>) {
-    if (e.key === 'Escape') {
-      e.preventDefault()
-      close()
-      return
-    }
-    if (e.key !== 'Tab' || !dialog.current) return
-    const list = [...dialog.current.querySelectorAll<HTMLElement>(FOCUSABLE)]
-    const first = list[0]
-    const last = list[list.length - 1]
-    if (!first || !last) return
-    const active = document.activeElement as HTMLElement | null
-    const inside = active !== null && list.includes(active)
-    if (e.shiftKey && (active === first || !inside)) {
-      e.preventDefault()
-      last.focus()
-    } else if (!e.shiftKey && (active === last || !inside)) {
-      e.preventDefault()
-      first.focus()
-    }
-  }
-
-  return (
-    <dialog
-      ref={dialog}
-      className="share-dialog signin-dialog"
-      aria-labelledby={labelledBy}
-      onKeyDown={onKeyDown}
-      onCancel={(e) => {
-        e.preventDefault()
-        close()
-      }}
-      // A click on the backdrop lands on the dialog element itself.
-      onClick={(e) => {
-        if (e.target === dialog.current) close()
-      }}
-    >
-      <div className="share-dialog-body">
-        {children}
-        <button type="button" className="share-close" aria-label="Close" onClick={close}>
-          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-            <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          </svg>
-        </button>
-      </div>
-    </dialog>
-  )
-}
-
 // Sign-in is passkey only: the dialog opens the Fundit account sign-in and nothing else. The wallet modal never
 // opens from here; it opens only inside Add money.
 export function SignInButton({ className = 'btn', label = 'Sign in', onPasskeyDone, buttonRef }: SignInProps) {
   const [open, setOpen] = useState(false)
   const trigger = useRef<HTMLButtonElement | null>(null)
   const headingId = useId()
+  const refocus = useRef(false)
 
   function dismiss() {
+    refocus.current = true
     setOpen(false)
-    trigger.current?.focus()
   }
+
+  // Focus goes back to Sign in after the Dialog has unmounted and closed the native dialog, so the page behind
+  // is no longer inert. A browser that does not focus a clicked button (Safari) would otherwise lose focus.
+  useEffect(() => {
+    if (open || !refocus.current) return
+    refocus.current = false
+    trigger.current?.focus()
+  }, [open])
 
   function setTrigger(el: HTMLButtonElement | null) {
     trigger.current = el
@@ -134,20 +63,16 @@ export function SignInButton({ className = 'btn', label = 'Sign in', onPasskeyDo
       <button ref={setTrigger} type="button" className={className} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
         {label}
       </button>
-      {open && (
-        <ModalDialog labelledBy={headingId} onClose={dismiss}>
-          <div className="signin-body">
-            <PasskeyLogin
-              headingId={headingId}
-              onLeave={() => setOpen(false)}
-              onDone={() => {
-                setOpen(false)
-                onPasskeyDone?.()
-              }}
-            />
-          </div>
-        </ModalDialog>
-      )}
+      <Dialog open={open} labelledBy={headingId} onClose={dismiss}>
+        <PasskeyLogin
+          headingId={headingId}
+          onLeave={() => setOpen(false)}
+          onDone={() => {
+            setOpen(false)
+            onPasskeyDone?.()
+          }}
+        />
+      </Dialog>
     </>
   )
 }
@@ -161,7 +86,7 @@ function BackupDialog({ stored }: { stored: StoredPasskey }) {
     guard.current = message
   }, [])
   return (
-    <ModalDialog labelledBy={headingId} onClose={dismissBackupPrompt} canClose={() => !guard.current || window.confirm(guard.current)}>
+    <Dialog open labelledBy={headingId} onClose={dismissBackupPrompt} canClose={() => !guard.current || window.confirm(guard.current)}>
       <AddBackupPasskey
         stored={stored}
         headingId={headingId}
@@ -169,7 +94,7 @@ function BackupDialog({ stored }: { stored: StoredPasskey }) {
         onDone={dismissBackupPrompt}
         onGuardChange={onGuardChange}
       />
-    </ModalDialog>
+    </Dialog>
   )
 }
 

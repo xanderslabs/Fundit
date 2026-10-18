@@ -2,6 +2,8 @@ import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { explainError, isInvalidUsername, isUserRejection, USERNAME_PATTERN, USERNAME_RULE } from '../lib/errors'
 import { loginPasskey, registerPasskey } from '../lib/passkey'
+import { Button, Field } from './ui'
+import './PasskeyLogin.css'
 
 export const MAX_USERNAME = 50
 
@@ -67,42 +69,40 @@ export function PasskeyLogin({ onDone, onLeave, headingId }: { onDone?: () => vo
 
   return (
     <div className="passkey-login">
-      <h2 id={headingId}>{view === 'signin' ? 'Sign in' : 'Create your account'}</h2>
+      <h2 id={headingId} className="passkey-title">
+        {view === 'signin' ? 'Sign in' : 'Create your account'}
+      </h2>
       {view === 'signin' ? (
-        <button ref={signInButton} type="button" className="btn" disabled={busy} onClick={() => void run(() => loginPasskey())}>
+        <Button ref={signInButton} size="lg" block disabled={busy} onClick={() => void run(() => loginPasskey())}>
           Sign in with your passkey
-        </button>
+        </Button>
       ) : (
         <form className="passkey-form" onSubmit={signUp} noValidate>
-          <div className="form-field">
-            <label htmlFor="passkey-username">Username</label>
-            <input
-              ref={usernameField}
-              id="passkey-username"
-              autoComplete="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              disabled={busy}
-              aria-invalid={nameError ? true : undefined}
-              aria-describedby="passkey-username-hint"
-            />
-            <p id="passkey-username-hint" className="hint">
-              5 to 50 characters, no spaces
-            </p>
+          <div className="passkey-field">
+            <Field id="passkey-username" label="Username" hint="5 to 50 characters, no spaces">
+              <input
+                ref={usernameField}
+                autoComplete="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                disabled={busy}
+                aria-invalid={nameError ? true : undefined}
+              />
+            </Field>
             {nameError && (
-              <p className="field-error" role="alert">
+              <p className="ui-field-error" role="alert">
                 {nameError}
               </p>
             )}
           </div>
-          <button type="submit" className="btn" disabled={busy}>
+          <Button type="submit" size="lg" block disabled={busy}>
             Create account
-          </button>
+          </Button>
         </form>
       )}
-      {busy && <p className="hint">Follow the steps your browser shows.</p>}
+      {busy && <p className="passkey-hint">Follow the steps your browser shows.</p>}
       {error && (
-        <p className="field-error" role="alert">
+        <p className="ui-field-error" role="alert">
           {error}
         </p>
       )}
