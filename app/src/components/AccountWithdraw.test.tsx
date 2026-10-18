@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
-import { type Address, decodeFunctionData, type Hex, pad, parseAbi, zeroHash } from 'viem'
+import { type Address, decodeFunctionData, getAddress, type Hex, pad, parseAbi, zeroHash } from 'viem'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { erc20Abi } from '../abi/erc20'
 import { FORWARD_HOOK_DATA, TOKEN_MESSENGER_V2, TOKENS } from '../config'
@@ -12,6 +12,8 @@ import { AccountWithdraw } from './AccountWithdraw'
 const ACCOUNT = '0x00000000000000000000000000000000000000cC' as Address
 const FRIEND = '0x1111111111111111111111111111111111111111'
 const HASH = `0x${'1'.repeat(64)}` as Hex
+const PENDING_KEY = 'fundit.pendingBridges'
+const BLOCKED = 'Your last transfer to another chain is still on its way. You can send another once it arrives.'
 
 const balances = vi.hoisted(() => ({ usdc: 0n, eurc: 0n }))
 const fetchAccountBalances = vi.hoisted(() => vi.fn(async () => ({ ...balances })))
@@ -23,7 +25,12 @@ const messengerAbi = parseAbi([
   'function depositForBurnWithHook(uint256 amount, uint32 destinationDomain, bytes32 mintRecipient, address burnToken, bytes32 destinationCaller, uint256 maxFee, uint32 minFinalityThreshold, bytes hookData)',
 ])
 const fetchForwardFee = vi.hoisted(() => vi.fn())
-vi.mock('../lib/iris', async (importOriginal) => ({ ...(await importOriginal<typeof import('../lib/iris')>()), fetchForwardFee }))
+// The tracker asks Iris how the transfer is doing. Here it is always still on its way.
+vi.mock('../lib/iris', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/iris')>()),
+  fetchForwardFee,
+  fetchTransferStatus: async () => 'pending',
+}))
 vi.mock('../lib/clients', () => ({ arcClient: {} }))
 
 let send: ReturnType<typeof vi.fn<(...args: Parameters<Sender['send']>) => Promise<TxResult>>>
@@ -38,6 +45,7 @@ afterEach(() => {
   vi.clearAllMocks()
   balances.usdc = 0n
   balances.eurc = 0n
+  localStorage.clear()
 })
 
 function renderForm(kind: Sender['kind'] = 'passkey') {
@@ -243,5 +251,55 @@ describe('AccountWithdraw', () => {
     await userEvent.click(submitButton())
     await screen.findByText('The transfer fee changed. Check the new amount and confirm again.')
     expect(send).not.toHaveBeenCalled()
+  })
+
+  // The burn on Arc is only half the trip. The record keeps the status on My page after a reload.
+  it('saves a cross-chain send keyed by the account and shows it after a reload', async () => {
+    balances.usdc = 10_000000n
+    renderForm()
+    await screen.findByText(/You have 10.00 USDC/)
+    await userEvent.selectOptions(screen.getByLabelText('Send to'), 'Base')
+    await fill('2', FRIEND)
+    await screen.findByText('At least 1.85 USDC')
+    await userEvent.click(submitButton())
+    await screen.findByText(/It arrives on Base in about a minute/)
+    expect(JSON.parse(localStorage.getItem(PENDING_KEY)!)).toMatchObject([
+      { kind: 'payout', campaign: getAddress(ACCOUNT), burnTx: HASH, srcDomain: 26, destDomain: 6, amount: '1.85' },
+    ])
+    expect(await screen.findByText('1.85 USDC to Base is on its way.')).toBeTruthy()
+
+    cleanup()
+    renderForm()
+    expect(await screen.findByText('1.85 USDC to Base is on its way.')).toBeTruthy()
+  })
+
+  // Two sends to another chain at once are easy to make by mistake and hard to undo. Arc sends stay open.
+  it('blocks a second cross-chain send from the account while one is on its way', async () => {
+    balances.usdc = 10_000000n
+    localStorage.setItem(
+      PENDING_KEY,
+      JSON.stringify([{ kind: 'payout', campaign: ACCOUNT.toLowerCase(), burnTx: `0x${'2'.repeat(64)}`, srcDomain: 26, destDomain: 6, amount: '1', createdAt: Date.now() }]),
+    )
+    renderForm()
+    await screen.findByText(/You have 10.00 USDC/)
+    await fill('2', FRIEND)
+    expect(screen.queryByText(BLOCKED)).toBeNull()
+    expect((submitButton() as HTMLButtonElement).disabled).toBe(false)
+    await userEvent.selectOptions(screen.getByLabelText('Send to'), 'Base')
+    await screen.findByText('At least 1.85 USDC')
+    expect(screen.getByText(BLOCKED)).toBeTruthy()
+    expect((submitButton() as HTMLButtonElement).disabled).toBe(true)
+    await userEvent.click(submitButton())
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it('saves no record for a send on Arc', async () => {
+    balances.usdc = 10_000000n
+    renderForm()
+    await screen.findByText(/You have 10.00 USDC/)
+    await fill('2', FRIEND)
+    await userEvent.click(submitButton())
+    await screen.findByText('Your money was sent.')
+    expect(localStorage.getItem(PENDING_KEY)).toBeNull()
   })
 })

@@ -1,10 +1,10 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
-import { type Address, formatUnits, isAddressEqual, zeroAddress } from 'viem'
+import { type Address, formatUnits, getAddress, isAddressEqual, zeroAddress } from 'viem'
 import { ARC_DOMAIN, CCTP_CHAINS, CHAIN_LABELS, PASSKEY_GAS_BUFFER, TOKENS, type TokenSymbol } from '../config'
 import { buildAccountSendCalls, maxAccountSend, OWN_ADDRESS, TOO_SMALL } from '../lib/accountWithdraw'
-import { chainByKey } from '../lib/bridge'
+import { chainByKey, pendingPayoutFrom, savePendingPayout, subscribePending } from '../lib/bridge'
 import { arcClient } from '../lib/clients'
 import { BALANCES_KEY, balancesKey, fetchAccountBalances } from '../lib/deposit'
 import { PlainError } from '../lib/errors'
@@ -13,11 +13,13 @@ import { fetchForwardFee } from '../lib/iris'
 import { destDomain, type PayoutDest } from '../lib/payout'
 import type { Sender } from '../lib/sender'
 import { ADDRESS_TYPO, parseTypedAddress } from '../lib/validate'
+import { PendingBridgeTracker } from './PendingBridgeTracker'
 import { TxStatus, useTx } from './TxStatus'
 
 const FEE_CHANGED = 'The transfer fee changed. Check the new amount and confirm again.'
 const OVER_HELD = 'That is more than your Fundit account holds.'
 const KEEP_GAS = `Leave at least ${formatAmount(PASSKEY_GAS_BUFFER, 'USDC')} in your Fundit account for the network fee.`
+const ONE_AT_A_TIME = 'Your last transfer to another chain is still on its way. You can send another once it arrives.'
 const NO_GAS = `Add at least ${formatAmount(PASSKEY_GAS_BUFFER, 'USDC')} to your Fundit account first. It pays the network fee.`
 const QUOTE_DEBOUNCE_MS = 400
 
@@ -38,12 +40,18 @@ function SendOutForm({ sender }: { sender: Sender }) {
   const [fastChoice, setFastChoice] = useState(true)
   const [recipientText, setRecipientText] = useState('')
   // What the last submit sent, read once its receipt is in.
-  const sending = useRef<{ dest: PayoutDest; fast: boolean } | null>(null)
+  // net is what arrives on the other chain, set once the fee is known at send time.
+  const sending = useRef<{ dest: PayoutDest; fast: boolean; net?: bigint } | null>(null)
   const [sentText, setSentText] = useState('Your money was sent.')
-  const tx = useTx(() => {
+  const tx = useTx((hash) => {
     setAmountText('')
     void queryClient.invalidateQueries({ queryKey: [BALANCES_KEY] })
     const sent = sending.current
+    // The burn is on Arc. Saved so My page keeps tracking the mint after a reload. Arc sends need no record.
+    if (sent && sent.dest !== 'Arc' && sent.net !== undefined) {
+      // The store only keeps valid (checksummed) addresses.
+      savePendingPayout({ campaign: getAddress(account), burnTx: hash, destDomain: destDomain(sent.dest), amount: formatUnits(sent.net, 6) })
+    }
     setSentText(
       sent && sent.dest !== 'Arc'
         ? `Sent from Arc. It arrives on ${CHAIN_LABELS[sent.dest]} in about ${sent.fast ? 'a minute' : '15 to 20 minutes'}.`
@@ -80,6 +88,15 @@ function SendOutForm({ sender }: { sender: Sender }) {
   else if (typed?.ok && (isAddressEqual(typed.address, zeroAddress) || isAddressEqual(typed.address, account))) recipientError = OWN_ADDRESS
   const recipient: Address | null = typed?.ok && !recipientError ? typed.address : null
 
+  // A send to another chain from this account that has not arrived. Another one waits until it does.
+  const [inFlight, setInFlight] = useState(() => pendingPayoutFrom(account) !== null)
+  useEffect(() => {
+    const reload = () => setInFlight(pendingPayoutFrom(account) !== null)
+    reload()
+    return subscribePending(reload)
+  }, [account])
+  const blocked = crossChain && inFlight
+
   const [quoteAmount, setQuoteAmount] = useState<bigint | null>(null)
   useEffect(() => {
     const timer = setTimeout(() => setQuoteAmount(amount), QUOTE_DEBOUNCE_MS)
@@ -104,6 +121,7 @@ function SendOutForm({ sender }: { sender: Sender }) {
     !noGas &&
     recipient !== null &&
     !tx.locked &&
+    !blocked &&
     (!crossChain || (quote !== undefined && !tooSmall))
 
   function chooseSymbol(next: TokenSymbol) {
@@ -125,12 +143,15 @@ function SendOutForm({ sender }: { sender: Sender }) {
         if (amount > nowHeld) throw new PlainError(OVER_HELD)
         if (now.usdc < PASSKEY_GAS_BUFFER) throw new PlainError(NO_GAS)
         if (symbol === 'USDC' && amount > maxAccountSend(now.usdc, PASSKEY_GAS_BUFFER)) throw new PlainError(KEEP_GAS)
+        // Read again here: another tab may have sent one since the form last looked.
+        if (crossChain && pendingPayoutFrom(account)) throw new PlainError(ONE_AT_A_TIME)
         // A fresh quote at send time, so the fee cap matches what Circle charges now.
         const fresh = crossChain ? await fetchForwardFee(ARC_DOMAIN, destDomain(dest), amount, fast) : undefined
         if (fresh && quote && fresh.maxFee > quote.maxFee) {
           queryClient.setQueryData(['account-send-fee', dest, fast, amount.toString()], fresh)
           throw new PlainError(fresh.maxFee >= amount ? TOO_SMALL : FEE_CHANGED)
         }
+        if (fresh) sending.current = { dest, fast, net: amount - fresh.maxFee }
         return buildAccountSendCalls({ token: TOKENS[symbol].address, amount, dest, recipient, maxFee: fresh?.maxFee, fast, account })
       },
       'Send money out',
@@ -269,6 +290,7 @@ function SendOutForm({ sender }: { sender: Sender }) {
           </dl>
         )}
         {tooSmall && <p className="field-error">{TOO_SMALL}</p>}
+        {blocked && <p className="field-error">{ONE_AT_A_TIME}</p>}
         {crossChain && fee.isError && <p className="field-error">Could not get a fee quote from Circle. Try again in a moment.</p>}
 
         <TxStatus
@@ -283,6 +305,7 @@ function SendOutForm({ sender }: { sender: Sender }) {
           </button>
         )}
       </form>
+      <PendingBridgeTracker campaign={account} kind="payout" />
     </section>
   )
 }

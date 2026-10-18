@@ -9,6 +9,7 @@ import {
   pendingArc,
   pendingBridges,
   pendingCrossChain,
+  pendingPayoutFrom,
   pendingPayouts,
   savePendingArc,
   savePendingPayout,
@@ -154,6 +155,17 @@ describe('pending payouts', () => {
     expect(pendingPayouts()[0]!.minted).toBe(true)
     clearBridge(BURN)
     expect(pendingPayouts()).toEqual([])
+  })
+
+  // A Fundit account's own send to another chain is saved the same way, keyed by the account. While it has not
+  // arrived, a second one waits, so the person does not send twice by mistake.
+  it('finds the unarrived payout from an address, and lets go once it arrived', () => {
+    expect(pendingPayoutFrom(CAMPAIGN)).toBeNull()
+    savePendingPayout({ campaign: CAMPAIGN, burnTx: BURN, destDomain: 6, amount: '9.9' })
+    expect(pendingPayoutFrom(CAMPAIGN.toLowerCase() as Address)).toMatchObject({ burnTx: BURN })
+    expect(pendingPayoutFrom(OTHER)).toBeNull()
+    markBridgeMinted(BURN)
+    expect(pendingPayoutFrom(CAMPAIGN)).toBeNull()
   })
 
   it('ignores a payout entry with an unknown destination', () => {

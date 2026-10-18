@@ -118,6 +118,12 @@ export function pendingPayouts(): PendingPayout[] {
   return readAll().filter((e): e is PendingPayout => e.kind === 'payout')
 }
 
+// A payout from this address that has not arrived yet. A Fundit account's own send to another chain is saved as
+// a payout with the account's address in campaign, so this keeps it to one at a time.
+export function pendingPayoutFrom(address: Address): PendingPayout | null {
+  return pendingPayouts().find((e) => same(e.campaign, address) && !e.minted) ?? null
+}
+
 // Saved once the withdrawal's Arc receipt is in. The Arc transaction is the CCTP burn Iris reports on.
 export function savePendingPayout(p: { campaign: Address; burnTx: Hex; destDomain: number; amount: string }) {
   const all = readAll().filter((e) => !isBurn(e, p.burnTx))
