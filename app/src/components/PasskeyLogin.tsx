@@ -87,7 +87,7 @@ export function PasskeyLogin({ onDone, onLeave, headingId }: { onDone?: () => vo
               aria-describedby="passkey-username-hint"
             />
             <p id="passkey-username-hint" className="hint">
-              5 to 50 letters or numbers, no spaces
+              5 to 50 characters, no spaces
             </p>
             {nameError && (
               <p className="field-error" role="alert">

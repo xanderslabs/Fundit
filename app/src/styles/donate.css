@@ -62,11 +62,19 @@
   padding-right: 8px;
 }
 
+/* The four tip choices always share one row, down to a 320px screen. */
+.donate-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .donate-option {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 8px 12px;
+  padding: 8px 6px;
+  white-space: nowrap;
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
   font-weight: var(--weight-medium);
@@ -215,6 +223,13 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+@media (max-width: 480px) {
+  .donate-option {
+    gap: 4px;
+    font-size: 14px;
+  }
 }
 
 /* Transfers on their way to a Fundit account, and payouts on their way to another chain. */

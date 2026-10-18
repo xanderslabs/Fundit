@@ -116,7 +116,7 @@ describe('Sign in', () => {
     const dialog = screen.getByRole('dialog', { name: 'Create your account' })
     const field = within(dialog).getByLabelText('Username')
     expect(document.activeElement).toBe(field)
-    expect(dialog.textContent).toContain('5 to 50 letters or numbers, no spaces')
+    expect(dialog.textContent).toContain('5 to 50 characters, no spaces')
     expect(within(dialog).getByRole('button', { name: 'Create account' })).toBeTruthy()
     expect(within(dialog).queryByRole('button', { name: 'Sign in with your passkey' })).toBeNull()
     expect(dialog.textContent).toContain('Already have an account? Sign in now')
