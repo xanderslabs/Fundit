@@ -66,14 +66,15 @@ export function useTx(onSuccess: (hash: Hex) => void) {
   }
 
   // build runs inside the guard, so a quote it fetches or a check it makes cannot overlap a second click.
-  async function run(sender: Sender, build: () => Call | Promise<Call>, label: string) {
+  // Several calls go to the sender in one send, so a passkey account signs them as one user operation.
+  async function run(sender: Sender, build: () => Call | Call[] | Promise<Call | Call[]>, label: string) {
     if (inFlight.current) return
     inFlight.current = true
     setPhase({ kind: 'sending' })
     lastSender.current = sender
     try {
-      const call = await build()
-      handle(await sender.send([call], { label }))
+      const built = await build()
+      handle(await sender.send(Array.isArray(built) ? built : [built], { label }))
     } catch (err) {
       setPhase({ kind: 'error', message: explainError(err) })
     } finally {

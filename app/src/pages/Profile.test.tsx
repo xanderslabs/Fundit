@@ -161,4 +161,15 @@ describe('Profile', () => {
     renderProfile()
     expect(screen.queryByRole('link', { name: 'Add money' })).toBeNull()
   })
+
+  // Money in a Fundit account can only leave through Fundit, so a passkey account needs a way out.
+  it('shows Send money out for a passkey account only', () => {
+    state.sender = { kind: 'passkey', address: '0x00000000000000000000000000000000000000cC', send: vi.fn() }
+    renderProfile()
+    expect(screen.getByRole('heading', { name: 'Send money out' })).toBeTruthy()
+    cleanup()
+    state.sender = { kind: 'eoa', address: '0x1111111111111111111111111111111111111111', send: vi.fn() }
+    renderProfile()
+    expect(screen.queryByRole('heading', { name: 'Send money out' })).toBeNull()
+  })
 })

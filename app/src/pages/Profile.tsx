@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import type { Address } from 'viem'
 import { arc } from 'viem/chains'
 import { SignInButton } from '../components/AccountMenu'
+import { AccountWithdraw } from '../components/AccountWithdraw'
 import { AddBackupPasskey } from '../components/AddBackupPasskey'
 import { CampaignGrid, LoadError } from '../components/CampaignGrid'
 import { Name } from '../components/Name'
@@ -175,6 +176,11 @@ export function Profile() {
         </Link>
       </section>
       {sender.kind === 'passkey' && <AccountBalance address={sender.address} />}
+      {sender.kind === 'passkey' && (
+        <section className="section">
+          <AccountWithdraw sender={sender} />
+        </section>
+      )}
       {passkey && backupNeeded && (
         <section className="section notice">
           <AddBackupPasskey stored={passkey} />
