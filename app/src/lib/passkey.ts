@@ -494,9 +494,12 @@ async function fallbackReserve(address: Address, depositWei: bigint): Promise<bi
   return roundReserve((deployed ? RESERVE_FALLBACK : RESERVE_FALLBACK_NEW_ACCOUNT) * WEI_PER_UNIT - depositWei)
 }
 
-// A zero USDC transfer to the account itself, the stand-in operation when the caller has none.
-function stubCalls(address: Address): Call[] {
-  return [{ to: TOKENS.USDC.address, data: encodeFunctionData({ abi: erc20Abi, functionName: 'transfer', args: [address, 0n] }) }]
+// The stand-in operation when the caller has none: a real USDC transfer, 1 unit to another address. A zero
+// transfer to the account itself estimated far lower on Arc testnet (0.13 USDC kept against 0.19 needed by
+// the real send), and a Max worked out from it was refused.
+const STAND_IN_RECIPIENT: Address = '0x000000000000000000000000000000000000dEaD'
+export function standInCalls(): Call[] {
+  return [{ to: TOKENS.USDC.address, data: encodeFunctionData({ abi: erc20Abi, functionName: 'transfer', args: [STAND_IN_RECIPIENT, 1n] }) }]
 }
 
 // The reserve for these calls (or a stand-in) from this account. It estimates with the signer of this page load
@@ -509,7 +512,7 @@ export async function passkeyReserve(address: Address, calls?: readonly Call[], 
     try {
       const lib = await loadSdk()
       const { client } = clients(lib, clientKey())
-      const ops = (calls && calls.length > 0 ? calls : stubCalls(address)).map((c) => ({ to: c.to, data: c.data }))
+      const ops = (calls && calls.length > 0 ? calls : standInCalls()).map((c) => ({ to: c.to, data: c.data }))
       const [gas, fees] = await Promise.all([
         signer.bundler.estimateUserOperationGas({ account: signer.account, calls: ops }),
         userOperationFees(lib.sdk, client),

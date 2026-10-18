@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react'
-import { type Address, getAddress, type Hex, type TransactionReceipt } from 'viem'
+import { type Address, decodeFunctionData, erc20Abi, getAddress, type Hex, type TransactionReceipt } from 'viem'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CIRCLE_MULTISIG_PLUGIN, ENTRY_POINT, RESERVE_FALLBACK, RESERVE_FALLBACK_NEW_ACCOUNT, TX_TIMEOUT_MS } from '../config'
 import { useSender } from '../hooks/useSender'
@@ -889,6 +889,17 @@ describe('passkeyReserve', () => {
     expect(await passkeyReserve(ADDRESS, [SEND])).toBe(310_000n)
     expect(kit.bundler.estimateUserOperationGas).toHaveBeenCalledWith({ account: { address: ADDRESS }, calls: [SEND] })
     expect(kit.sdk.toWebAuthnCredential).not.toHaveBeenCalled()
+  })
+
+  // A zero transfer to the account itself estimated far below a real send on Arc testnet.
+  it('estimates a real 1-unit USDC transfer to another address when the caller gives no calls', async () => {
+    await loginPasskey()
+    await passkeyReserve(ADDRESS)
+    const [{ calls }] = kit.bundler.estimateUserOperationGas.mock.calls.at(-1)! as unknown as [{ calls: Call[] }]
+    expect(calls).toHaveLength(1)
+    expect(calls[0]!.to).toBe('0x3600000000000000000000000000000000000000')
+    const { args } = decodeFunctionData({ abi: erc20Abi, data: calls[0]!.data })
+    expect(args).toEqual(['0x000000000000000000000000000000000000dEaD', 1n])
   })
 
   it('keeps the deployed-account fallback with no signer on this page', async () => {

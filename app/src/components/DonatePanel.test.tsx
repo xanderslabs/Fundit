@@ -684,6 +684,19 @@ describe('DonatePanel', () => {
       await waitFor(() => expect(donateButton().disabled).toBe(false))
     })
 
+    // The reserve drops once the account is deployed. On Arc testnet a value cached before the first operation
+    // (about 1.46 USDC) kept Give disabled on the next page.
+    it('reads the reserve again on mount instead of keeping an old one', async () => {
+      passkeySender()
+      state.balance = 10_000000n
+      const client = new QueryClient()
+      client.setQueryData(['passkey-reserve', ME.toLowerCase(), `donate-${CAMPAIGN.toLowerCase()}`], 1_460_000n)
+      renderPanel(view('USDC'), client)
+      const user = userEvent.setup()
+      await user.type(screen.getByLabelText('Amount'), '9.7')
+      await waitFor(() => expect(donateButton().disabled).toBe(false))
+    })
+
     // The prefund for the real calls (approve and donate) at the fee now decides, before anything is sent.
     it('checks the exact prefund for the gift right before sending', async () => {
       const { send } = passkeySender()

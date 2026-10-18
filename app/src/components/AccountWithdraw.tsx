@@ -3,7 +3,7 @@ import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { type Address, formatUnits, getAddress, isAddressEqual, zeroAddress } from 'viem'
 import { ARC_DOMAIN, CCTP_CHAINS, CHAIN_LABELS, TOKENS, type TokenSymbol } from '../config'
-import { usePasskeyReserve } from '../hooks/usePasskeyReserve'
+import { RESERVE_KEY, usePasskeyReserve } from '../hooks/usePasskeyReserve'
 import { buildAccountSendCalls, maxAccountSend, OWN_ADDRESS, TOO_SMALL } from '../lib/accountWithdraw'
 import { chainByKey, pendingPayoutFrom, savePendingPayout, subscribePending } from '../lib/bridge'
 import { arcClient } from '../lib/clients'
@@ -49,6 +49,7 @@ function SendOutForm({ sender }: { sender: Sender }) {
   const tx = useTx((hash) => {
     setAmountText('')
     void queryClient.invalidateQueries({ queryKey: [BALANCES_KEY] })
+    void queryClient.invalidateQueries({ queryKey: [RESERVE_KEY] })
     const sent = sending.current
     // The burn is on Arc. Saved so My page keeps tracking the mint after a reload. Arc sends need no record.
     if (sent && sent.dest !== 'Arc' && sent.net !== undefined) {

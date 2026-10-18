@@ -3,7 +3,7 @@ import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import type { Hex } from 'viem'
 import { EXPLORER_URL } from '../config'
-import { usePasskeyReserve } from '../hooks/usePasskeyReserve'
+import { RESERVE_KEY, usePasskeyReserve } from '../hooks/usePasskeyReserve'
 import { useSender } from '../hooks/useSender'
 import {
   clearPendingArc,
@@ -114,7 +114,11 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   const messageTooLong = messageBytes > limit
   const balance = funds.data?.balance
   // What the Fundit account keeps for the network fee (passkeyReserve). Only a USDC balance pays it.
-  const reserve = usePasskeyReserve(sender)
+  // Estimated as a gift of the same shape: an approve and a donate of 1 unit.
+  const reserve = usePasskeyReserve(sender, {
+    key: `donate-${campaign.toLowerCase()}`,
+    calls: buildDonateCalls({ campaign, token, amount: 1n, tip: 0n, message: '', allowance: 0n }),
+  })
   const gasBuffer = sender?.kind === 'passkey' && symbol === 'USDC' ? (reserve ?? 0n) : 0n
   // An EURC gift from a Fundit account still pays the network fee in USDC, so it needs the buffer in USDC.
   const needsGasUsdc = sender?.kind === 'passkey' && symbol !== 'USDC'
@@ -151,6 +155,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
     void queryClient.invalidateQueries({ queryKey: ['activity', campaign.toLowerCase()] })
     void queryClient.invalidateQueries({ queryKey: ['donor-funds'] })
     void queryClient.invalidateQueries({ queryKey: [BALANCES_KEY] })
+    void queryClient.invalidateQueries({ queryKey: [RESERVE_KEY] })
   }
 
   function handle(res: TxResult, hadApprove: boolean) {
