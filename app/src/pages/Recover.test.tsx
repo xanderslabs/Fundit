@@ -143,4 +143,18 @@ describe('Recover', () => {
     expect(await screen.findByText('Your account is back.')).toBeTruthy()
     expect(recoverWithPhrase).toHaveBeenCalledTimes(1)
   })
+
+  // A revert found later must bring the form back, not leave "still confirming" on screen. The words were
+  // dropped when the recovery went pending, so the person types them again.
+  it('returns to an empty form when Check again finds the recovery reverted', async () => {
+    recoverWithPhrase.mockResolvedValue({ status: 'pending', account: ACCOUNT })
+    checkPendingRecovery.mockRejectedValueOnce(new PlainError('The recovery did not go through. Nothing changed. Try again.'))
+    const user = renderPage()
+    await fill(user)
+    await user.click(await screen.findByRole('button', { name: 'Check again' }))
+    expect((await screen.findByRole('alert')).textContent).toBe('The recovery did not go through. Nothing changed. Try again.')
+    expect(screen.queryByText(/still confirming/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Check again' })).toBeNull()
+    for (let i = 1; i <= 12; i++) expect((screen.getByLabelText(`Word ${i}`) as HTMLInputElement).value).toBe('')
+  })
 })

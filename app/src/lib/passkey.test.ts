@@ -62,6 +62,7 @@ const kit = vi.hoisted(() => {
       toCircleSmartAccount: vi.fn(async () => ({ address: '0x00000000000000000000000000000000000000cc' })),
       getUserOperationGasPrice: vi.fn(),
       WebAuthnMode: { Register: 'Register', Login: 'Login' },
+      OwnerIdentifierType: { EOA: 'EOAOWNER', WebAuthn: 'WEBAUTHOWNER' },
     },
     createPublicClient: vi.fn(() => ({})),
     createBundlerClient: vi.fn(() => bundler),
@@ -69,10 +70,20 @@ const kit = vi.hoisted(() => {
   }
 })
 // The real BIP-39 word list, so the checksum check runs for real.
-vi.mock('./passkeyKit', async () => Object.assign(kit, { english: (await vi.importActual<typeof import('viem/accounts')>('viem/accounts')).english }))
+vi.mock('./passkeyKit', async () =>
+  Object.assign(kit, {
+    english: (await vi.importActual<typeof import('viem/accounts')>('viem/accounts')).english,
+    validateMnemonic: (await vi.importActual<typeof import('@scure/bip39')>('@scure/bip39')).validateMnemonic,
+    bip39English: (await vi.importActual<typeof import('@scure/bip39/wordlists/english')>('@scure/bip39/wordlists/english')).wordlist,
+  }),
+)
 // The account's USDC balance, read before a backup is added.
 const balance = vi.hoisted(() => ({ value: 1_000_000n }))
-vi.mock('./clients', () => ({ arcClient: { readContract: async () => balance.value } }))
+// Deployed code per address (lower case), for picking the live account when a key maps to several.
+const code = vi.hoisted(() => new Map<string, string>())
+vi.mock('./clients', () => ({
+  arcClient: { readContract: async () => balance.value, getCode: async ({ address }: { address: string }) => code.get(address.toLowerCase()) },
+}))
 vi.mock('wagmi', () => ({
   useConfig: () => ({}),
   useConnection: () => ({ address: '0x9999999999999999999999999999999999999999', isConnected: true }),
@@ -590,6 +601,24 @@ describe('recoverWithPhrase', () => {
     )
     for (const word of ['sausage', 'useful', 'yellow']) expect(seen).not.toContain(word)
     expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  // Circle may know more than one wallet for the key's address (toCircleSmartAccount asks circle_getAddress for
+  // it). Only the deployed one can be the Fundit account that added this key.
+  it('picks the deployed account when the key maps to several wallets, and refuses when that is still ambiguous', async () => {
+    const OTHER = '0x00000000000000000000000000000000000000Cd'
+    kit.sdk.getAddressMapping.mockResolvedValue([
+      { walletAddress: OTHER, owner: {} },
+      { walletAddress: RECOVERED, owner: {} },
+    ])
+    code.set(RECOVERED.toLowerCase(), '0x6001')
+    expect(await recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).toEqual({
+      status: 'recovered',
+      session: { address: RECOVERED, credentialId: 'cred-new' },
+    })
+    code.set(OTHER.toLowerCase(), '0x6001')
+    await expect(recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).rejects.toThrow('more than one account')
+    code.clear()
   })
 
   it('refuses when no Fundit account uses this recovery key', async () => {

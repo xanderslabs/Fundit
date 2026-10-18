@@ -1,53 +1,14 @@
-import { type ClipboardEvent, type FormEvent, useEffect, useRef, useState } from 'react'
+import { type ClipboardEvent, type FormEvent, useRef, useState } from 'react'
 import type { Address } from 'viem'
+import { AddressQr, CopyAddress } from '../components/AddressTools'
 import { AddBackupPasskey } from '../components/AddBackupPasskey'
+import { MAX_USERNAME } from '../components/PasskeyLogin'
 import { explainError } from '../lib/errors'
 import { checkPendingRecovery, normalizePhrase, RecoveryNeedsFunds, recoverWithPhrase, type StoredPasskey } from '../lib/passkey'
-import { qrMatrix, qrPath } from '../lib/qr'
 
 const WORDS = 12
 const INVALID = "Those words don't form a valid recovery key. Check the order and spelling."
-const MAX_USERNAME = 32
 const empty = () => Array<string>(WORDS).fill('')
-
-function AccountQr({ address }: { address: Address }) {
-  const [qr, setQr] = useState<{ size: number; path: string } | null>(null)
-  useEffect(() => {
-    let live = true
-    void qrMatrix(address).then((m) => live && setQr({ size: m.size + 8, path: qrPath(m) }))
-    return () => {
-      live = false
-    }
-  }, [address])
-  if (!qr) return null
-  return (
-    <svg className="fund-qr" viewBox={`0 0 ${qr.size} ${qr.size}`} role="img" aria-label="QR code of your account address">
-      <rect width={qr.size} height={qr.size} fill="#fff" />
-      <path d={qr.path} fill="#101928" />
-    </svg>
-  )
-}
-
-function CopyAddress({ address }: { address: Address }) {
-  const [copied, setCopied] = useState<boolean | null>(null)
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(address)
-      setCopied(true)
-    } catch {
-      setCopied(false)
-    }
-  }
-  return (
-    <div className="fund-address">
-      <code>{address}</code>
-      <button type="button" className="btn btn-outline" onClick={() => void copy()}>
-        {copied ? 'Copied' : 'Copy address'}
-      </button>
-      {copied === false && <p className="field-error">Could not copy. Select the address and copy it yourself.</p>}
-    </div>
-  )
-}
 
 // Recover a passkey account with its 12-word recovery key. The words live only in this component's state:
 // they are never stored, logged or put in the URL, and lib/passkey sends only derived addresses and signatures.
@@ -85,6 +46,8 @@ export function Recover() {
       setNeedsFunds(null)
       setRecovered(res.session)
     } else if (res.status === 'pending') {
+      // Check again needs only the account, so the words go now. A later revert means typing them again.
+      setWords(empty())
       setPending(res.account)
     } else {
       // The record is gone (it reverted or expired). The person can try again with the words.
@@ -122,7 +85,16 @@ export function Recover() {
     })
   }
 
-  const check = () => void run(async () => settle(await checkPendingRecovery(pending!)))
+  // A revert clears the lib's record and throws. The form comes back with the error.
+  const check = () =>
+    void run(async () => {
+      try {
+        settle(await checkPendingRecovery(pending!))
+      } catch (err) {
+        setPending(null)
+        throw err
+      }
+    })
 
   if (recovered) {
     return (
@@ -194,7 +166,7 @@ export function Recover() {
               <div className="recover-fund">
                 <p>{needsFunds.message}</p>
                 <CopyAddress address={needsFunds.account} />
-                <AccountQr address={needsFunds.account} />
+                <AddressQr address={needsFunds.account} label="QR code of your account address" />
               </div>
             )}
             <button type="submit" className="btn" disabled={busy}>

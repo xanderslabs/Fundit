@@ -5,7 +5,7 @@ import { loginPasskey, registerPasskey } from '../lib/passkey'
 export const PASSKEY_INTRO =
   'A passkey lets you sign in with your fingerprint, face or device PIN, with no wallet app to install. It opens a Fundit wallet on Arc that you add USDC to before you give.'
 
-const MAX_USERNAME = 32
+export const MAX_USERNAME = 32
 
 // Sign up with a username, or log in with a passkey already on this device.
 export function PasskeyLogin({ onDone }: { onDone?: () => void }) {

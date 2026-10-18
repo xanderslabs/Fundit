@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { type Address, decodeErrorResult, getAddress, type Hex, hexToBytes, isAddress, parseAbi, sha256, type TransactionReceipt, type Transport } from 'viem'
+import { type Address, decodeErrorResult, getAddress, type Hex, isAddress, parseAbi, type TransactionReceipt, type Transport } from 'viem'
 import { arc } from 'viem/chains'
 import { erc20Abi } from '../abi/erc20'
 import { CIRCLE_CLIENT_KEY, MODULAR_WALLETS_URL, PASSKEY_GAS_BUFFER, PASSKEYS_ENABLED, TOKENS, TX_TIMEOUT_MS } from '../config'
@@ -510,19 +510,12 @@ export function normalizePhrase(text: string): string {
   return text.trim().toLowerCase().split(/\s+/).join(' ')
 }
 
-// True for 12 words from the BIP-39 English list whose last 4 bits match the checksum (the first 4 bits of
-// SHA-256 of the other 128 bits).
+// True for exactly 12 words that form a valid BIP-39 English phrase (words and checksum), checked by @scure/bip39.
 export async function isValidRecoveryPhrase(text: string): Promise<boolean> {
-  const words = normalizePhrase(text).split(' ')
-  if (words.length !== 12) return false
-  const { english } = await import('./passkeyKit')
-  const indexes = words.map((w) => english.indexOf(w))
-  if (indexes.some((i) => i < 0)) return false
-  const bits = indexes.map((i) => i.toString(2).padStart(11, '0')).join('')
-  const entropy = new Uint8Array(16)
-  for (let i = 0; i < 16; i++) entropy[i] = parseInt(bits.slice(i * 8, i * 8 + 8), 2)
-  const first = hexToBytes(sha256(entropy))[0]!
-  return (first >> 4).toString(2).padStart(4, '0') === bits.slice(128)
+  const phrase = normalizePhrase(text)
+  if (phrase.split(' ').length !== 12) return false
+  const kit = await import('./passkeyKit')
+  return kit.validateMnemonic(phrase, kit.bip39English)
 }
 
 export function readPendingRecovery(account: Address): PendingRecovery | null {
@@ -600,13 +593,18 @@ export async function recoverWithPhrase(p: { phrase: string; username: string })
   const recovery = lib.viem.mnemonicToAccount(phrase)
   const { transport, client } = clients(lib, key)
 
-  const mappings = await sdk.getAddressMapping(client as never, {
-    owner: { type: 'EOAOWNER', identifier: { address: recovery.address } },
-  } as never)
-  const wallets = [...new Set(mappings.map((m) => m.walletAddress.toLowerCase()))]
+  type Lookup = Parameters<typeof sdk.getAddressMapping>
+  const lookup: Lookup[1] = { owner: { type: sdk.OwnerIdentifierType.EOA, identifier: { address: recovery.address } } }
+  const mappings = await sdk.getAddressMapping(client as unknown as Lookup[0], lookup)
+  let wallets = [...new Set(mappings.map((m) => m.walletAddress.toLowerCase()))].map((w) => getAddress(w))
   if (wallets.length === 0) throw new PlainError("We couldn't find a Fundit account for this recovery key. Check the words and try again.")
-  if (wallets.length > 1) throw new PlainError('This recovery key belongs to more than one account, so Fundit cannot pick one.')
-  const account = getAddress(wallets[0]!)
+  if (wallets.length > 1) {
+    // Circle can also hold a wallet made for the key itself. The account that added the key is deployed on Arc.
+    const deployed = await Promise.all(wallets.map(async (w) => ((await arcClient.getCode({ address: w })) ?? '0x') !== '0x'))
+    wallets = wallets.filter((_, i) => deployed[i])
+    if (wallets.length !== 1) throw new PlainError('This recovery key belongs to more than one account, so Fundit cannot pick one.')
+  }
+  const account = wallets[0]!
 
   const pending = readPendingRecovery(account)
   if (pending) return { status: 'pending', account }

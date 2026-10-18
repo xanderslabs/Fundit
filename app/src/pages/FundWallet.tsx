@@ -1,10 +1,10 @@
 import { useAppKit } from '@reown/appkit/react'
 import { useQuery } from '@tanstack/react-query'
-import qrcode from 'qrcode-generator'
-import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { type Address, type EIP1193Provider, formatUnits } from 'viem'
 import { useConnection } from 'wagmi'
 import { erc20Abi } from '../abi/erc20'
+import { AddressQr, CopyAddress } from '../components/AddressTools'
 import { PasskeyLogin } from '../components/PasskeyLogin'
 import { PendingBridgeTracker } from '../components/CrossChainDonate'
 import { ARC_DOMAIN, CCTP_CHAINS, CHAIN_LABELS, type CctpChainKey, CROSSCHAIN_ENABLED, TOKENS } from '../config'
@@ -17,46 +17,6 @@ import { usePasskeySession } from '../lib/passkey'
 
 const BALANCE_POLL_MS = 15_000
 const QUOTE_DEBOUNCE_MS = 400
-
-// A QR code for the address, drawn as SVG squares so no HTML string is injected.
-function AddressQr({ address }: { address: Address }) {
-  const { size, path } = useMemo(() => {
-    const qr = qrcode(0, 'M')
-    qr.addData(address)
-    qr.make()
-    const n = qr.getModuleCount()
-    let d = ''
-    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) d += `M${c + 4} ${r + 4}h1v1h-1z`
-    return { size: n + 8, path: d }
-  }, [address])
-  return (
-    <svg className="fund-qr" viewBox={`0 0 ${size} ${size}`} role="img" aria-label="QR code of your wallet address">
-      <rect width={size} height={size} fill="#fff" />
-      <path d={path} fill="#101928" />
-    </svg>
-  )
-}
-
-function CopyAddress({ address }: { address: Address }) {
-  const [copied, setCopied] = useState<boolean | null>(null)
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(address)
-      setCopied(true)
-    } catch {
-      setCopied(false)
-    }
-  }
-  return (
-    <div className="fund-address">
-      <code>{address}</code>
-      <button type="button" className="btn btn-outline" onClick={() => void copy()}>
-        {copied ? 'Copied' : 'Copy address'}
-      </button>
-      {copied === false && <p className="field-error">Could not copy. Select the address and copy it yourself.</p>}
-    </div>
-  )
-}
 
 // Bridge Kit from an external wallet on another chain. Circle's forwarder mints the USDC to the passkey wallet on Arc.
 function BridgeToPasskey({ recipient }: { recipient: Address }) {
@@ -254,7 +214,7 @@ export function FundWallet() {
         </p>
         <p className="hint">Network fees on Arc are paid in USDC from this balance, so keep a little extra.</p>
         <CopyAddress address={address} />
-        <AddressQr address={address} />
+        <AddressQr address={address} label="QR code of your wallet address" />
         <p className="hint">Send only USDC on Arc to this address. It is not the same wallet on other chains.</p>
       </section>
 
