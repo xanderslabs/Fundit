@@ -1,11 +1,13 @@
 import { Link, Outlet } from 'react-router'
 import { NETWORK, SOCIAL_LINKS } from '../config'
 import { AccountControl } from './AccountMenu'
+import { ScrollToTop } from './ScrollToTop'
 import { TestnetBanner } from './TestnetBanner'
 
 export function Layout() {
   return (
     <div className="layout">
+      <ScrollToTop />
       <TestnetBanner network={NETWORK.name} />
       <header className="header">
         <Link to="/" className="header-logo" aria-label="Fundit home">
