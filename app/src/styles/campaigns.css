@@ -949,21 +949,16 @@
   padding: 24px;
 }
 
-/* Tabs: the ARIA tabs pattern. The list scrolls sideways when it does not fit. */
+/* Tabs: the ARIA tabs pattern. The tabs share the row equally and wrap their labels, so the list never scrolls. */
 .tab-list {
   display: flex;
   gap: 4px;
-  overflow-x: auto;
   border-bottom: 1px solid var(--line);
-  scrollbar-width: none;
-}
-
-.tab-list::-webkit-scrollbar {
-  display: none;
 }
 
 .tab {
-  flex: none;
+  flex: 1 1 0;
+  min-width: 0;
   margin-bottom: -1px;
   padding: 12px 16px;
   border: 0;
@@ -971,7 +966,8 @@
   background: none;
   color: var(--muted);
   font-weight: var(--weight-medium);
-  white-space: nowrap;
+  line-height: 1.25;
+  text-align: center;
 }
 
 .tab:hover {
@@ -1086,13 +1082,7 @@
   }
 
   .tab {
-    padding: 12px 10px;
-  }
-
-  /* A soft fade at the right edge shows that the tabs scroll. The padding lets the last tab clear it. */
-  .tab-list {
-    padding-right: 24px;
-    mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+    padding: 12px 6px;
   }
 
   .deposit-address {
