@@ -427,6 +427,9 @@
 .campaign-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 380px;
+  /* The side column spans both rows. The second row takes any extra height, so a tall side column never
+     pushes About away from the image. */
+  grid-template-rows: auto 1fr;
   grid-template-areas:
     'hero side'
     'body side';
@@ -452,6 +455,15 @@
 .campaign-body {
   grid-area: body;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* The column gap sets the spacing, so the sections' own top margins go. */
+.campaign-body > .links,
+.campaign-body > .activity {
+  margin-top: 0;
 }
 
 .campaign-body h2 {
@@ -575,6 +587,7 @@
       'hero'
       'side'
       'body';
+    grid-template-rows: none;
   }
 
   .campaign-side {

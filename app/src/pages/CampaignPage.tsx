@@ -117,6 +117,8 @@ function CampaignBody({ view }: { view: CampaignView }) {
         )}
       </header>
       <BackupBanner view={view} />
+      {/* DOM order is the narrow-screen and screen reader order. Wide screens place stats and Give in the
+          right column with grid areas, so the left column runs on without gaps. */}
       <div className="campaign-grid">
         <CampaignImage url={summary.meta.imageUrl} title={summary.meta.title} className="campaign-hero" />
         <aside className="campaign-side">
@@ -124,9 +126,6 @@ function CampaignBody({ view }: { view: CampaignView }) {
             <CampaignStats view={view} />
           </div>
           <DonatePanel view={view} />
-          <section className="panel" aria-labelledby="share-heading">
-            <SharePanel address={view.address} title={summary.meta.title} isCreator={isCreator} headingId="share-heading" />
-          </section>
         </aside>
         <div className="campaign-body">
           <section>
@@ -135,6 +134,9 @@ function CampaignBody({ view }: { view: CampaignView }) {
           </section>
           <CampaignLinks links={summary.meta.links} />
           <CreatorLine creator={summary.creator} address={view.address} />
+          <section className="panel" aria-labelledby="share-heading">
+            <SharePanel address={view.address} title={summary.meta.title} isCreator={isCreator} headingId="share-heading" />
+          </section>
           <ActivityList campaign={view.address} createdAtBlock={summary.createdAtBlock} symbol={view.symbol} />
         </div>
       </div>

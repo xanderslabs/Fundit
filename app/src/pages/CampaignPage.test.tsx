@@ -120,6 +120,29 @@ describe('CampaignPage', () => {
     expect(screen.getByRole('button', { name: 'Sign in to give' })).toBeTruthy()
   })
 
+  // Screen readers and narrow screens follow the DOM: the money facts and Give come right after the image,
+  // before the story. The wide layout moves stats and Give to the right column with grid placement only.
+  it('orders the page image, stats, Give, About, links, organiser, Share, Activity', () => {
+    hookState.current = { data: view({ links: ['https://example.org/report'] }), isPending: false, isError: false }
+    const { container } = renderPage()
+    const parts = [
+      container.querySelector('.campaign-hero'),
+      container.querySelector('.stats'),
+      screen.getByRole('region', { name: 'Give' }),
+      screen.getByRole('heading', { name: 'About' }),
+      screen.getByRole('heading', { name: 'Links' }),
+      screen.getByText('Organiser'),
+      screen.getByRole('heading', { name: 'Share this Fundit' }),
+      screen.getByRole('heading', { name: 'Activity' }),
+    ]
+    for (let i = 1; i < parts.length; i++) {
+      expect(parts[i - 1]!.compareDocumentPosition(parts[i]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    }
+    // Only stats and Give sit in the sticky column.
+    const side = container.querySelector('.campaign-side')!
+    expect(side.contains(screen.getByRole('heading', { name: 'Share this Fundit' }))).toBe(false)
+  })
+
   // A closed campaign reverts every donation, so the page must not offer one.
   it('disables donating on a closed campaign', () => {
     hookState.current = { data: view({}, true), isPending: false, isError: false }
