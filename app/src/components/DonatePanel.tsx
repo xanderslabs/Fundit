@@ -332,7 +332,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
               {TIP_PERCENTS.map((pct) => (
                 <label key={pct} className="donate-option">
                   <input type="radio" name="donate-tip" checked={tipPercent === pct} onChange={() => setTipPercent(pct)} />
-                  <span>{pct === 0 ? 'No tip' : `${pct}%`}</span>
+                  <span>{`${pct}%`}</span>
                 </label>
               ))}
             </div>

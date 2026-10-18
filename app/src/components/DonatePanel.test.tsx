@@ -156,8 +156,19 @@ describe('DonatePanel', () => {
     expect(await screen.findByText(/Your balance is 104.00 USDC\. Keep about 0.30 USDC more/)).toBeTruthy()
     expect(donateButton().disabled).toBe(true)
 
-    await user.click(screen.getByLabelText('No tip'))
+    await user.click(screen.getByLabelText('0%'))
     await waitFor(() => expect(donateButton().disabled).toBe(false))
+  })
+
+  // The tip choices read as one scale, so the zero option says 0% like the others, and it is the default.
+  it('labels the zero tip 0%, checked by default', () => {
+    fakeSender()
+    state.balance = 104_000000n
+    renderPanel(view('USDC'))
+    const tips = screen.getByRole('group', { name: 'Tip Fundit (optional)' })
+    expect(within(tips).getAllByRole('radio').map((r) => r.closest('label')!.textContent)).toEqual(['0%', '5%', '10%', '15%'])
+    expect((within(tips).getByLabelText('0%') as HTMLInputElement).checked).toBe(true)
+    expect(screen.queryByText('No tip')).toBeNull()
   })
 
   // The donor must see where every unit goes before the wallet asks them to confirm.
