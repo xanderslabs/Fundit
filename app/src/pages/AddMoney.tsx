@@ -5,10 +5,9 @@ import { type Address, type EIP1193Provider, formatUnits } from 'viem'
 import { useConfig, useConnection } from 'wagmi'
 import { AddressQr, CopyAddress } from '../components/AddressTools'
 import { PasskeyLogin } from '../components/PasskeyLogin'
-import { PendingBridgeTracker } from '../components/CrossChainDonate'
+import { PendingBridgeTracker } from '../components/PendingBridgeTracker'
 import { TxStatus, useTx } from '../components/TxStatus'
 import { ARC_DOMAIN, CCTP_CHAINS, CHAIN_LABELS, type CctpChainKey, CROSSCHAIN_ENABLED, PASSKEY_GAS_BUFFER, TOKENS, type TokenSymbol } from '../config'
-import { useWalletChoice } from '../hooks/useSender'
 import { blockingEntry, chainByKey, donateCrossChain, estimateCrossChain, notifyPending, subscribePending } from '../lib/bridge'
 import { arcClient } from '../lib/clients'
 import { BALANCES_KEY, balancesKey, buildDepositCall, fetchAccountBalances } from '../lib/deposit'
@@ -206,12 +205,13 @@ function BridgeToAccount({ recipient }: { recipient: Address }) {
   )
 }
 
-// A regular wallet on Arc sends USDC or EURC straight to the Fundit account. It always uses the connected
-// wallet's own sender, even while the passkey is the active wallet: the passkey is where the money goes.
+// A regular wallet on Arc sends USDC or EURC straight to the Fundit account. It uses the connected wallet's own
+// sender: the Fundit account is where the money goes. Add money is the only place a wallet connects.
 function WalletDeposit({ account }: { account: Address }) {
   const { open } = useAppKit()
   const config = useConfig()
-  const { external } = useWalletChoice()
+  const { address, isConnected } = useConnection()
+  const external = isConnected && address ? address : null
   const queryClient = useQueryClient()
   const [symbol, setSymbol] = useState<TokenSymbol>('USDC')
   const [amountText, setAmountText] = useState('')

@@ -58,11 +58,7 @@ describe('NETWORKS', () => {
     expect(n.usdc).toBe('0x3600000000000000000000000000000000000000')
     expect(n.eurc).toBe('0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1')
     expect(n.tokenMessengerV2).toBe('0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d')
-    expect(n.memo).toBe('0x5294E9927c3306DcBaDb03fe70b92e01cCede505')
-    expect(n.gatewayWallet).toBe('0x77777777Dcc4d5A8B6E418Fd04D8997ef11000eE')
-    expect(n.gatewayMinter).toBe('0x2222222d7164433c4C09B0b0D809a9b52C04C205')
     expect(n.irisUrl).toBe('https://iris-api.circle.com')
-    expect(n.gatewayUrl).toBe('https://gateway-api.circle.com')
     expect(n.modularChainPath).toBe('/arc')
     expect(n.cctpChains.map((c) => [c.key, c.chainId, c.domain, c.usdc, c.rpcUrl])).toEqual([
       ['Ethereum', 1, 0, '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', 'https://ethereum-rpc.publicnode.com'],
@@ -88,11 +84,7 @@ describe('NETWORKS', () => {
     expect(n.usdc).toBe('0x3600000000000000000000000000000000000000')
     expect(n.eurc).toBe('0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a')
     expect(n.tokenMessengerV2).toBe('0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA')
-    expect(n.memo).toBe('0x5294E9927c3306DcBaDb03fe70b92e01cCede505')
-    expect(n.gatewayWallet).toBe('0x0077777d7EBA4688BDeF3E311b846F25870A19B9')
-    expect(n.gatewayMinter).toBe('0x0022222ABE238Cc2C7Bb1f21003F0a260052475B')
     expect(n.irisUrl).toBe('https://iris-api-sandbox.circle.com')
-    expect(n.gatewayUrl).toBe('https://gateway-api-testnet.circle.com')
     expect(n.modularChainPath).toBe('/arcTestnet')
     expect(n.cctpChains.map((c) => [c.key, c.chainId, c.domain, c.usdc, c.rpcUrl])).toEqual([
       ['Ethereum', 11155111, 0, '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', 'https://11155111.rpc.thirdweb.com'],
@@ -139,7 +131,6 @@ describe('VITE_ARC_NETWORK=testnet', () => {
       expect(c.ARC_RPC_URL).toBe('https://rpc.testnet.arc.io')
       expect(c.EXPLORER_URL).toBe('https://explorer.testnet.arc.io')
       expect(c.IRIS_URL).toBe('https://iris-api-sandbox.circle.com')
-      expect(c.GATEWAY_URL).toBe('https://gateway-api-testnet.circle.com')
       expect(c.TOKENS.EURC.address).toBe('0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a')
       expect(c.TOKEN_MESSENGER_V2).toBe('0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA')
       expect(c.CCTP_CHAINS).toHaveLength(2)
@@ -159,6 +150,11 @@ describe('_headers CSP', () => {
   // A host missing here is blocked by the browser at runtime with no build or type error.
   it.each(EXTERNAL_HOSTS)('allows the app to call %s', (url) => {
     expect(connectSrcAllows(headers, url)).toBe(true)
+  })
+
+  // Donating from a Gateway unified balance is gone, so the browser must not be allowed to call Gateway.
+  it('lists no Gateway API host', () => {
+    expect(headers).not.toMatch(/gateway-api/)
   })
 
   it('refuses a host or scheme connect-src does not list', () => {

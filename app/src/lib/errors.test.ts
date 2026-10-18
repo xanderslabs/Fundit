@@ -145,7 +145,7 @@ describe('explainError', () => {
 })
 
 describe('explainAfterApproval', () => {
-  // A cross-chain or unified donation can fail after the wallet already approved or signed. "Nothing was sent"
+  // Adding money from another chain can fail after the wallet already approved. "Nothing was sent"
   // would then be untrue, so the generic text stops at "Something went wrong."
   it('never says "Nothing was sent"', () => {
     expect(explainAfterApproval(new Error('socket hang up'))).toBe('Something went wrong. (socket hang up)')

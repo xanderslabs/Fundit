@@ -1,13 +1,4 @@
 import { Link } from 'react-router'
-import { CROSSCHAIN_ENABLED, PASSKEYS_ENABLED } from '../config'
-
-// What Circle provides here, joined as plain English: "a", "a and b", "a, b and c".
-function circleServices(): string {
-  const parts = ['cross-chain transfers (CCTP)']
-  if (CROSSCHAIN_ENABLED) parts.push('unified balances (Gateway)')
-  if (PASSKEYS_ENABLED) parts.push('passkey wallets')
-  return parts.length === 1 ? parts[0]! : `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`
-}
 
 export function Privacy() {
   return (
@@ -44,7 +35,7 @@ export function Privacy() {
       <p>Fundit sets no cookies. It uses your browser's local storage only for:</p>
       <ul>
         <li>Reminders of transactions you started that have not finished yet, so the page can check on them.</li>
-        {PASSKEYS_ENABLED && <li>Your passkey wallet session, if you use a passkey wallet.</li>}
+        <li>Your passkey wallet session, if you use a passkey wallet.</li>
         <li>
           Your wallet connection, which the wallet connection tools (wagmi, Reown and WalletConnect) save so you stay
           connected after a reload.
@@ -68,7 +59,7 @@ export function Privacy() {
       <ul>
         <li>Public RPC providers for Arc, Ethereum and the other supported chains, to read and send transactions.</li>
         <li>
-          Circle, for {circleServices()}.
+          Circle, for cross-chain transfers (CCTP) and passkey wallets.
         </li>
         <li>Reown and WalletConnect, to connect your wallet.</li>
         <li>The sites that host fundraiser images and avatars.</li>

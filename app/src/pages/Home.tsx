@@ -1,10 +1,9 @@
-import { useAppKitState } from '@reown/appkit/react'
-import { type ReactNode, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { SignInButton } from '../components/AccountMenu'
 import { CampaignCard } from '../components/CampaignCard'
 import { CampaignGrid, LoadError } from '../components/CampaignGrid'
-import { CHAIN_NAMES, CROSSCHAIN_ENABLED, PASSKEYS_ENABLED } from '../config'
+import { CHAIN_NAMES } from '../config'
 import { useCampaigns, useFeatured } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
 
@@ -62,8 +61,7 @@ const STEPS = [
 
 type Faq = { q: string; a: ReactNode }
 
-// Built at render, so the flags decide what the page promises. Fees, caps and payout rules match the
-// contracts: MAX_FEE_BPS = 500, fees copied into each fundraiser at creation, EURC payouts on Arc only.
+// Fees, caps and payout rules match the contracts: MAX_FEE_BPS = 500, fees copied into each fundraiser at creation, EURC payouts on Arc only.
 function faqs(): Faq[] {
   return [
     {
@@ -106,44 +104,28 @@ function faqs(): Faq[] {
       q: 'What can I give with?',
       a: (
         <p>
-          Each Fundit takes one currency: USDC or EURC on Arc. EURC Fundits take donations on Arc only.
-          {CROSSCHAIN_ENABLED &&
-            ' USDC Fundits can also take USDC from another chain, or from your Circle unified balance.'}
+          Each Fundit takes one currency: USDC or EURC on Arc. You give from your Fundit account, so add USDC or
+          EURC to it first.
         </p>
       ),
     },
     {
       q: 'Do I need a crypto wallet?',
-      a: PASSKEYS_ENABLED ? (
+      a: (
         <p>
-          You need a wallet, but Fundit can make one for you. Sign in with a wallet such as MetaMask, or any wallet
-          that works with WalletConnect. Or sign in with a passkey, and Fundit opens a wallet on Arc for you. You add
-          USDC to it before you give.
+          No. You sign in with a passkey, and Fundit opens a Fundit account on Arc for you. You add USDC to it before
+          you give.
         </p>
-      ) : (
-        <p>Yes. Sign in with a wallet such as MetaMask, or any wallet that works with WalletConnect.</p>
       ),
     },
   ]
 }
 
-// Signed in, it is a link to /create. Signed out, it opens sign-in first and goes to /create once that
-// succeeds. Closing the wallet modal or the sign-in panel without signing in stays on Home.
+// Signed in, it is a link to /create. Signed out, it opens the passkey sign-in and goes to /create once that
+// succeeds. Closing the sign-in dialog without signing in stays on Home.
 function CreateFunditButton() {
   const signedIn = useSender() !== null
   const navigate = useNavigate()
-  const { open: modalOpen } = useAppKitState()
-  // waiting: sign-in started. modal: the wallet modal opened, so its closing without a sign-in ends the wait.
-  const [want, setWant] = useState<'no' | 'waiting' | 'modal'>('no')
-
-  useEffect(() => {
-    if (want === 'no') return
-    if (signedIn) {
-      setWant('no')
-      void navigate('/create')
-    } else if (modalOpen && want === 'waiting') setWant('modal')
-    else if (!modalOpen && want === 'modal') setWant('no')
-  }, [want, signedIn, modalOpen, navigate])
 
   const className = 'btn btn-lg btn-outline'
   if (signedIn) {
@@ -154,13 +136,7 @@ function CreateFunditButton() {
     )
   }
   return (
-    <SignInButton
-      className={className}
-      label="Create a Fundit"
-      onStart={() => setWant('waiting')}
-      onDismiss={() => setWant('no')}
-      onPasskeyDone={() => void navigate('/create')}
-    />
+    <SignInButton className={className} label="Create a Fundit" onPasskeyDone={() => void navigate('/create')} />
   )
 }
 

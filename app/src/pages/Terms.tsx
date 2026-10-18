@@ -1,5 +1,4 @@
 import { Link } from 'react-router'
-import { CROSSCHAIN_ENABLED, PASSKEYS_ENABLED } from '../config'
 
 export function Terms() {
   return (
@@ -37,8 +36,8 @@ export function Terms() {
       </p>
       <h3>3.2 Your wallet</h3>
       <p>
-        To start a fundraiser or donate you connect a wallet you control
-        {PASSKEYS_ENABLED && ', or use a Circle passkey wallet'}. You are responsible for keeping your wallet, keys and devices safe. We cannot recover a lost wallet or reverse a
+        To start a fundraiser or donate you connect a wallet you control, or use a Circle passkey wallet. You are
+        responsible for keeping your wallet, keys and devices safe. We cannot recover a lost wallet or reverse a
         transaction.
       </p>
 
@@ -89,9 +88,8 @@ export function Terms() {
 
       <h2>7. Third-party services</h2>
       <p>
-        Fundit relies on services we do not run: the Arc blockchain, Circle (USDC, EURC, CCTP
-        {CROSSCHAIN_ENABLED && ', Gateway'}
-        {PASSKEYS_ENABLED && ' and passkey wallets'}), Reown and WalletConnect for connecting wallets, and public RPC providers for reading blockchain data.
+        Fundit relies on services we do not run: the Arc blockchain, Circle (USDC, EURC, CCTP and passkey wallets),
+        Reown and WalletConnect for connecting wallets, and public RPC providers for reading blockchain data.
         Their own terms apply to your use of them, and we are not responsible for their availability or errors.
       </p>
 

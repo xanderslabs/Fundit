@@ -4,12 +4,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Privacy } from './Privacy'
 import { Terms } from './Terms'
 
-const flags = vi.hoisted(() => ({ passkeys: false, crosschain: false }))
+const flags = vi.hoisted(() => ({ crosschain: false }))
 vi.mock('../config', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../config')>()),
-  get PASSKEYS_ENABLED() {
-    return flags.passkeys
-  },
   get CROSSCHAIN_ENABLED() {
     return flags.crosschain
   },
@@ -17,7 +14,6 @@ vi.mock('../config', async (importOriginal) => ({
 
 afterEach(() => {
   cleanup()
-  flags.passkeys = false
   flags.crosschain = false
 })
 
@@ -41,20 +37,15 @@ describe.each(['terms', 'privacy'] as const)('%s page', (page) => {
     expect(screen.getByText('Draft: review before launch.')).toBeTruthy()
   })
 
-  // Passkey wallets ship behind a flag. The policy must not describe a service the site does not use.
-  it('mentions passkey wallets only when they are switched on', () => {
-    expect(text(page)).not.toMatch(/passkey/i)
-    cleanup()
-    flags.passkeys = true
+  // Every account is a Fundit account (a Circle passkey wallet), so the policy always describes it.
+  it('always mentions passkeys', () => {
     expect(text(page)).toMatch(/passkey/i)
   })
 
-  // Gateway unified balances ship behind VITE_CROSSCHAIN, like passkeys behind theirs.
-  it('mentions Gateway only when cross-chain donations are switched on', () => {
+  // Gateway unified balances are no longer used anywhere, so the policy must not name them.
+  it.each([false, true])('never mentions Gateway (cross-chain flag %s)', (on) => {
+    flags.crosschain = on
     expect(text(page)).not.toMatch(/Gateway/)
-    cleanup()
-    flags.crosschain = true
-    expect(text(page)).toMatch(/Gateway/)
   })
 
   // fundit.xyz is not our domain, so mail sent there would reach a stranger.

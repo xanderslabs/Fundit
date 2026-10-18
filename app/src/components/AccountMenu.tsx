@@ -1,10 +1,7 @@
-import { useAppKit } from '@reown/appkit/react'
 import { type KeyboardEvent, type ReactNode, type Ref, type RefObject, useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import type { Address } from 'viem'
 import { useDisconnect } from 'wagmi'
-import { PASSKEYS_ENABLED } from '../config'
-import { useWalletChoice } from '../hooks/useSender'
 import { dismissBackupPrompt, logoutPasskey, type StoredPasskey, useBackupPrompt, usePasskeySession } from '../lib/passkey'
 import { AddBackupPasskey, confirmLeave } from './AddBackupPasskey'
 import { Name } from './Name'
@@ -25,35 +22,9 @@ function useOutsideClose(open: boolean, root: RefObject<HTMLElement | null>, clo
 type SignInProps = {
   className?: string
   label?: string
-  // Runs when the person starts signing in: the wallet modal or the sign-in dialog opens.
-  onStart?: () => void
-  // Runs when the sign-in dialog closes without a sign-in (Escape, a click on the backdrop, or Close).
-  onDismiss?: () => void
   // Runs after a passkey sign-in. The top bar sends a new passkey user to add money to their account.
   onPasskeyDone?: () => void
   buttonRef?: Ref<HTMLButtonElement>
-}
-
-// Without passkeys, Sign in opens the wallet modal. With passkeys, it opens a dialog that offers both.
-export function SignInButton(props: SignInProps) {
-  const { open: openWallet } = useAppKit()
-  const { className = 'btn', label = 'Sign in', onStart, buttonRef } = props
-  if (!PASSKEYS_ENABLED) {
-    return (
-      <button
-        ref={buttonRef}
-        type="button"
-        className={className}
-        onClick={() => {
-          onStart?.()
-          void openWallet()
-        }}
-      >
-        {label}
-      </button>
-    )
-  }
-  return <SignInDialog {...props} className={className} label={label} />
 }
 
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
@@ -138,9 +109,9 @@ function ModalDialog({
   )
 }
 
-// The Fundit account (a passkey) comes first. A crypto wallet opens the existing wallet modal.
-function SignInDialog({ className, label, onStart, onDismiss, onPasskeyDone, buttonRef }: SignInProps) {
-  const { open: openWallet } = useAppKit()
+// Sign-in is passkey only: the dialog opens the Fundit account sign-in and nothing else. The wallet modal never
+// opens from here; it opens only inside Add money.
+export function SignInButton({ className = 'btn', label = 'Sign in', onPasskeyDone, buttonRef }: SignInProps) {
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState<'choose' | 'passkey'>('choose')
   const trigger = useRef<HTMLButtonElement | null>(null)
@@ -150,7 +121,6 @@ function SignInDialog({ className, label, onStart, onDismiss, onPasskeyDone, but
   function dismiss() {
     setOpen(false)
     trigger.current?.focus()
-    onDismiss?.()
   }
 
   // The Continue button goes away on the passkey step, so focus moves to the username field.
@@ -175,7 +145,6 @@ function SignInDialog({ className, label, onStart, onDismiss, onPasskeyDone, but
         onClick={() => {
           setStep('choose')
           setOpen(true)
-          onStart?.()
         }}
       >
         {label}
@@ -201,16 +170,6 @@ function SignInDialog({ className, label, onStart, onDismiss, onPasskeyDone, but
                 </Link>
               </>
             )}
-            <button
-              type="button"
-              className="link-button"
-              onClick={() => {
-                setOpen(false)
-                void openWallet()
-              }}
-            >
-              Use a crypto wallet instead
-            </button>
           </div>
         </ModalDialog>
       )}
@@ -247,7 +206,6 @@ const ChevronDown = () => (
 
 // The top bar control: Sign in when signed out, else the account pill and its menu.
 export function AccountControl() {
-  const choice = useWalletChoice()
   const session = usePasskeySession()
   const backupPrompt = useBackupPrompt(session)
   const navigate = useNavigate()
@@ -256,27 +214,24 @@ export function AccountControl() {
 
   // After Sign out the pill is gone, so focus lands on the Sign in button that replaces it.
   useEffect(() => {
-    if (focusSignIn && choice.active === null) {
+    if (focusSignIn && session === null) {
       signIn.current?.focus()
       setFocusSignIn(false)
     }
-  }, [focusSignIn, choice.active])
+  }, [focusSignIn, session])
 
-  const address = choice.active === 'passkey' ? session?.address : choice.active === 'external' ? choice.external : null
-  if (!address) {
+  if (!session) {
     return <SignInButton buttonRef={signIn} onPasskeyDone={() => navigate('/add-money')} />
   }
   return (
     <>
-      <AccountMenu address={address} onSignedOut={() => setFocusSignIn(true)} />
-      {PASSKEYS_ENABLED && session && backupPrompt && <BackupDialog stored={session} />}
+      <AccountMenu address={session.address} onSignedOut={() => setFocusSignIn(true)} />
+      {backupPrompt && <BackupDialog stored={session} />}
     </>
   )
 }
 
 function AccountMenu({ address, onSignedOut }: { address: Address; onSignedOut: () => void }) {
-  const choice = useWalletChoice()
-  const session = usePasskeySession()
   const { mutate: disconnect } = useDisconnect()
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
@@ -329,8 +284,9 @@ function AccountMenu({ address, onSignedOut }: { address: Address; onSignedOut: 
     // Recovery words on My page would be lost, so Sign out asks first like any other way out.
     if (!confirmLeave()) return
     setOpen(false)
-    if (choice.external) disconnect()
-    if (session) logoutPasskey()
+    // A wallet connected to add money goes too. With none connected this does nothing.
+    disconnect()
+    logoutPasskey()
     onSignedOut()
   }
 
@@ -351,9 +307,6 @@ function AccountMenu({ address, onSignedOut }: { address: Address; onSignedOut: 
       </button>
       {open && (
         <div className="popover account-popover">
-          {choice.both && (
-            <p className="account-note">Using your {choice.active === 'passkey' ? 'Fundit account' : 'connected wallet'}</p>
-          )}
           <ul ref={menu} id={menuId} role="menu" aria-label="Account" className="account-menu" onKeyDown={onMenuKeyDown}>
             <li role="none">
               <Link role="menuitem" tabIndex={-1} to="/create" onClick={() => close(false)}>
@@ -365,28 +318,11 @@ function AccountMenu({ address, onSignedOut }: { address: Address; onSignedOut: 
                 My page
               </Link>
             </li>
-            {PASSKEYS_ENABLED && session && (
-              <li role="none">
-                <Link role="menuitem" tabIndex={-1} to="/add-money" onClick={() => close(false)}>
-                  Add money
-                </Link>
-              </li>
-            )}
-            {choice.both && (
-              <li role="none">
-                <button
-                  type="button"
-                  role="menuitem"
-                  tabIndex={-1}
-                  onClick={() => {
-                    choice.setActive(choice.active === 'passkey' ? 'external' : 'passkey')
-                    close(true)
-                  }}
-                >
-                  {choice.active === 'passkey' ? 'Use connected wallet' : 'Use Fundit account'}
-                </button>
-              </li>
-            )}
+            <li role="none">
+              <Link role="menuitem" tabIndex={-1} to="/add-money" onClick={() => close(false)}>
+                Add money
+              </Link>
+            </li>
             <li role="none">
               <button type="button" role="menuitem" tabIndex={-1} onClick={signOut}>
                 Sign out

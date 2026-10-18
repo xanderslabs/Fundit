@@ -6,14 +6,11 @@ import { SOCIAL_LINKS } from '../config'
 import type { Sender } from '../lib/sender'
 import { Home } from './Home'
 
-const flags = vi.hoisted(() => ({ crosschain: false, passkeys: false }))
+const flags = vi.hoisted(() => ({ crosschain: false }))
 vi.mock('../config', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../config')>()),
   get CROSSCHAIN_ENABLED() {
     return flags.crosschain
-  },
-  get PASSKEYS_ENABLED() {
-    return flags.passkeys
   },
 }))
 vi.mock('../hooks/useCampaigns', () => ({
@@ -22,21 +19,23 @@ vi.mock('../hooks/useCampaigns', () => ({
 }))
 const state: { sender: Sender | null } = { sender: null }
 vi.mock('../hooks/useSender', () => ({ useSender: () => state.sender }))
-const modal = vi.hoisted(() => ({ open: false, openWallet: vi.fn() }))
-vi.mock('@reown/appkit/react', () => ({
-  useAppKit: () => ({ open: modal.openWallet }),
-  useAppKitState: () => ({ open: modal.open }),
+// AppKit is mocked only to prove Home never opens it. It opens only inside Add money.
+const openWallet = vi.hoisted(() => vi.fn())
+vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: openWallet }) }))
+const loginPasskey = vi.hoisted(() => vi.fn())
+vi.mock('../lib/passkey', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/passkey')>()),
+  loginPasskey,
 }))
 
-const ME: Sender = { kind: 'eoa', address: '0x1111111111111111111111111111111111111111', send: vi.fn() }
+const ME: Sender = { kind: 'passkey', address: '0x1111111111111111111111111111111111111111', send: vi.fn() }
 
 afterEach(() => {
   cleanup()
   flags.crosschain = false
-  flags.passkeys = false
   state.sender = null
-  modal.open = false
-  modal.openWallet.mockReset()
+  openWallet.mockReset()
+  loginPasskey.mockReset()
 })
 
 const ui = () => (
@@ -81,26 +80,24 @@ describe('Home hero', () => {
     expect(within(hero()).getByRole('link', { name: 'Create a Fundit' }).getAttribute('href')).toBe('/create')
   })
 
-  // Only signed-in people can create. Signed out, the button signs them in first, then carries on to /create.
-  it('signed out, Create a Fundit opens sign-in and goes to /create once signed in', async () => {
-    const view = renderHome()
-    await userEvent.setup().click(within(hero()).getByRole('button', { name: 'Create a Fundit' }))
-    expect(modal.openWallet).toHaveBeenCalledTimes(1)
-    modal.open = true
-    view.rerender(ui())
-    state.sender = ME
-    modal.open = false
-    view.rerender(ui())
+  // Only signed-in people can create. Signed out, the button opens the passkey sign-in, then carries on to /create.
+  it('signed out, Create a Fundit opens the passkey sign-in and goes to /create once signed in', async () => {
+    loginPasskey.mockResolvedValue({ address: ME.address })
+    renderHome()
+    const user = userEvent.setup()
+    await user.click(within(hero()).getByRole('button', { name: 'Create a Fundit' }))
+    await user.click(within(screen.getByRole('dialog', { name: 'Sign in' })).getByRole('button', { name: 'Continue with passkey' }))
+    await user.click(screen.getByRole('button', { name: 'Sign in with a passkey' }))
     expect(await screen.findByText('Create page')).toBeTruthy()
+    expect(openWallet).not.toHaveBeenCalled()
   })
 
-  it('signed out, closing sign-in without connecting stays on Home, and a later sign-in does not jump', async () => {
+  it('signed out, closing sign-in without signing in stays on Home, and a later sign-in does not jump', async () => {
     const view = renderHome()
-    await userEvent.setup().click(within(hero()).getByRole('button', { name: 'Create a Fundit' }))
-    modal.open = true
-    view.rerender(ui())
-    modal.open = false
-    view.rerender(ui())
+    const user = userEvent.setup()
+    await user.click(within(hero()).getByRole('button', { name: 'Create a Fundit' }))
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).toBeNull()
     expect(hero()).toBeTruthy()
     state.sender = ME
     view.rerender(ui())
@@ -186,30 +183,21 @@ describe('Home FAQ', () => {
     expect(text).toMatch(/tip for Fundit/)
   })
 
-  // Cross-chain donations ship behind VITE_CROSSCHAIN. The page must not promise ways to give that the donate
-  // panel does not offer.
-  it('cross-chain off: does not mention giving from another chain', () => {
+  // Gifts come only from the Fundit account. The page must not promise ways to give that the donate panel
+  // does not offer, whatever the cross-chain flag says.
+  it.each([false, true])('cross-chain %s: does not mention giving from another chain or a unified balance', (on) => {
+    flags.crosschain = on
     renderHome()
-    expect(document.body.textContent).not.toMatch(/from another chain|unified balance/i)
+    expect(faq().textContent).not.toMatch(/from another chain|unified balance/i)
   })
 
-  it('cross-chain on: mentions giving from another chain', () => {
-    flags.crosschain = true
+  // Sign-in is passkey only, so the answer must not send people to a wallet app.
+  it('says no wallet is needed: a passkey opens a Fundit account', () => {
     renderHome()
-    expect(faq().textContent).toMatch(/from another chain/)
-  })
-
-  // Passkeys ship behind VITE_PASSKEYS, so the wallet answer only mentions them when they are on.
-  it('passkeys off: a wallet is required and passkeys are not mentioned', () => {
-    renderHome()
-    expect(faq().textContent).toMatch(/Yes\. Sign in with a wallet/)
-    expect(faq().textContent).not.toMatch(/passkey/i)
-  })
-
-  it('passkeys on: mentions passkey sign-in', () => {
-    flags.passkeys = true
-    renderHome()
-    expect(faq().textContent).toMatch(/sign in with a passkey/)
+    const text = faq().textContent
+    expect(text).toMatch(/sign in with a passkey/)
+    expect(text).toMatch(/Fundit account/)
+    expect(text).not.toMatch(/MetaMask|WalletConnect/)
   })
 })
 

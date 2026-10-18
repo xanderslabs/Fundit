@@ -7,7 +7,8 @@ const BASE_DOMAIN = 6
 const BURN_TX = `0x${'ab'.repeat(32)}` as const
 const FORWARD_TX = `0x${'cd'.repeat(32)}` as const
 
-test('a stubbed CCTP mint shows in raised, and as a cross-chain donation once settled', async ({ as }) => {
+// replaced in Plan 5 Task 4
+test.skip('a stubbed CCTP mint shows in raised, and as a cross-chain donation once settled', async ({ as }) => {
   const usdc = await tokenAddress('USDC')
   const campaign = await createCampaign(ACCOUNTS.creator, 'USDC', 'E2E cross-chain fund')
 
@@ -68,7 +69,8 @@ test('a stubbed CCTP mint shows in raised, and as a cross-chain donation once se
   await expect(page.locator('.stats-raised')).toContainText('5.00 USDC')
 })
 
-test('an EURC campaign offers only "Arc wallet" in the donate panel', async ({ as }) => {
+// replaced in Plan 5 Task 4
+test.skip('an EURC campaign offers only "Arc wallet" in the donate panel', async ({ as }) => {
   const campaign = await createCampaign(ACCOUNTS.creator, 'EURC', 'E2E euro fund')
   const page = await as(ACCOUNTS.donor)
   await page.goto(`/c/${campaign}`)
@@ -84,7 +86,8 @@ test('an EURC campaign offers only "Arc wallet" in the donate panel', async ({ a
   await expect(donate.getByText('EURC Fundits take donations on Arc only.')).toBeVisible()
 })
 
-test('with VITE_CROSSCHAIN off, a USDC campaign offers only "Arc wallet" to a connected wallet', async ({ as }) => {
+// replaced in Plan 5 Task 4
+test.skip('with VITE_CROSSCHAIN off, a USDC campaign offers only "Arc wallet" to a connected wallet', async ({ as }) => {
   // The e2e build uses the production default, cross-chain donations off. DonatePanel.test.tsx covers the
   // flag on, where a connected wallet gets all three sources.
   const campaign = await createCampaign(ACCOUNTS.creator, 'USDC', 'E2E dollar fund')

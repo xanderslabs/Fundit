@@ -10,7 +10,9 @@ import { Profile } from './Profile'
 
 const state: { sender: Sender | null; mine: Promise<CampaignView[]> | null; gifts: unknown[] | null } = { sender: null, mine: null, gifts: null }
 vi.mock('../hooks/useSender', () => ({ useSender: () => state.sender }))
-vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: () => {} }) }))
+// AppKit is mocked only to prove My page never opens it. It opens only inside Add money.
+const openWallet = vi.hoisted(() => vi.fn())
+vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: openWallet }) }))
 // The lists load from Arc; lib/activity.test.ts and lib/campaigns.test.ts cover the reads.
 vi.mock('../lib/clients', () => ({ arcClient: {} }))
 vi.mock('../lib/activity', async (importOriginal) => ({
@@ -71,12 +73,14 @@ describe('Profile', () => {
     expect(screen.queryByRole('heading', { name: 'Add a recovery key' })).toBeNull()
   })
 
-  // With no wallet there is no address to look up, so the page asks to connect instead of loading forever.
-  it('asks to sign in when no wallet is connected', () => {
+  // Signed out there is no address to look up, so the page asks to sign in with a passkey instead of loading forever.
+  it('signed out, asks to sign in and opens the passkey sign-in dialog', async () => {
     renderProfile()
     expect(screen.getByText('Sign in to see your Fundits and the donations you made.')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Start a Fundit' })).toBeNull()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(within(screen.getByRole('dialog', { name: 'Sign in' })).getByRole('button', { name: 'Continue with passkey' })).toBeTruthy()
+    expect(openWallet).not.toHaveBeenCalled()
   })
 
   // My page is where a signed-in person starts a new fundraiser, so the button sits at the top.

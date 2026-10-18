@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { type Address, decodeErrorResult, getAddress, type Hex, isAddress, numberToHex, parseAbi, type TransactionReceipt, type Transport } from 'viem'
 import { erc20Abi } from '../abi/erc20'
-import { ARC_CHAIN, CIRCLE_CLIENT_KEY, MODULAR_WALLETS_URL, NETWORK, PASSKEY_GAS_BUFFER, PASSKEYS_ENABLED, TOKENS, TX_TIMEOUT_MS } from '../config'
+import { ARC_CHAIN, CIRCLE_CLIENT_KEY, MODULAR_WALLETS_URL, NETWORK, PASSKEY_GAS_BUFFER, TOKENS, TX_TIMEOUT_MS } from '../config'
 import { arcClient } from './clients'
 import { formatAmount } from './format'
 import { isUserRejection, PlainError } from './errors'
@@ -85,9 +85,9 @@ function subscribe(onChange: () => void) {
 
 const none = () => null
 
-// The current passkey session, or null. Always null when passkeys are switched off.
+// The current passkey session, or null.
 export function usePasskeySession(): StoredPasskey | null {
-  return useSyncExternalStore(PASSKEYS_ENABLED ? subscribe : () => () => {}, PASSKEYS_ENABLED ? getSnapshot : none, none)
+  return useSyncExternalStore(subscribe, getSnapshot, none)
 }
 
 // The two bundler actions the sender uses. Kept this narrow so tests need no SDK.
@@ -157,7 +157,7 @@ let live: Live | null = null
 let liveSession: StoredPasskey | null = null
 
 function clientKey(): string {
-  if (!PASSKEYS_ENABLED || CIRCLE_CLIENT_KEY === '') throw new Error('Fundit accounts are not set up on this site yet.')
+  if (CIRCLE_CLIENT_KEY === '') throw new Error('Fundit accounts are not set up on this site yet.')
   return CIRCLE_CLIENT_KEY
 }
 

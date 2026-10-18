@@ -31,7 +31,6 @@ export type BuildEnv = {
   PROD: boolean
   VITE_ARC_NETWORK?: string
   VITE_ALLOW_TESTNET_BUILD?: string
-  VITE_PASSKEYS?: string
   VITE_CIRCLE_CLIENT_KEY?: string
   VITE_ARC_RPC_URL?: string
   VITE_MAINNET_RPC_URL?: string
@@ -85,8 +84,9 @@ export function checkBuildEnv(env: BuildEnv, headers: string): void {
   if (network === 'testnet' && env.VITE_ALLOW_TESTNET_BUILD !== '1') {
     throw new Error('VITE_ARC_NETWORK=testnet is refused in a production build, which is for fundit.fun. Set VITE_ALLOW_TESTNET_BUILD=1 only for a test site.')
   }
-  if (env.VITE_PASSKEYS === '1' && !env.VITE_CIRCLE_CLIENT_KEY) {
-    throw new Error('VITE_CIRCLE_CLIENT_KEY is required when VITE_PASSKEYS=1 in a production build')
+  // Sign-in is passkey only, so a site with no client key would have no way in.
+  if (!env.VITE_CIRCLE_CLIENT_KEY) {
+    throw new Error('VITE_CIRCLE_CLIENT_KEY is required in a production build: sign-in is passkey only')
   }
   for (const name of ['VITE_ARC_RPC_URL', 'VITE_MAINNET_RPC_URL'] as const) {
     const url = env[name]

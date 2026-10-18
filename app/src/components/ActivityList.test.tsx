@@ -71,12 +71,12 @@ describe('ActivityList cross-chain inflows not counted yet', () => {
     expect(screen.queryByRole('button', { name: 'Count it now' })).toBeNull()
   })
 
-  it('asks for a wallet when none is connected', async () => {
+  it('asks to sign in when signed out', async () => {
     state.unaccounted = 5_000000n
     renderList()
     expect(await screen.findByText('5.00 USDC from other chains, not counted yet')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Count it now' })).toBeNull()
-    expect(screen.getByText('Sign in with any wallet to count it.')).toBeTruthy()
+    expect(screen.getByText('Sign in with any Fundit account to count it.')).toBeTruthy()
   })
 })
 

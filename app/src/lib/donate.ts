@@ -1,18 +1,13 @@
-import { type Address, encodeFunctionData, type Hex, type PublicClient, keccak256, toHex } from 'viem'
+import { type Address, encodeFunctionData, type PublicClient } from 'viem'
 import { campaignAbi } from '../abi/campaign'
 import { erc20Abi } from '../abi/erc20'
-import { memoAbi } from '../abi/memo'
-import { MAX_MESSAGE_BYTES, MEMO_ADDRESS } from '../config'
-import type { Call, Sender } from './sender'
+import { MAX_MESSAGE_BYTES } from '../config'
+import type { Call } from './sender'
 import { byteLength } from './validate'
-
-// Tags every Fundit donation sent through Arc Memo.
-export const DONATE_MEMO_ID = keccak256(toHex('fundit.donate.v1'))
 
 const BPS = 10_000n
 
 export type DonateParams = {
-  sender: Sender
   campaign: Address
   token: Address
   amount: bigint
@@ -20,12 +15,10 @@ export type DonateParams = {
   message: string
   // The donor's current allowance to the campaign, read from Arc just before building.
   allowance: bigint
-  // The code at the donor address on Arc, read just before building. viem's getCode gives undefined for none.
-  senderCode: Hex | undefined
 }
 
-// The campaign pulls amount + tip from msg.sender. Memo keeps msg.sender as the donor, so the approval
-// always names the campaign, never Memo.
+// Gifts come from a Fundit account, a smart account, so they call donate on the campaign directly (Arc Memo
+// only accepts an EOA caller). The campaign pulls amount + tip from msg.sender, so the approval names the campaign.
 export function buildDonateCalls(p: DonateParams): Call[] {
   if (byteLength(p.message) > MAX_MESSAGE_BYTES) throw new Error(`The message is over ${MAX_MESSAGE_BYTES} bytes.`)
   const total = p.amount + p.tip
@@ -33,20 +26,7 @@ export function buildDonateCalls(p: DonateParams): Call[] {
   if (p.allowance < total) {
     calls.push({ to: p.token, data: encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [p.campaign, total] }) })
   }
-  const donate = encodeFunctionData({ abi: campaignAbi, functionName: 'donate', args: [p.amount, p.tip, p.message] })
-  // Memo only accepts an EOA caller. A passkey account, a smart wallet, a Safe or an EIP-7702 delegated
-  // address has code on Arc, so it calls the campaign directly.
-  const hasCode = p.senderCode !== undefined && p.senderCode !== '0x'
-  if (p.sender.kind === 'passkey' || hasCode) {
-    calls.push({ to: p.campaign, data: donate })
-  } else {
-    const data = encodeFunctionData({
-      abi: memoAbi,
-      functionName: 'memo',
-      args: [p.campaign, donate, DONATE_MEMO_ID, toHex(p.message)],
-    })
-    calls.push({ to: MEMO_ADDRESS, data })
-  }
+  calls.push({ to: p.campaign, data: encodeFunctionData({ abi: campaignAbi, functionName: 'donate', args: [p.amount, p.tip, p.message] }) })
   return calls
 }
 

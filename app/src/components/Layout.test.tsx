@@ -6,9 +6,6 @@ import { TestnetBanner } from './TestnetBanner'
 
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: () => {} }) }))
 vi.mock('wagmi', () => ({ useDisconnect: () => ({ mutate: () => {} }) }))
-vi.mock('../hooks/useSender', () => ({
-  useWalletChoice: () => ({ both: false, active: null, external: null, setActive: () => {} }),
-}))
 
 afterEach(cleanup)
 

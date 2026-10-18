@@ -41,7 +41,7 @@ function embedRewrite(): Plugin {
 
 export default defineConfig(({ command, mode }) => {
   // Fail the production build, not the deployed page, when the factory or Reown config is missing, when
-  // passkeys are on with no Circle client key, or when an RPC host is missing from the CSP.
+  // the Circle client key for passkey sign-in is missing, or when an RPC host is missing from the CSP.
   if (command === 'build') {
     const env = { ...loadEnv(mode, '.', 'VITE_'), PROD: mode === 'production' }
     loadConfig(env)

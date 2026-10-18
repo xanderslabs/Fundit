@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useParams } from 'react-router'
 import {
@@ -22,7 +22,9 @@ const HASH = `0x${'ab'.repeat(32)}` as Hex
 
 const state: { sender: Sender | null } = { sender: null }
 vi.mock('../hooks/useSender', () => ({ useSender: () => state.sender }))
-vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: () => {} }) }))
+// AppKit is mocked only to prove Create never opens it. It opens only inside Add money.
+const openWallet = vi.hoisted(() => vi.fn())
+vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: openWallet }) }))
 // What "Check again" gets back on the wallet path. The default throws so an unplanned re-check is loud.
 const recheck: { next: () => Promise<TxResult> } = { next: async () => { throw new Error('no re-check planned') } }
 vi.mock('../lib/sender', async (importOriginal) => ({
@@ -105,6 +107,13 @@ describe('Create signed out', () => {
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy()
     expect(screen.queryByLabelText('Title')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Create a Fundit' })).toBeNull()
+  })
+
+  it('Sign in opens the passkey sign-in dialog, never the wallet modal', async () => {
+    renderCreate()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(within(screen.getByRole('dialog', { name: 'Sign in' })).getByRole('button', { name: 'Continue with passkey' })).toBeTruthy()
+    expect(openWallet).not.toHaveBeenCalled()
   })
 
   it('shows the form once signed in, without leaving /create', () => {

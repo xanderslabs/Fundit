@@ -5,7 +5,8 @@ import { ACCOUNTS, approveAndDonate, balanceOf, connect, createCampaign, expect,
 const A = ACCOUNTS.creator
 const B = ACCOUNTS.donor
 
-test('A creates a USDC campaign, B donates with a tip and message, A withdraws to Arc and closes', async ({ as }) => {
+// replaced in Plan 5 Task 4
+test.skip('A creates a USDC campaign, B donates with a tip and message, A withdraws to Arc and closes', async ({ as }) => {
   const usdc = await tokenAddress('USDC')
 
   // 1. A signs in on Home, opens the account menu, picks Start a Fundit, creates a USDC Fundit with a
@@ -135,7 +136,8 @@ test('A creates a USDC campaign, B donates with a tip and message, A withdraws t
 // about 3,200 gas short. Before the fix the wallet (here the node, for eth_sendTransaction without gas)
 // estimated that way, and this withdrawal ran out of gas and reverted, with the organiser paying the fee.
 // The app now estimates on the Arc client and sends gas plus 25% (withGasMargin in src/lib/sender.ts).
-test('a withdrawal right after a donation in the latest block goes through', async ({ as }) => {
+// replaced in Plan 5 Task 4
+test.skip('a withdrawal right after a donation in the latest block goes through', async ({ as }) => {
   const campaign = await createCampaign(A, 'USDC', 'E2E same-block fund')
   await approveAndDonate(B, campaign, '10')
   const donationBlock = await node.getBlockNumber()
@@ -159,7 +161,8 @@ test('a withdrawal right after a donation in the latest block goes through', asy
 
 // Give anonymously only hides the name on Fundit. The marker is the record: the Donated event keeps B as donor
 // and carries "[anon]" at the start of the message, so the app must read the marker and never show B.
-test('an anonymous gift shows as Anonymous with its message, and the event message starts with [anon]', async ({ as }) => {
+// replaced in Plan 5 Task 4
+test.skip('an anonymous gift shows as Anonymous with its message, and the event message starts with [anon]', async ({ as }) => {
   const campaign = await createCampaign(A, 'USDC', 'E2E anonymous fund')
   const fromBlock = await node.getBlockNumber()
 

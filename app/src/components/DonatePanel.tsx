@@ -1,15 +1,12 @@
-import { useAppKit } from '@reown/appkit/react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import type { Hex } from 'viem'
-import { useConnection } from 'wagmi'
-import { CHAIN_NAMES, CROSSCHAIN_ENABLED, EXPLORER_URL, PASSKEY_GAS_BUFFER } from '../config'
+import { EXPLORER_URL, PASSKEY_GAS_BUFFER } from '../config'
 import { useSender } from '../hooks/useSender'
 import {
   type BlockingEntry,
   blockingEntry,
-  clearCrossChain,
   clearPendingArc,
   notifyPending,
   type PendingArc,
@@ -26,9 +23,8 @@ import { explainError } from '../lib/errors'
 import { bpsToPercent, formatAmount, formatExact, parseAmount } from '../lib/format'
 import type { TxResult } from '../lib/sender'
 import { byteLength } from '../lib/validate'
-import { CrossChainDonate, PendingBridgeTracker } from './CrossChainDonate'
+import { SignInButton } from './AccountMenu'
 import { PASSKEY_LOGIN_TO_CHECK, PASSKEY_PROCESSING, recheckResult } from './TxStatus'
-import { UnifiedDonate } from './UnifiedDonate'
 
 const QUICK_AMOUNTS = ['10', '25', '50', '100'] as const
 const TIP_PERCENTS = [0, 5, 10, 15] as const
@@ -36,28 +32,6 @@ const DAY_MS = 24 * 60 * 60 * 1000
 const NO_GAS = `Add at least ${formatAmount(PASSKEY_GAS_BUFFER, 'USDC')} to your Fundit account first. It pays the network fee.`
 const START_OVER_WARNING =
   'The earlier transaction may still go through. If it does and you give again, you will give twice. Start a new donation anyway?'
-
-// Where the money comes from.
-type PaySourceId = 'arc' | 'crosschain' | 'unified'
-// usdcOnly: bridged money arrives as USDC, so an EURC campaign cannot take it.
-// needsWallet: signed by the connected external wallet, so it is offered only while one is connected.
-type PaySource = { id: PaySourceId; label: string; hint: string; usdcOnly?: boolean; needsWallet?: boolean }
-const PAY_SOURCES: readonly PaySource[] = [
-  { id: 'arc', label: 'Arc wallet', hint: 'Pay from your connected wallet on Arc.' },
-  {
-    id: 'crosschain',
-    label: 'USDC on another chain',
-    hint: `Send USDC from ${CHAIN_NAMES}.`,
-    usdcOnly: true,
-  },
-  {
-    id: 'unified',
-    label: 'Unified USDC balance',
-    hint: 'Spend USDC you hold with Circle Gateway, from any chain, in one step.',
-    usdcOnly: true,
-    needsWallet: true,
-  },
-]
 
 type Phase =
   | { kind: 'idle' }
@@ -85,30 +59,19 @@ function ExplorerLink({ hash }: { hash: Hex }) {
   )
 }
 
-function ConnectPrompt() {
-  const { open } = useAppKit()
-  return (
-    <button type="button" className="btn btn-lg donate-submit" onClick={() => open()}>
-      Sign in to give
-    </button>
-  )
-}
-
 export function DonatePanel({ view }: { view: CampaignView }) {
   const { address: campaign, summary, symbol } = view
   const token = summary.token
   const closed = summary.closed
   const sender = useSender()
   const queryClient = useQueryClient()
-  const { isConnected } = useConnection()
 
   const [amountText, setAmountText] = useState('')
   const [tipPercent, setTipPercent] = useState<(typeof TIP_PERCENTS)[number]>(0)
   const [message, setMessage] = useState('')
   const [anonymous, setAnonymous] = useState(false)
-  const [source, setSource] = useState<PaySourceId>('arc')
-  // The unconfirmed donation to this campaign, from any source, read from the shared pending store. While
-  // there is one, every source is blocked and only its own status shows.
+  // The unconfirmed donation to this campaign, read from the shared pending store. While there is one, a new
+  // donation is blocked.
   const [blocker, setBlocker] = useState<BlockingEntry | null>(() => blockingEntry(campaign))
   // Re-read on every change, from this tab or another. An Arc donation another tab left unconfirmed also
   // puts this form into its not-confirmed state, unless this tab is sending or checking its own.
@@ -121,29 +84,11 @@ export function DonatePanel({ view }: { view: CampaignView }) {
     reload()
     return subscribePending(reload)
   }, [campaign])
-  const blockedSource: PaySourceId | null = !blocker
-    ? null
-    : blocker.kind === 'arc'
-      ? 'arc'
-      : blocker.kind === 'unified'
-        ? 'unified'
-        : 'crosschain'
   // An unconfirmed donation saved before a reload still blocks a new one until it is settled.
   const [phase, setPhase] = useState<Phase>(() => {
     const saved = pendingArc(campaign)
     return saved ? arcTimeout(saved) : { kind: 'idle' }
   })
-  const [crossChainBusy, setCrossChainBusy] = useState(false)
-  // With VITE_CROSSCHAIN off only the Arc wallet is offered. A source with a saved unconfirmed donation
-  // always shows, so its status stays in view and can be checked.
-  const sources = PAY_SOURCES.filter(
-    (s) =>
-      s.id === blockedSource ||
-      ((s.id === 'arc' || CROSSCHAIN_ENABLED) && (!s.usdcOnly || symbol === 'USDC') && (!s.needsWallet || isConnected)),
-  )
-  // The blocked source shows its status. Otherwise a source that is no longer offered (the wallet
-  // disconnected) falls back to Arc.
-  const activeSource: PaySourceId = blockedSource ?? (sources.some((s) => s.id === source) ? source : 'arc')
   // Set synchronously, so a second click before React re-renders cannot start a second send or check.
   const inFlight = useRef(false)
 
@@ -247,11 +192,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
     setPhase({ kind: 'sending' })
     try {
       // Read the balance and allowance again right before building, so a finished approval is not repeated.
-      // The code at the donor address decides Memo or a direct call: Memo only takes an EOA caller.
-      const [fresh, senderCode] = await Promise.all([
-        fetchDonorFunds(arcClient, token, sender.address, campaign),
-        sender.kind === 'eoa' ? arcClient.getCode({ address: sender.address }) : Promise.resolve(undefined),
-      ])
+      const fresh = await fetchDonorFunds(arcClient, token, sender.address, campaign)
       queryClient.setQueryData(fundsKey, fresh)
       if (fresh.balance < amount + tip + gasBuffer) {
         setPhase({ kind: 'error', message: notEnough(fresh.balance) })
@@ -265,7 +206,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
           return
         }
       }
-      const calls = buildDonateCalls({ sender, campaign, token, amount, tip, message: anonymous ? markAnonymous(message) : message, allowance: fresh.allowance, senderCode })
+      const calls = buildDonateCalls({ campaign, token, amount, tip, message: anonymous ? markAnonymous(message) : message, allowance: fresh.allowance })
       const donateIndex = calls.length - 1
       const res = await sender.send(calls, {
         label: 'Donate',
@@ -342,226 +283,180 @@ export function DonatePanel({ view }: { view: CampaignView }) {
     <section className="panel donate" aria-label="Give">
       <h2>Give</h2>
       {closed && <p className="field-error">This Fundit is closed.</p>}
-      <PendingBridgeTracker campaign={campaign} />
-
-      <fieldset className="form-field donate-source" disabled={closed || locked || crossChainBusy || blocker !== null}>
-        <legend>Pay with</legend>
-        {sources.map((s) => (
-          <label key={s.id} className="choice">
-            <input type="radio" name="donate-source" checked={activeSource === s.id} onChange={() => setSource(s.id)} />
-            <span>
-              {s.label} <span className="hint">{s.hint}</span>
-            </span>
-          </label>
-        ))}
-        {symbol !== 'USDC' && <p className="hint">EURC Fundits take donations on Arc only.</p>}
-      </fieldset>
-
-      {activeSource === 'crosschain' ? (
-        <>
-          <CrossChainDonate view={view} onBusyChange={setCrossChainBusy} blocked={blockedSource === 'crosschain'} />
-          {blocker && (blocker.kind === 'bridge' || blocker.kind === 'submitted') && (
-            <div className="donate-status" aria-live="polite">
-              <div className="status-box">
-                <p>
-                  <strong>Your cross-chain donation of {blocker.amount} USDC is still on its way.</strong> Wait for it to
-                  reach the Fundit before you give again, so you do not give twice.
-                </p>
-                {!crossChainBusy && (
-                  <div className="donate-actions">
-                    <button
-                      type="button"
-                      className="btn btn-outline"
-                      onClick={() => {
-                        if (window.confirm(START_OVER_WARNING)) clearCrossChain(blocker)
-                      }}
-                    >
-                      Start over
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </>
-      ) : activeSource === 'unified' ? (
-        <UnifiedDonate view={view} onBusyChange={setCrossChainBusy} />
-      ) : (
-        <form className="donate-form" onSubmit={submit} noValidate>
-          <fieldset className="donate-fields" disabled={closed || locked}>
-            <div className="form-field">
-              <label htmlFor="donate-amount">Amount</label>
-              <div className="donate-amount">
-                <input
-                  id="donate-amount"
-                  inputMode="decimal"
-                  autoComplete="off"
-                  placeholder="25"
-                  value={amountText}
-                  onChange={(e) => setAmountText(e.target.value)}
-                  aria-invalid={parsed && !parsed.ok ? true : undefined}
-                  aria-describedby="donate-amount-error donate-balance"
-                />
-                <span className="donate-symbol">{symbol}</span>
-              </div>
-              <div className="donate-quick" role="group" aria-label="Quick amounts">
-                {QUICK_AMOUNTS.map((q) => (
-                  <button key={q} type="button" className="btn btn-outline" onClick={() => setAmountText(q)}>
-                    {q}
-                  </button>
-                ))}
-              </div>
-              {parsed && !parsed.ok && (
-                <p id="donate-amount-error" className="field-error" role="alert">
-                  {parsed.error}
-                </p>
-              )}
-              {overBalance && balance !== undefined && (
-                <p className="field-error" role="alert">
-                  {notEnough(balance)}
-                </p>
-              )}
-              {noGas && (
-                <p className="field-error" role="alert">
-                  {NO_GAS} <Link to="/add-money">Add money</Link>
-                </p>
-              )}
-              {balanceNote && (
-                <p id="donate-balance" className="hint">
-                  {balanceNote}
-                </p>
-              )}
-            </div>
-
-            <fieldset className="form-field">
-              <legend>Tip for Fundit (optional)</legend>
-              <div className="donate-options">
-                {TIP_PERCENTS.map((pct) => (
-                  <label key={pct} className="donate-option">
-                    <input type="radio" name="donate-tip" checked={tipPercent === pct} onChange={() => setTipPercent(pct)} />
-                    <span>{pct === 0 ? 'No tip' : `${pct}%`}</span>
-                  </label>
-                ))}
-              </div>
-              <p className="hint">The tip goes to the Fundit team, not to this Fundit.</p>
-            </fieldset>
-
-            <div className="form-field">
-              <label htmlFor="donate-message">Message (optional)</label>
-              <textarea
-                id="donate-message"
-                rows={3}
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                aria-invalid={messageTooLong ? true : undefined}
-                aria-describedby="donate-message-count"
+      <form className="donate-form" onSubmit={submit} noValidate>
+        <fieldset className="donate-fields" disabled={closed || locked}>
+          <div className="form-field">
+            <label htmlFor="donate-amount">Amount</label>
+            <div className="donate-amount">
+              <input
+                id="donate-amount"
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder="25"
+                value={amountText}
+                onChange={(e) => setAmountText(e.target.value)}
+                aria-invalid={parsed && !parsed.ok ? true : undefined}
+                aria-describedby="donate-amount-error donate-balance"
               />
-              <span id="donate-message-count" className={messageTooLong ? 'counter counter-over' : 'counter'}>
-                {messageBytes} of {limit} bytes
-              </span>
-              <p className="hint">Your message is public and stays on chain.</p>
-              <label className="check">
-                <input type="checkbox" checked={anonymous} onChange={(e) => setAnonymous(e.target.checked)} />
-                <span>Give anonymously</span>
-              </label>
-              <p className="hint">
-                Your name won't show on Fundit. The gift is still recorded on the public blockchain from your wallet address.
-              </p>
+              <span className="donate-symbol">{symbol}</span>
             </div>
-
-          </fieldset>
-
-          {breakdown && (
-            <dl className="donate-breakdown" aria-label="Breakdown">
-              <div>
-                <dt>To the Fundit</dt>
-                <dd>{formatExact(breakdown.toCampaign, symbol)}</dd>
-              </div>
-              <div>
-                <dt>Platform fee ({bpsToPercent(summary.donationFeeBps)})</dt>
-                <dd>{formatExact(breakdown.fee, symbol)}</dd>
-              </div>
-              <div>
-                <dt>Tip for Fundit</dt>
-                <dd>{formatExact(breakdown.tip, symbol)}</dd>
-              </div>
-              <div className="donate-total">
-                <dt>Total you pay</dt>
-                <dd>{formatExact(breakdown.total, symbol)}</dd>
-              </div>
-            </dl>
-          )}
-          {breakdown && <p className="hint">You also pay a small network fee in USDC.</p>}
-
-          <div className="donate-status" aria-live="polite">
-            {phase.kind === 'sending' && <p>Confirm in your wallet, then wait for the network. This can take a few seconds.</p>}
-            {phase.kind === 'checking' && <p>Checking the transaction again...</p>}
-            {phase.kind === 'success' && (
-              <div className="status-box status-success">
-                <p>
-                  <strong>Thank you. Your donation went through.</strong>
-                </p>
-                <p>
-                  <ExplorerLink hash={phase.hash} />
-                </p>
-              </div>
+            <div className="donate-quick" role="group" aria-label="Quick amounts">
+              {QUICK_AMOUNTS.map((q) => (
+                <button key={q} type="button" className="btn btn-outline" onClick={() => setAmountText(q)}>
+                  {q}
+                </button>
+              ))}
+            </div>
+            {parsed && !parsed.ok && (
+              <p id="donate-amount-error" className="field-error" role="alert">
+                {parsed.error}
+              </p>
             )}
-            {phase.kind === 'timeout' && (
-              <div className="status-box">
-                <p>
-                  <strong>Your Arc wallet {phase.approve ? 'approval' : 'donation'} is not confirmed yet.</strong> It may still go
-                  through. Check it before you try again, so you do not give twice.
-                </p>
-                <p>{phase.userop ? PASSKEY_PROCESSING : <ExplorerLink hash={phase.hash} />}</p>
-                {phase.note && <p className="field-error">{phase.note}</p>}
-                {phase.userop && !sender?.recheck && <p className="field-error">{PASSKEY_LOGIN_TO_CHECK}</p>}
-                <div className="donate-actions">
-                  {(!phase.userop || sender?.recheck) && (
-                    <button
-                      type="button"
-                      className="btn btn-outline"
-                      onClick={() => checkAgain(phase.hash, phase.approve, phase.userop === true)}
-                    >
-                      Check again
-                    </button>
-                  )}
-                  <button type="button" className="btn btn-outline" onClick={startOver}>
-                    Start over
-                  </button>
-                </div>
-              </div>
+            {overBalance && balance !== undefined && (
+              <p className="field-error" role="alert">
+                {notEnough(balance)} <Link to="/add-money">Add money</Link>
+              </p>
             )}
-            {phase.kind === 'partial' && (
-              <div className="status-box status-error">
-                <p>Your approval went through, but the donation was not sent.</p>
-                {phase.error && <p>{phase.error}</p>}
-              </div>
+            {noGas && (
+              <p className="field-error" role="alert">
+                {NO_GAS} <Link to="/add-money">Add money</Link>
+              </p>
             )}
-            {phase.kind === 'error' && (
-              <div className="status-box status-error">
-                <p>{phase.message}</p>
-                {phase.hash && (
-                  <p>
-                    <ExplorerLink hash={phase.hash} />
-                  </p>
-                )}
-              </div>
+            {balanceNote && (
+              <p id="donate-balance" className="hint">
+                {balanceNote}
+              </p>
             )}
           </div>
 
-          {unconfirmed ? null : !sender && !closed ? (
-            <ConnectPrompt />
-          ) : phase.kind === 'partial' ? (
-            <button type="submit" className="btn btn-lg donate-submit" disabled={!canSubmit}>
-              Finish donation
-            </button>
-          ) : (
-            <button type="submit" className="btn btn-lg donate-submit" disabled={!canSubmit}>
-              {busy ? 'Giving...' : 'Give'}
-            </button>
+          <fieldset className="form-field">
+            <legend>Tip for Fundit (optional)</legend>
+            <div className="donate-options">
+              {TIP_PERCENTS.map((pct) => (
+                <label key={pct} className="donate-option">
+                  <input type="radio" name="donate-tip" checked={tipPercent === pct} onChange={() => setTipPercent(pct)} />
+                  <span>{pct === 0 ? 'No tip' : `${pct}%`}</span>
+                </label>
+              ))}
+            </div>
+            <p className="hint">The tip goes to the Fundit team, not to this Fundit.</p>
+          </fieldset>
+
+          <div className="form-field">
+            <label htmlFor="donate-message">Message (optional)</label>
+            <textarea
+              id="donate-message"
+              rows={3}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              aria-invalid={messageTooLong ? true : undefined}
+              aria-describedby="donate-message-count"
+            />
+            <span id="donate-message-count" className={messageTooLong ? 'counter counter-over' : 'counter'}>
+              {messageBytes} of {limit} bytes
+            </span>
+            <p className="hint">Your message is public and stays on chain.</p>
+            <label className="check">
+              <input type="checkbox" checked={anonymous} onChange={(e) => setAnonymous(e.target.checked)} />
+              <span>Give anonymously</span>
+            </label>
+            <p className="hint">
+              Your name won't show on Fundit. The gift is still recorded on the public blockchain from your wallet address.
+            </p>
+          </div>
+
+        </fieldset>
+
+        {breakdown && (
+          <dl className="donate-breakdown" aria-label="Breakdown">
+            <div>
+              <dt>To the Fundit</dt>
+              <dd>{formatExact(breakdown.toCampaign, symbol)}</dd>
+            </div>
+            <div>
+              <dt>Platform fee ({bpsToPercent(summary.donationFeeBps)})</dt>
+              <dd>{formatExact(breakdown.fee, symbol)}</dd>
+            </div>
+            <div>
+              <dt>Tip for Fundit</dt>
+              <dd>{formatExact(breakdown.tip, symbol)}</dd>
+            </div>
+            <div className="donate-total">
+              <dt>Total you pay</dt>
+              <dd>{formatExact(breakdown.total, symbol)}</dd>
+            </div>
+          </dl>
+        )}
+        {breakdown && <p className="hint">You also pay a small network fee in USDC.</p>}
+
+        <div className="donate-status" aria-live="polite">
+          {phase.kind === 'sending' && <p>Confirm with your passkey, then wait for the network. This can take a few seconds.</p>}
+          {phase.kind === 'checking' && <p>Checking the transaction again...</p>}
+          {phase.kind === 'success' && (
+            <div className="status-box status-success">
+              <p>
+                <strong>Thank you. Your donation went through.</strong>
+              </p>
+              <p>
+                <ExplorerLink hash={phase.hash} />
+              </p>
+            </div>
           )}
-        </form>
-      )}
+          {phase.kind === 'timeout' && (
+            <div className="status-box">
+              <p>
+                <strong>Your {phase.approve ? 'approval' : 'donation'} is not confirmed yet.</strong> It may still go
+                through. Check it before you try again, so you do not give twice.
+              </p>
+              <p>{phase.userop ? PASSKEY_PROCESSING : <ExplorerLink hash={phase.hash} />}</p>
+              {phase.note && <p className="field-error">{phase.note}</p>}
+              {phase.userop && !sender?.recheck && <p className="field-error">{PASSKEY_LOGIN_TO_CHECK}</p>}
+              <div className="donate-actions">
+                {(!phase.userop || sender?.recheck) && (
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={() => checkAgain(phase.hash, phase.approve, phase.userop === true)}
+                  >
+                    Check again
+                  </button>
+                )}
+                <button type="button" className="btn btn-outline" onClick={startOver}>
+                  Start over
+                </button>
+              </div>
+            </div>
+          )}
+          {phase.kind === 'partial' && (
+            <div className="status-box status-error">
+              <p>Your approval went through, but the donation was not sent.</p>
+              {phase.error && <p>{phase.error}</p>}
+            </div>
+          )}
+          {phase.kind === 'error' && (
+            <div className="status-box status-error">
+              <p>{phase.message}</p>
+              {phase.hash && (
+                <p>
+                  <ExplorerLink hash={phase.hash} />
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Signed out, the sign-in button sits after the form: its dialog holds a form of its own. */}
+        {unconfirmed || (!sender && !closed) ? null : phase.kind === 'partial' ? (
+          <button type="submit" className="btn btn-lg donate-submit" disabled={!canSubmit}>
+            Finish donation
+          </button>
+        ) : (
+          <button type="submit" className="btn btn-lg donate-submit" disabled={!canSubmit}>
+            {busy ? 'Giving...' : 'Give'}
+          </button>
+        )}
+      </form>
+      {!unconfirmed && !sender && !closed && <SignInButton className="btn btn-lg donate-submit" label="Sign in to give" />}
     </section>
   )
 }

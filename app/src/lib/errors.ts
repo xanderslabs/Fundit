@@ -149,8 +149,8 @@ export function explainError(e: unknown, generic = GENERIC): string {
   return d ? `${generic} (${d})` : generic
 }
 
-// For cross-chain and unified balance donations, which can fail after the wallet approved or signed
-// something. "Nothing was sent" may be untrue there.
+// For adding money from another chain, which can fail after the wallet already approved something.
+// "Nothing was sent" may be untrue there.
 export function explainAfterApproval(e: unknown): string {
   return explainError(e, 'Something went wrong.')
 }

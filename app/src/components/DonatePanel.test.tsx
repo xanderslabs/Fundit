@@ -1,13 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { type Address, decodeFunctionData, getAddress, type Hex, toHex, type TransactionReceipt } from 'viem'
+import { type Address, decodeFunctionData, getAddress, type Hex, type TransactionReceipt } from 'viem'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { campaignAbi } from '../abi/campaign'
 import { erc20Abi } from '../abi/erc20'
-import { memoAbi } from '../abi/memo'
-import { MEMO_ADDRESS, TOKENS, type TokenSymbol } from '../config'
+import { TOKENS, type TokenSymbol } from '../config'
 import type { CampaignView } from '../lib/campaigns'
 import type { Call, Sender, SendOptions, TxResult } from '../lib/sender'
 import { DonatePanel } from './DonatePanel'
@@ -16,53 +15,25 @@ const ME = '0x1111111111111111111111111111111111111111' as Address
 const CAMPAIGN = getAddress('0x00000000000000000000000000000000000000a1')
 const HASH = `0x${'ab'.repeat(32)}` as Hex
 
-// code is what getCode returns for the donor address: undefined for an EOA, bytes for a smart wallet.
 // usdc, when set, is the USDC balance for a campaign in another token (the Fundit account's gas money).
-const state: { sender: Sender | null; balance: bigint; usdc?: bigint; allowance: bigint; wallet: boolean; code: Hex | undefined } = {
+const state: { sender: Sender | null; balance: bigint; usdc?: bigint; allowance: bigint } = {
   sender: null,
   balance: 0n,
   allowance: 0n,
-  wallet: false,
-  code: undefined,
 }
-const codeReads: Address[] = []
+// AppKit is mocked only to prove the donate panel never opens it. It opens only inside Add money.
 const open = vi.fn()
 const reads: { address: Address; functionName: string; args: readonly unknown[] }[] = []
 
 // What "Check again" gets back. Each test sets it; the default throws so an unplanned re-check is loud.
 const recheck: { next: () => Promise<TxResult> } = { next: async () => { throw new Error('no re-check planned') } }
 
-// Cross-chain sources ship behind VITE_CROSSCHAIN. Most tests here cover how sources block each other, so the
-// flag is on unless a test turns it off.
-const flags = vi.hoisted(() => ({ crosschain: true }))
-vi.mock('../config', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../config')>()),
-  get CROSSCHAIN_ENABLED() {
-    return flags.crosschain
-  },
-}))
 vi.mock('../hooks/useSender', () => ({ useSender: () => state.sender }))
 vi.mock('../lib/sender', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/sender')>()),
   waitForResult: () => recheck.next(),
 }))
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open }) }))
-// What Iris says about a cross-chain burn. Each test sets it.
-const iris: { status: 'pending' | 'attested' | 'minted' | 'unknown' } = { status: 'pending' }
-vi.mock('../lib/iris', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../lib/iris')>()),
-  fetchTransferStatus: async () => iris.status,
-}))
-// No test here may reach Circle. The unified balance flow itself is covered in UnifiedDonate.test.tsx.
-vi.mock('../lib/unified', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../lib/unified')>()),
-  fetchUnifiedBalance: async () => ({ total: 0n, byChain: [] }),
-}))
-// The unified balance option signs with the connected external wallet, so it reads wagmi directly.
-vi.mock('wagmi', () => ({
-  useConnection: () =>
-    state.wallet ? { isConnected: true, address: ME, connector: { getProvider: async () => ({}) } } : { isConnected: false },
-}))
 vi.mock('../lib/clients', () => ({
   arcClient: {
     readContract: async (p: { address: Address; functionName: string; args: readonly unknown[] }) => {
@@ -70,10 +41,6 @@ vi.mock('../lib/clients', () => ({
       if (p.functionName === 'balanceOf') return p.address === TOKENS.USDC.address && state.usdc !== undefined ? state.usdc : state.balance
       if (p.functionName === 'allowance') return state.allowance
       throw new Error(`unexpected read ${p.functionName}`)
-    },
-    getCode: async ({ address }: { address: Address }) => {
-      codeReads.push(address)
-      return state.code
     },
   },
 }))
@@ -128,12 +95,7 @@ afterEach(() => {
   state.balance = 0n
   state.usdc = undefined
   state.allowance = 0n
-  state.wallet = false
-  state.code = undefined
-  flags.crosschain = true
-  iris.status = 'pending'
   reads.length = 0
-  codeReads.length = 0
   localStorage.clear()
   open.mockClear()
   recheck.next = async () => {
@@ -203,28 +165,36 @@ describe('DonatePanel', () => {
     expect(breakdown.getByText('10.849999 USDC')).toBeTruthy()
   })
 
-  // Memo reverts for any caller with code. A smart wallet or an EIP-7702 delegated address connects as an
-  // ordinary wallet, so the panel reads the code on Arc before building.
-  it('donates through Memo from an address with no code', async () => {
+  // Memo only accepts an EOA caller, and a Fundit account is a smart account. Every gift calls donate on the
+  // Fundit itself, after an approval when the allowance is short.
+  it('gives by calling donate on the Fundit directly, never through Memo', async () => {
     const send = fakeSender()
     state.balance = 1000_000000n
-    renderPanel(view('USDC'))
-    await fillAndDonate()
-    await waitFor(() => expect(send).toHaveBeenCalledTimes(1))
-    expect(codeReads).toEqual([ME])
-    expect(send.mock.calls[0]![0].at(-1)!.to).toBe(MEMO_ADDRESS)
-  })
-
-  it('calls the campaign directly from an address with code', async () => {
-    const send = fakeSender()
-    state.balance = 1000_000000n
-    state.code = `0xef0100${'5a'.repeat(20)}`
     renderPanel(view('USDC'))
     await fillAndDonate()
     await waitFor(() => expect(send).toHaveBeenCalledTimes(1))
     const calls = send.mock.calls[0]![0]
-    expect(calls[0]!.to).toBe(TOKENS.USDC.address)
-    expect(calls[1]!.to).toBe(CAMPAIGN)
+    expect(calls.map((c) => c.to)).toEqual([TOKENS.USDC.address, CAMPAIGN])
+    expect(decodeFunctionData({ abi: campaignAbi, data: calls[1]!.data }).functionName).toBe('donate')
+  })
+
+  // One way to pay: the Fundit account balance. No other chain, no unified balance and no wallet choice.
+  it('offers no other way to pay', () => {
+    fakeSender()
+    renderPanel(view('USDC'))
+    expect(screen.queryByRole('group', { name: 'Pay with' })).toBeNull()
+    expect(screen.queryByRole('radio', { name: /another chain|Unified|Arc wallet/ })).toBeNull()
+  })
+
+  // Too little in the account is fixed by adding money, so the panel points there.
+  it('a low balance shows Add money, linking to /add-money', async () => {
+    fakeSender()
+    state.balance = 5_000000n
+    renderPanel(view('USDC'))
+    await userEvent.setup().type(screen.getByLabelText('Amount'), '10')
+    expect(await screen.findByText(/not enough USDC/)).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/add-money')
+    expect(donateButton().disabled).toBe(true)
   })
 
   describe('Give anonymously', () => {
@@ -237,27 +207,9 @@ describe('DonatePanel', () => {
       expect(screen.getByText(HELP)).toBeTruthy()
     })
 
-    it('sends the marked message in the donate call and the Memo data (EOA)', async () => {
+    it('sends the marked message in the donate call', async () => {
       const send = fakeSender()
       state.balance = 1000_000000n
-      renderPanel(view('USDC'))
-      const user = userEvent.setup()
-      await user.click(screen.getByLabelText('Give anonymously'))
-      await user.type(screen.getByLabelText('Message (optional)'), '0123456789')
-      await user.type(screen.getByLabelText('Amount'), '10')
-      await waitFor(() => expect(donateButton().disabled).toBe(false))
-      await user.click(donateButton())
-      await waitFor(() => expect(send).toHaveBeenCalledTimes(1))
-      const memo = decodeFunctionData({ abi: memoAbi, data: send.mock.calls[0]![0].at(-1)!.data })
-      expect(memo.args![3]).toBe(toHex('[anon]0123456789'))
-      const inner = decodeFunctionData({ abi: campaignAbi, data: memo.args![1] as Hex })
-      expect(inner.args![2]).toBe('[anon]0123456789')
-    })
-
-    it('sends the marked message in the direct donate call (address with code)', async () => {
-      const send = fakeSender()
-      state.balance = 1000_000000n
-      state.code = `0xef0100${'5a'.repeat(20)}`
       renderPanel(view('USDC'))
       const user = userEvent.setup()
       await user.click(screen.getByLabelText('Give anonymously'))
@@ -273,7 +225,6 @@ describe('DonatePanel', () => {
     it('sends no marker when the box is unticked', async () => {
       const send = fakeSender()
       state.balance = 1000_000000n
-      state.code = `0xef0100${'5a'.repeat(20)}`
       renderPanel(view('USDC'))
       const user = userEvent.setup()
       await user.type(screen.getByLabelText('Message (optional)'), 'hello')
@@ -361,16 +312,18 @@ describe('DonatePanel', () => {
     const [calls] = send.mock.calls[0]!
     expect(calls[0]!.to).toBe(TOKENS.EURC.address)
     expect(decodeFunctionData({ abi: erc20Abi, data: calls[0]!.data }).args).toEqual([CAMPAIGN, 10_000000n])
-    expect(calls[1]!.to).toBe(MEMO_ADDRESS)
+    expect(calls[1]!.to).toBe(CAMPAIGN)
     for (const r of reads) expect(r.address).toBe(TOKENS.EURC.address)
     expect(reads.some((r) => r.functionName === 'allowance' && r.args[1] === CAMPAIGN)).toBe(true)
   })
 
-  it('shows a connect prompt instead of the submit button when no wallet is connected', async () => {
+  // Signed out, giving starts with the passkey sign-in. The wallet modal never opens from here.
+  it('signed out, Sign in to give opens the passkey sign-in dialog, never the wallet modal', async () => {
     renderPanel(view('USDC'))
     expect(screen.queryByRole('button', { name: 'Give' })).toBeNull()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in to give' }))
-    expect(open).toHaveBeenCalled()
+    expect(within(screen.getByRole('dialog', { name: 'Sign in' })).getByRole('button', { name: 'Continue with passkey' })).toBeTruthy()
+    expect(open).not.toHaveBeenCalled()
   })
 
   // After a success the campaign total and the activity list are stale, so both are reloaded.
@@ -410,8 +363,8 @@ describe('DonatePanel', () => {
     expect(await screen.findByText(/Thank you/)).toBeTruthy()
     const finish = send.mock.calls[1]![0]
     expect(finish).toHaveLength(1)
-    expect(finish[0]!.to).toBe(MEMO_ADDRESS)
-    expect(decodeFunctionData({ abi: memoAbi, data: finish[0]!.data }).functionName).toBe('memo')
+    expect(finish[0]!.to).toBe(CAMPAIGN)
+    expect(decodeFunctionData({ abi: campaignAbi, data: finish[0]!.data }).functionName).toBe('donate')
   })
 
   // A donate call that timed out may still be mined. Calling it "not sent" could make the donor give twice.
@@ -590,218 +543,51 @@ describe('DonatePanel', () => {
     expect(await screen.findByText(/Thank you/)).toBeTruthy()
     expect(send).toHaveBeenCalledTimes(1)
   })
-  describe('VITE_CROSSCHAIN flag', () => {
-    const radios = () => screen.getAllByRole('radio', { name: /Arc wallet|USDC on another chain|Unified USDC balance/ })
-
-    it('off: a USDC campaign offers only the Arc wallet, even with a wallet connected', () => {
-      flags.crosschain = false
-      state.wallet = true
-      fakeSender()
-      renderPanel(view('USDC'))
-      expect(radios().map((r) => r.closest('label')!.textContent)).toEqual([expect.stringMatching(/^Arc wallet/)])
-    })
-
-    it('on: a USDC campaign offers all three sources to a connected wallet', () => {
-      state.wallet = true
-      fakeSender()
-      renderPanel(view('USDC'))
-      expect(radios()).toHaveLength(3)
-    })
-
-    // Entries saved before the flag went off still describe money that may move. They must still block and be
-    // checkable, or the donor could give twice.
-    it('off: a stored unified spend still shows its status and blocks the Arc wallet', () => {
-      flags.crosschain = false
-      localStorage.setItem(
-        'fundit.pendingBridges',
-        JSON.stringify([{ kind: 'unified', campaign: CAMPAIGN, amount: '5', transferId: 't-1', createdAt: Date.now() }]),
-      )
-      state.wallet = true
-      fakeSender()
-      state.balance = 1000_000000n
-      renderPanel(view('USDC'))
-      expect((screen.getByRole('radio', { name: /Unified USDC balance/ }) as HTMLInputElement).checked).toBe(true)
-      expect(screen.getByText(/unified balance donation is not confirmed yet/)).toBeTruthy()
-      expect(screen.getByRole('button', { name: 'Check again' })).toBeTruthy()
-      expect(screen.getByRole('radio', { name: /Arc wallet/ }).matches(':disabled')).toBe(true)
-      expect(screen.queryByRole('button', { name: 'Give' })).toBeNull()
-    })
-
-    it('off: a stored cross-chain transfer still shows and blocks', () => {
-      flags.crosschain = false
-      localStorage.setItem(
-        'fundit.pendingBridges',
-        JSON.stringify([{ kind: 'bridge', campaign: CAMPAIGN, burnTx: `0x${'cd'.repeat(32)}`, srcDomain: 6, amount: '25', createdAt: Date.now() }]),
-      )
-      fakeSender()
-      renderPanel(view('USDC'))
-      expect(screen.getByText(/cross-chain donation of 25 USDC is still on its way/)).toBeTruthy()
-      expect(screen.getByRole('radio', { name: /Arc wallet/ }).matches(':disabled')).toBe(true)
-      expect(screen.queryByRole('button', { name: 'Give' })).toBeNull()
-    })
-  })
-
-  describe('unified balance option', () => {
-    const option = () => screen.queryByRole('radio', { name: /Unified USDC balance/ })
-
-    // Gateway spends USDC only. Offering it on an EURC campaign would mint the wrong token to the campaign.
-    it('is hidden for EURC campaigns, even with a wallet connected', () => {
-      state.wallet = true
-      fakeSender()
-      renderPanel(view('EURC'))
-      expect(option()).toBeNull()
-    })
-
-    it('is offered for USDC campaigns when a wallet is connected', () => {
-      state.wallet = true
-      fakeSender()
-      renderPanel(view('USDC'))
-      expect(option()).toBeTruthy()
-    })
-
-    // The spend is signed by the external wallet. Without one there is nothing to sign with.
-    it('is hidden when no wallet is connected', () => {
-      renderPanel(view('USDC'))
-      expect(option()).toBeNull()
-    })
-
-    // After a reload the unconfirmed spend must be in view, or the donor could give again from Arc unaware.
-    it('opens the unified option after a reload when a spend there is unconfirmed', () => {
-      localStorage.setItem(
-        'fundit.pendingBridges',
-        JSON.stringify([{ kind: 'unified', campaign: CAMPAIGN, amount: '5', transferId: 't-1', createdAt: Date.now() }]),
-      )
-      state.wallet = true
-      fakeSender()
-      renderPanel(view('USDC'))
-      expect((option() as HTMLInputElement).checked).toBe(true)
-      expect(screen.getByText(/not confirmed yet/)).toBeTruthy()
-    })
-  })
-
-  // Any unconfirmed donation to this campaign, from any source, blocks every source. A second donation from
-  // another source while the first may still land would make the donor give twice.
-  describe('one unconfirmed donation blocks every source', () => {
+  // An unconfirmed donation to this Fundit, from this tab or another, blocks a new one so nobody gives twice.
+  describe('one unconfirmed donation at a time', () => {
     const KEY = 'fundit.pendingBridges'
     const BURN = `0x${'cd'.repeat(32)}` as Hex
     const store = (...entries: Record<string, unknown>[]) =>
       localStorage.setItem(KEY, JSON.stringify(entries.map((e) => ({ campaign: CAMPAIGN, createdAt: Date.now(), ...e }))))
-    // A disabled fieldset disables its inputs without setting their own disabled property.
-    const radio = (name: RegExp) => {
-      const el = screen.getByRole('radio', { name }) as HTMLInputElement
-      return { disabled: el.matches(':disabled') }
-    }
     const unsubmittable = () => expect(screen.queryByRole('button', { name: 'Give' })).toBeNull()
 
-    // The wallet that signed the unified spend is not connected after the reload, which used to drop the
-    // panel back to an open Arc wallet form.
-    it('a pending unified entry blocks the Arc wallet form', () => {
-      store({ kind: 'unified', amount: '5', transferId: 't-1' })
-      fakeSender()
-      state.balance = 1000_000000n
-      renderPanel(view('USDC'))
-      expect(screen.getByText(/unified balance donation is not confirmed yet/)).toBeTruthy()
-      expect(radio(/Arc wallet/).disabled).toBe(true)
-      unsubmittable()
-    })
-
-    it('a pending Arc timeout blocks the unified and cross-chain options', () => {
-      store({ kind: 'arc', hash: HASH, approve: false })
-      state.wallet = true
-      fakeSender()
-      renderPanel(view('USDC'))
-      expect(screen.getByText(/Arc wallet donation is not confirmed yet/)).toBeTruthy()
-      expect(radio(/Unified USDC balance/).disabled).toBe(true)
-      expect(radio(/USDC on another chain/).disabled).toBe(true)
-      unsubmittable()
-    })
-
-    it('a cross-chain transfer on its way blocks the Arc wallet form, and Start over clears only it', async () => {
-      const OTHER_BURN = `0x${'ee'.repeat(32)}` as Hex
-      store(
-        { kind: 'bridge', burnTx: BURN, srcDomain: 6, amount: '25' },
-        { kind: 'bridge', burnTx: OTHER_BURN, srcDomain: 6, amount: '7', minted: true },
-      )
-      fakeSender()
-      state.balance = 1000_000000n
-      renderPanel(view('USDC'))
-      expect(screen.getByText(/cross-chain donation of 25 USDC is still on its way/)).toBeTruthy()
-      expect(radio(/Arc wallet/).disabled).toBe(true)
-      unsubmittable()
-      vi.spyOn(window, 'confirm').mockReturnValue(true)
-      await userEvent.setup().click(screen.getByRole('button', { name: 'Start over' }))
-      const left = JSON.parse(localStorage.getItem(KEY)!) as { burnTx: string }[]
-      expect(left.map((e) => e.burnTx)).toEqual([OTHER_BURN])
-      expect(radio(/Arc wallet/).disabled).toBe(false)
-    })
-
     // Another tab wrote the entry after this form loaded and this tab heard nothing. Submit reads the store again.
-    it('re-reads the store at Arc wallet submit and sends nothing while another donation is unconfirmed', async () => {
+    it('re-reads the store at submit and sends nothing while another donation is unconfirmed', async () => {
       const send = fakeSender()
       state.balance = 1000_000000n
       renderPanel(view('USDC'))
       const user = userEvent.setup()
       await user.type(screen.getByLabelText('Amount'), '10')
       await waitFor(() => expect(donateButton().disabled).toBe(false))
-      localStorage.setItem(KEY, JSON.stringify([{ kind: 'unified', campaign: CAMPAIGN, amount: '5', createdAt: Date.now() }]))
+      store({ kind: 'arc', hash: HASH, approve: false })
       await user.click(donateButton())
-      expect(await screen.findByText(/unified balance donation is not confirmed yet/)).toBeTruthy()
+      expect(await screen.findByText(/donation is not confirmed yet/)).toBeTruthy()
       expect(send).not.toHaveBeenCalled()
-      expect(radio(/Arc wallet/).disabled).toBe(true)
+      unsubmittable()
     })
 
     // The browser tells other tabs of a localStorage change with a storage event.
-    it('picks up an Arc donation another tab left unconfirmed, on the storage event', async () => {
+    it('picks up a donation another tab left unconfirmed, on the storage event', async () => {
       fakeSender()
       state.balance = 1000_000000n
       renderPanel(view('USDC'))
       expect(screen.queryByText(/not confirmed yet/)).toBeNull()
-      localStorage.setItem(KEY, JSON.stringify([{ kind: 'arc', campaign: CAMPAIGN, hash: HASH, approve: false, createdAt: Date.now() }]))
+      store({ kind: 'arc', hash: HASH, approve: false })
       act(() => {
         window.dispatchEvent(new StorageEvent('storage', { key: KEY }))
       })
-      expect(await screen.findByText(/Arc wallet donation is not confirmed yet/)).toBeTruthy()
+      expect(await screen.findByText(/donation is not confirmed yet/)).toBeTruthy()
       unsubmittable()
     })
 
-    it('a submitted cross-chain entry with no burn hash yet also blocks', () => {
-      store({ kind: 'submitted', id: 's-1', srcDomain: 6, amount: '25' })
-      fakeSender()
-      renderPanel(view('USDC'))
-      expect(radio(/Arc wallet/).disabled).toBe(true)
-      unsubmittable()
-    })
-
-    // The organiser's own payout to another chain is money leaving the campaign, not a donation on its way.
+    // The organiser's own payout to another chain is money leaving the Fundit, not a donation on its way.
     it('a payout to another chain does not block and does not show in the donate panel', async () => {
       store({ kind: 'payout', burnTx: BURN, srcDomain: 26, destDomain: 6, amount: '9.9' })
       fakeSender()
       state.balance = 1000_000000n
       renderPanel(view('USDC'))
       expect(screen.queryByText(/9.9 USDC/)).toBeNull()
-      expect(radio(/Arc wallet/).disabled).toBe(false)
       await fillAndDonate()
-    })
-
-    it('a minted cross-chain entry does not block', async () => {
-      store({ kind: 'bridge', burnTx: BURN, srcDomain: 6, amount: '25', minted: true })
-      fakeSender()
-      state.balance = 1000_000000n
-      renderPanel(view('USDC'))
-      expect(radio(/Arc wallet/).disabled).toBe(false)
-      await fillAndDonate()
-    })
-
-    // The tracker learns of the mint from Iris. From then on the transfer is done and must stop blocking.
-    it('stops blocking once Iris reports the mint', async () => {
-      store({ kind: 'bridge', burnTx: BURN, srcDomain: 6, amount: '25' })
-      iris.status = 'minted'
-      fakeSender()
-      state.balance = 1000_000000n
-      renderPanel(view('USDC'))
-      expect(await screen.findByText(/reached the Fundit/)).toBeTruthy()
-      await waitFor(() => expect(radio(/Arc wallet/).disabled).toBe(false))
-      expect(screen.getByRole('button', { name: 'Give' })).toBeTruthy()
     })
   })
 
@@ -850,7 +636,6 @@ describe('DonatePanel', () => {
       await user.clear(screen.getByLabelText('Amount'))
       await user.type(screen.getByLabelText('Amount'), '9.95')
       await waitFor(() => expect(donateButton().disabled).toBe(false))
-      expect(codeReads).toEqual([])
     })
 
     // Arc gas is paid in USDC. A Fundit account with EURC and no USDC would fail at gas estimation after the tap.

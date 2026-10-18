@@ -150,7 +150,6 @@ export async function startFork(): Promise<Fork> {
         `VITE_FACTORY_DEPLOY_BLOCK=${deployBlock}`,
         'VITE_REOWN_PROJECT_ID=e2e-dummy',
         `VITE_ARC_RPC_URL=${LOCAL_RPC}`,
-        'VITE_PASSKEYS=',
         '',
       ].join('\n'),
     )

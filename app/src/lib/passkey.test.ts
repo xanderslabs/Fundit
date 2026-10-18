@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react'
 import { type Address, getAddress, type Hex, type TransactionReceipt } from 'viem'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TX_TIMEOUT_MS } from '../config'
-import { pickWallet, setActiveWallet, useSender, useWalletChoice } from '../hooks/useSender'
+import { useSender } from '../hooks/useSender'
 import {
   addBackupPasskey,
   checkPendingBackup,
@@ -30,10 +30,8 @@ import {
 } from './passkey'
 import type { Call } from './sender'
 
-// The flag is off in tests by default. useSender only looks for a passkey session when it is on.
 vi.mock('../config', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../config')>()),
-  PASSKEYS_ENABLED: true,
   CIRCLE_CLIENT_KEY: 'test-key',
 }))
 
@@ -258,44 +256,20 @@ describe('passkey session store', () => {
 describe('useSender', () => {
   beforeEach(() => {
     clearPasskeySession()
-    setActiveWallet('passkey')
   })
 
-  // A logged-in passkey wallet is who acts, even if an external wallet is also connected for bridging.
-  it('returns the passkey sender when a passkey session exists', () => {
+  // A logged-in Fundit account is who acts, even while a regular wallet is connected to add money.
+  it('returns the passkey sender when a passkey session exists, even with a wallet connected', () => {
     savePasskeySession({ address: ACCOUNT.address, credentialId: 'cred-1' })
     const { result } = renderHook(() => useSender())
     expect(result.current?.kind).toBe('passkey')
     expect(result.current?.address).toBe(ACCOUNT.address)
   })
 
-  it('returns the wallet sender without a passkey session', () => {
+  // Sign-in is passkey only. A wallet connected for Add money must never give, create or manage.
+  it('never returns a wagmi sender: a connected wallet alone is signed out', () => {
     const { result } = renderHook(() => useSender())
-    expect(result.current?.kind).toBe('eoa')
-  })
-
-  // With both active the person chooses. The choice must change who signs, not only what the header says.
-  it('returns the wallet sender once the person switches to the connected wallet, and back', () => {
-    savePasskeySession({ address: ACCOUNT.address, credentialId: 'cred-1' })
-    const { result } = renderHook(() => ({ sender: useSender(), choice: useWalletChoice() }))
-    expect(result.current.choice).toMatchObject({ both: true, active: 'passkey', external: '0x9999999999999999999999999999999999999999' })
-    act(() => result.current.choice.setActive('external'))
-    expect(result.current.sender?.kind).toBe('eoa')
-    expect(result.current.choice.active).toBe('external')
-    act(() => setActiveWallet('passkey'))
-    expect(result.current.sender?.kind).toBe('passkey')
-  })
-})
-
-describe('pickWallet', () => {
-  const P = { address: ACCOUNT.address, credentialId: 'c' }
-  const E = '0x9999999999999999999999999999999999999999' as Address
-  it('prefers the passkey by default, the chosen one when both exist, and whichever exists otherwise', () => {
-    expect(pickWallet({ passkey: P, external: E, prefer: 'passkey' })).toBe('passkey')
-    expect(pickWallet({ passkey: P, external: E, prefer: 'external' })).toBe('external')
-    expect(pickWallet({ passkey: P, external: null, prefer: 'external' })).toBe('passkey')
-    expect(pickWallet({ passkey: null, external: E, prefer: 'passkey' })).toBe('external')
-    expect(pickWallet({ passkey: null, external: null, prefer: 'passkey' })).toBeNull()
+    expect(result.current).toBeNull()
   })
 })
 

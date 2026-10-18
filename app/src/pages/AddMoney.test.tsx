@@ -6,7 +6,6 @@ import { type Address, decodeFunctionData, type Hex, UserRejectedRequestError } 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { erc20Abi } from '../abi/erc20'
 import { ARC_CHAIN_ID, TOKENS } from '../config'
-import type { WalletChoice } from '../hooks/useSender'
 import { AddMoney } from './AddMoney'
 
 const ACCOUNT = '0x00000000000000000000000000000000000000cc' as Address
@@ -28,15 +27,6 @@ vi.mock('../lib/passkey', async (importOriginal) => ({
   usePasskeySession: () => ({ address: '0x00000000000000000000000000000000000000cc', credentialId: 'cred-1' }),
   storedPasskeySender: () => ({ kind: 'passkey', address: '0x00000000000000000000000000000000000000cc', send: passkeySend }),
 }))
-// The passkey is the active wallet, with a regular wallet connected next to it.
-vi.mock('../hooks/useSender', () => ({
-  useWalletChoice: (): WalletChoice => ({
-    both: state.external !== null,
-    active: 'passkey',
-    external: state.external,
-    setActive: () => {},
-  }),
-}))
 const fetchAccountBalances = vi.hoisted(() =>
   vi.fn(async (_client: unknown, who: Address) => state.balances.get(who.toLowerCase()) ?? { usdc: 0n, eurc: 0n }),
 )
@@ -50,7 +40,11 @@ vi.mock('@wagmi/core', () => core)
 const arc = vi.hoisted(() => ({ estimateGas: vi.fn(), waitForTransactionReceipt: vi.fn(), getTransaction: vi.fn(), call: vi.fn() }))
 vi.mock('../lib/clients', () => ({ arcClient: arc }))
 const openWallet = vi.hoisted(() => vi.fn())
-vi.mock('wagmi', () => ({ useConfig: () => ({}), useConnection: () => ({ isConnected: false }) }))
+// The Fundit account is signed in. state.external is a regular wallet connected here to add money from.
+vi.mock('wagmi', () => ({
+  useConfig: () => ({}),
+  useConnection: () => (state.external ? { isConnected: true, address: state.external } : { isConnected: false }),
+}))
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: openWallet }) }))
 
 beforeEach(() => {

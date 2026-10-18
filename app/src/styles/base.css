@@ -300,13 +300,6 @@ input[type='checkbox'] {
   min-width: 220px;
 }
 
-.account-note {
-  margin: 0;
-  padding: 8px 12px 6px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
 .account-menu {
   margin: 0;
   padding: 0;
@@ -362,17 +355,6 @@ input[type='checkbox'] {
 
 .backup-prompt p {
   margin: 0;
-}
-
-.link-button {
-  align-self: center;
-  padding: 8px;
-  border: 0;
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  text-decoration: underline;
-  cursor: pointer;
 }
 
 .backup-confirm {

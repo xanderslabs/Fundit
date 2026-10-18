@@ -1,45 +1,37 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import type { Address } from 'viem'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { WalletChoice } from '../hooks/useSender'
 import type { StoredPasskey } from '../lib/passkey'
 import { AccountControl } from './AccountMenu'
 
-const EXTERNAL = '0x1111111111111111111111111111111111111111' as Address
+const ACCOUNT: StoredPasskey = { address: '0x1111111111111111111111111111111111111111' as Address, credentialId: 'cred-1' }
 
-const state: { session: StoredPasskey | null; external: Address | null } = { session: null, external: null }
+const state: { session: StoredPasskey | null } = { session: null }
 const openWallet = vi.fn()
 const disconnect = vi.fn()
 const logoutPasskey = vi.fn()
 const confirmLeave = vi.fn(() => true)
 
+// AppKit is mocked only to prove that nothing here opens it. It opens only inside Add money.
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: openWallet }) }))
 vi.mock('wagmi', () => ({ useDisconnect: () => ({ mutate: disconnect }) }))
 vi.mock('../hooks/useName', () => ({ useName: () => ({ data: undefined }) }))
 vi.mock('../lib/passkey', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/passkey')>()),
   usePasskeySession: () => state.session,
+  useBackupPrompt: () => false,
   logoutPasskey: () => logoutPasskey(),
 }))
 vi.mock('./AddBackupPasskey', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./AddBackupPasskey')>()),
   confirmLeave: () => confirmLeave(),
 }))
-vi.mock('../hooks/useSender', () => ({
-  useWalletChoice: (): WalletChoice => ({
-    both: state.session !== null && state.external !== null,
-    active: state.session ? 'passkey' : state.external ? 'external' : null,
-    external: state.external,
-    setActive: () => {},
-  }),
-}))
 
 afterEach(() => {
   cleanup()
   state.session = null
-  state.external = null
   openWallet.mockReset()
   disconnect.mockReset()
   logoutPasskey.mockReset()
@@ -63,25 +55,21 @@ function ui() {
 const pill = () => screen.getByRole('button', { name: '0x1111...1111' })
 
 describe('AccountControl signed out', () => {
-  // One clear way in. Without passkeys it goes straight to the wallet modal, as the old Connect wallet did.
-  it('shows Sign in, which opens the wallet sign-in', async () => {
+  // Sign-in is passkey only. There is no wallet sign-in, so Sign in never opens the wallet modal.
+  it('shows Sign in, which opens the passkey sign-in dialog and never the wallet modal', async () => {
     render(ui())
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }))
-    expect(openWallet).toHaveBeenCalledTimes(1)
+    const dialog = screen.getByRole('dialog', { name: 'Sign in' })
+    expect(within(dialog).getByRole('button', { name: 'Continue with passkey' })).toBeTruthy()
+    expect(within(dialog).queryByText(/crypto wallet/i)).toBeNull()
+    expect(openWallet).not.toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: /0x/ })).toBeNull()
-  })
-
-  // Recovery is for passkey accounts, which only exist with passkeys switched on.
-  it('offers no recovery link with passkeys off', async () => {
-    render(ui())
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }))
-    expect(screen.queryByRole('link', { name: /Recover your account/ })).toBeNull()
   })
 })
 
 describe('AccountControl signed in', () => {
   it('shows the short address as a menu button', () => {
-    state.external = EXTERNAL
+    state.session = ACCOUNT
     render(ui())
     expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull()
     expect(pill().getAttribute('aria-haspopup')).toBe('menu')
@@ -89,39 +77,31 @@ describe('AccountControl signed in', () => {
   })
 
   // Start a Fundit lives here because only signed-in people can start one. The order is the product spec.
-  it('opens a menu with Start a Fundit, My page and Sign out, in that order, and focuses the first item', async () => {
-    state.external = EXTERNAL
+  it('opens a menu with Start a Fundit, My page, Add money and Sign out, in that order, and focuses the first item', async () => {
+    state.session = ACCOUNT
     render(ui())
     await userEvent.setup().click(pill())
     expect(pill().getAttribute('aria-expanded')).toBe('true')
     const items = screen.getAllByRole('menuitem').map((i) => i.textContent)
-    expect(items).toEqual(['Start a Fundit', 'My page', 'Sign out'])
+    expect(items).toEqual(['Start a Fundit', 'My page', 'Add money', 'Sign out'])
     expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Start a Fundit' }))
   })
 
-  // The Add money page only exists with passkeys on, so the menu must not link to it otherwise.
-  it('has no Add money item with passkeys off, even with a passkey session', async () => {
-    state.session = { address: '0x00000000000000000000000000000000000000cC', credentialId: 'cred-1' }
-    render(ui())
-    await userEvent.setup().click(screen.getByRole('button', { name: '0x0000...00cC' }))
-    expect(screen.queryByRole('menuitem', { name: 'Add money' })).toBeNull()
-  })
-
   it('moves between items with the arrow keys, wrapping at the ends', async () => {
-    state.external = EXTERNAL
+    state.session = ACCOUNT
     render(ui())
     const user = userEvent.setup()
     await user.click(pill())
     await user.keyboard('{ArrowDown}')
     expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'My page' }))
-    await user.keyboard('{ArrowDown}{ArrowDown}')
+    await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}')
     expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Start a Fundit' }))
     await user.keyboard('{ArrowUp}')
     expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Sign out' }))
   })
 
   it('opens from the keyboard with Enter', async () => {
-    state.external = EXTERNAL
+    state.session = ACCOUNT
     render(ui())
     const user = userEvent.setup()
     pill().focus()
@@ -131,7 +111,7 @@ describe('AccountControl signed in', () => {
 
   // Keyboard users must land back where they were, not at the top of the page.
   it('closes on Escape and returns focus to the button', async () => {
-    state.external = EXTERNAL
+    state.session = ACCOUNT
     render(ui())
     const user = userEvent.setup()
     await user.click(pill())
@@ -142,7 +122,7 @@ describe('AccountControl signed in', () => {
   })
 
   it('closes on a click outside', async () => {
-    state.external = EXTERNAL
+    state.session = ACCOUNT
     render(ui())
     const user = userEvent.setup()
     await user.click(pill())
@@ -151,7 +131,7 @@ describe('AccountControl signed in', () => {
   })
 
   it('My page goes to /me', async () => {
-    state.external = EXTERNAL
+    state.session = ACCOUNT
     render(ui())
     const user = userEvent.setup()
     await user.click(pill())
@@ -161,7 +141,7 @@ describe('AccountControl signed in', () => {
   })
 
   it('Start a Fundit goes to /create', async () => {
-    state.external = EXTERNAL
+    state.session = ACCOUNT
     render(ui())
     const user = userEvent.setup()
     await user.click(pill())
@@ -169,23 +149,24 @@ describe('AccountControl signed in', () => {
     expect(screen.getByText('Create page')).toBeTruthy()
   })
 
-  // Sign out has to end the wallet connection for real, or the next person on this browser acts as this one.
-  it('Sign out disconnects the wallet and leaves a passkey session alone when there is none', async () => {
-    state.external = EXTERNAL
+  // Sign out has to end the session for real, or the next person on this browser acts as this one. A wallet
+  // connected to add money is disconnected too.
+  it('Sign out ends the passkey session and disconnects any wallet connected for Add money', async () => {
+    state.session = ACCOUNT
     const { rerender } = render(ui())
     const user = userEvent.setup()
     await user.click(pill())
     await user.click(screen.getByRole('menuitem', { name: 'Sign out' }))
+    expect(logoutPasskey).toHaveBeenCalledTimes(1)
     expect(disconnect).toHaveBeenCalledTimes(1)
-    expect(logoutPasskey).not.toHaveBeenCalled()
-    state.external = null
+    state.session = null
     rerender(ui())
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Sign in' }))
   })
 
   // On My page with recovery words on screen, Sign out would drop them, so it asks first like any other exit.
   it('Sign out asks first while recovery words are on screen, and does nothing when the person stays', async () => {
-    state.external = EXTERNAL
+    state.session = ACCOUNT
     confirmLeave.mockReturnValue(false)
     render(ui())
     const user = userEvent.setup()

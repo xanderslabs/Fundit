@@ -17,8 +17,6 @@ export type PendingBridge = { kind: 'bridge'; campaign: Address; burnTx: Hex; sr
 export type PendingSubmitted = { kind: 'submitted'; id: string; campaign: Address; srcDomain: number; amount: string; createdAt: number }
 // hashKind 'userop' marks a passkey user operation hash, which only the passkey bundler can check.
 export type PendingArc = { kind: 'arc'; campaign: Address; hash: Hex; approve: boolean; hashKind?: 'userop'; createdAt: number }
-// A unified balance spend the donor started. transferId and hash are filled in when Circle reports them.
-export type PendingUnified = { kind: 'unified'; campaign: Address; amount: string; transferId?: string; hash?: Hex; createdAt: number }
 // An organiser's withdrawal burned on Arc (domain 26) and minted on destDomain. Money leaving the campaign, so
 // it never blocks a donation. minted works as for PendingBridge.
 export type PendingPayout = {
@@ -32,7 +30,7 @@ export type PendingPayout = {
   createdAt: number
 }
 export type PendingCrossChain = PendingBridge | PendingSubmitted
-type Entry = PendingBridge | PendingSubmitted | PendingArc | PendingUnified | PendingPayout
+type Entry = PendingBridge | PendingSubmitted | PendingArc | PendingPayout
 
 const isTxHash = (v: unknown): v is Hex => typeof v === 'string' && isHex(v) && v.length === 66
 
@@ -53,13 +51,6 @@ function isEntry(e: unknown): e is Entry {
     )
   }
   if (x.kind === 'arc') return isTxHash(x.hash) && typeof x.approve === 'boolean' && (x.hashKind === undefined || x.hashKind === 'userop')
-  if (x.kind === 'unified') {
-    return (
-      typeof x.amount === 'string' &&
-      (x.transferId === undefined || (typeof x.transferId === 'string' && x.transferId !== '')) &&
-      (x.hash === undefined || isTxHash(x.hash))
-    )
-  }
   return false
 }
 
@@ -105,9 +96,6 @@ export function notifyPending() {
   window.dispatchEvent(new Event(PENDING_EVENT))
 }
 
-// Shown when a submit finds that another donation to this campaign is still unconfirmed.
-export const ANOTHER_PENDING = 'Another donation to this Fundit is not confirmed yet. Wait for it before you give again.'
-
 export function pendingBridges(): PendingBridge[] {
   return readAll().filter((e): e is PendingBridge => e.kind === 'bridge')
 }
@@ -136,24 +124,17 @@ export function savePendingPayout(p: { campaign: Address; burnTx: Hex; destDomai
   writeAll([...all, { kind: 'payout', ...p, srcDomain: ARC_DOMAIN, createdAt: Date.now() }])
 }
 
-// An entry whose money may still move to this campaign. While one exists, no new donation may start from
-// any source, or the donor could give twice. Order: the Arc wallet, the unified balance, then cross-chain.
-export type BlockingEntry = PendingArc | PendingUnified | PendingSubmitted | (PendingBridge & { minted?: undefined })
+// An entry whose money may still move to this address: an unconfirmed donation to a campaign, or a transfer on
+// its way to a Fundit account. While one exists, no new one may start, or the money could move twice.
+export type BlockingEntry = PendingArc | PendingSubmitted | (PendingBridge & { minted?: undefined })
 
 export function blockingEntry(campaign: Address): BlockingEntry | null {
   const mine = readAll().filter((e) => same(e.campaign, campaign))
   return (
     mine.find((e): e is PendingArc => e.kind === 'arc') ??
-    mine.find((e): e is PendingUnified => e.kind === 'unified') ??
     mine.find((e): e is BlockingEntry => (e.kind === 'bridge' && !e.minted) || e.kind === 'submitted') ??
     null
   )
-}
-
-// Removes exactly this cross-chain entry. The donor confirmed that the money may still arrive.
-export function clearCrossChain(entry: PendingCrossChain) {
-  if (entry.kind === 'bridge') clearBridge(entry.burnTx)
-  else clearSubmitted(entry.id)
 }
 
 // Bridges and submitted transfers, for the tracker.
@@ -192,23 +173,6 @@ export function clearPendingArc(campaign: Address) {
   if (rest.length !== all.length) writeAll(rest)
 }
 
-export function pendingUnified(campaign: Address): PendingUnified | null {
-  return readAll().find((e): e is PendingUnified => e.kind === 'unified' && same(e.campaign, campaign)) ?? null
-}
-
-// One per campaign. Saving again keeps the first createdAt, so the entry expires on the usual schedule.
-export function savePendingUnified(p: { campaign: Address; amount: string; transferId?: string; hash?: Hex }) {
-  const all = readAll()
-  const prev = all.find((e): e is PendingUnified => e.kind === 'unified' && same(e.campaign, p.campaign))
-  writeAll([...all.filter((e) => e !== prev), { kind: 'unified', ...p, createdAt: prev?.createdAt ?? Date.now() }])
-}
-
-export function clearPendingUnified(campaign: Address) {
-  const all = readAll()
-  const rest = all.filter((e) => !(e.kind === 'unified' && same(e.campaign, campaign)))
-  if (rest.length !== all.length) writeAll(rest)
-}
-
 export function chainByKey(key: CctpChainKey): CctpChain {
   return CCTP_CHAINS.find((c) => c.key === key)!
 }
@@ -224,27 +188,25 @@ export type CrossChainParams = {
 }
 
 const SEND_METHODS = new Set(['eth_sendTransaction', 'wallet_sendCalls'])
-const SIGN_METHODS = new Set(['eth_signTypedData_v4', 'eth_signTypedData_v3', 'eth_signTypedData'])
 
-// Passes every call to the wallet, and reports each successful send or typed-data signature to whoever is
-// listening. The adapter reads only request() (through viem's custom transport), so a plain object is enough.
+// Passes every call to the wallet, and reports each successful send to whoever is listening. The adapter
+// reads only request() (through viem's custom transport), so a plain object is enough.
 function watchSends(provider: EIP1193Provider, watcher: Watcher): EIP1193Provider {
   const request = (async (args: { method: string }) => {
     const result = await provider.request(args as never)
     if (SEND_METHODS.has(args.method)) watcher.onSend?.()
-    if (SIGN_METHODS.has(args.method)) watcher.onSign?.()
     return result
   }) as EIP1193Provider['request']
   return { request } as EIP1193Provider
 }
 
-export type Watcher = { onSend: (() => void) | null; onSign: (() => void) | null }
+type Watcher = { onSend: (() => void) | null }
 type ViemAdapter = Awaited<ReturnType<typeof import('@circle-fin/adapter-viem-v2')['createViemAdapterFromProvider']>>
 
-// The SDKs are large, so they load only when someone donates from another chain or a unified balance.
+// The SDKs are large, so they load only when someone adds money from another chain.
 async function createAdapter(provider: EIP1193Provider): Promise<{ adapter: ViemAdapter; watcher: Watcher }> {
   const { createViemAdapterFromProvider } = await import('@circle-fin/adapter-viem-v2')
-  const watcher: Watcher = { onSend: null, onSign: null }
+  const watcher: Watcher = { onSend: null }
   const adapter = await createViemAdapterFromProvider({
     provider: watchSends(provider, watcher),
     // Reads go through our own RPCs, which are the hosts the CSP allows, not the SDK's defaults.
@@ -287,12 +249,6 @@ async function cachedAdapter(provider: EIP1193Provider, known?: Address) {
     entry = created
   }
   return entry
-}
-
-// The Circle viem adapter for this wallet and account, shared by Bridge Kit and the Unified Balance Kit, with
-// the watcher that reports what the wallet has sent or signed through it.
-export async function adapterFor(provider: EIP1193Provider, account?: Address): Promise<{ adapter: ViemAdapter; watcher: Watcher }> {
-  return cachedAdapter(provider, account)
 }
 
 let bridgeKit: Promise<import('@circle-fin/bridge-kit').BridgeKit> | null = null

@@ -1,21 +1,14 @@
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import type { Address } from 'viem'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { WalletChoice } from '../hooks/useSender'
 import type { StoredPasskey } from '../lib/passkey'
 import { AccountControl } from './AccountMenu'
 
 const PASSKEY = '0x00000000000000000000000000000000000000cc' as Address
-const EXTERNAL = '0x1111111111111111111111111111111111111111' as Address
 
-const state: { session: StoredPasskey | null; external: Address | null; active: 'passkey' | 'external' } = {
-  session: null,
-  external: null,
-  active: 'passkey',
-}
-const setActive = vi.fn()
+const state: { session: StoredPasskey | null } = { session: null }
 const disconnect = vi.fn()
 const logoutPasskey = vi.fn()
 const openWallet = vi.fn()
@@ -24,10 +17,6 @@ const loginPasskey = vi.fn()
 const dismissBackupPrompt = vi.fn()
 const prompt = { value: false }
 
-vi.mock('../config', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../config')>()),
-  PASSKEYS_ENABLED: true,
-}))
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: openWallet }) }))
 vi.mock('wagmi', () => ({ useDisconnect: () => ({ mutate: disconnect }) }))
 vi.mock('../hooks/useName', () => ({ useName: () => ({ data: undefined }) }))
@@ -43,21 +32,9 @@ vi.mock('../lib/passkey', async (importOriginal) => ({
   canPayBackupGas: async () => true,
   newRecoveryPhrase: async () => 'one two three four five six seven eight nine ten eleven twelve',
 }))
-vi.mock('../hooks/useSender', () => ({
-  useWalletChoice: (): WalletChoice => ({
-    both: state.session !== null && state.external !== null,
-    active: state.session && (state.active === 'passkey' || !state.external) ? 'passkey' : state.external ? 'external' : null,
-    external: state.external,
-    setActive,
-  }),
-}))
-
 afterEach(() => {
   cleanup()
   state.session = null
-  state.external = null
-  state.active = 'passkey'
-  setActive.mockReset()
   disconnect.mockReset()
   logoutPasskey.mockReset()
   openWallet.mockReset()
@@ -82,7 +59,7 @@ async function openMenu(name: string) {
   return user
 }
 
-describe('Sign in with passkeys on', () => {
+describe('Sign in', () => {
   async function openSignIn() {
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Sign in' }))
@@ -95,17 +72,16 @@ describe('Sign in with passkeys on', () => {
     return user
   }
 
-  // The Fundit account is the main way in. A crypto wallet is still one tap away for people who have one.
-  it('shows Continue with passkey first and Use a crypto wallet instead second, which opens the wallet modal', async () => {
+  // Sign-in is passkey only: the dialog offers the passkey and nothing else, and never opens the wallet modal.
+  it('offers no wallet sign-in option', async () => {
     renderControl()
-    const user = await openSignIn()
+    await openSignIn()
     const dialog = screen.getByRole('dialog', { name: 'Sign in' })
     const buttons = [...dialog.querySelectorAll('button')].map((b) => b.textContent).filter((t) => t !== '')
-    expect(buttons.indexOf('Continue with passkey')).toBeLessThan(buttons.indexOf('Use a crypto wallet instead'))
+    expect(buttons).toEqual(['Continue with passkey'])
+    expect(dialog.textContent).not.toMatch(/wallet/i)
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Continue with passkey' }))
-    await user.click(screen.getByRole('button', { name: 'Use a crypto wallet instead' }))
-    expect(openWallet).toHaveBeenCalledTimes(1)
-    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(openWallet).not.toHaveBeenCalled()
   })
 
   // Keyboard and screen reader users stay inside the dialog, and Escape takes them back where they were.
@@ -235,32 +211,12 @@ describe('Backup prompt after sign-up', () => {
 })
 
 describe('Account menu with a passkey session', () => {
-  it('shows which wallet is in use and switches to the connected wallet', async () => {
-    state.session = { address: PASSKEY, credentialId: 'cred-1' }
-    state.external = EXTERNAL
-    renderControl()
-    await openMenu('0x0000...00cc')
-    expect(screen.getByText('Using your Fundit account')).toBeTruthy()
-    await userEvent.setup().click(screen.getByRole('menuitem', { name: 'Use connected wallet' }))
-    expect(setActive).toHaveBeenCalledWith('external')
-  })
-
-  it('shows the connected wallet in use and switches back to the passkey', async () => {
-    state.session = { address: PASSKEY, credentialId: 'cred-1' }
-    state.external = EXTERNAL
-    state.active = 'external'
-    renderControl()
-    await openMenu('0x1111...1111')
-    expect(screen.getByText('Using your connected wallet')).toBeTruthy()
-    await act(async () => userEvent.setup().click(screen.getByRole('menuitem', { name: 'Use Fundit account' })))
-    expect(setActive).toHaveBeenCalledWith('passkey')
-  })
-
-  it('shows no switch with only the passkey, and keeps the spec order around the Add money link', async () => {
+  it('has no wallet switch, and keeps the spec order around the Add money link', async () => {
     state.session = { address: PASSKEY, credentialId: 'cred-1' }
     renderControl()
     await openMenu('0x0000...00cc')
     expect(screen.queryByText(/Using your/)).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: /connected wallet|Use Fundit account/ })).toBeNull()
     expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual([
       'Start a Fundit',
       'My page',
@@ -268,23 +224,5 @@ describe('Account menu with a passkey session', () => {
       'Sign out',
     ])
     expect(screen.getByRole('menuitem', { name: 'Add money' }).getAttribute('href')).toBe('/add-money')
-  })
-
-  it('has no Add money item for a connected wallet alone', async () => {
-    state.external = EXTERNAL
-    renderControl()
-    await openMenu('0x1111...1111')
-    expect(screen.queryByRole('menuitem', { name: 'Add money' })).toBeNull()
-  })
-
-  // Signing out ends every session this browser holds, so nobody else can act as this person afterwards.
-  it('Sign out ends the passkey session and disconnects the wallet', async () => {
-    state.session = { address: PASSKEY, credentialId: 'cred-1' }
-    state.external = EXTERNAL
-    renderControl()
-    await openMenu('0x0000...00cc')
-    await userEvent.setup().click(screen.getByRole('menuitem', { name: 'Sign out' }))
-    expect(logoutPasskey).toHaveBeenCalledTimes(1)
-    expect(disconnect).toHaveBeenCalledTimes(1)
   })
 })

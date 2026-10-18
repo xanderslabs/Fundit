@@ -4,11 +4,11 @@ import { Link, Navigate, useParams } from 'react-router'
 import { type Address, encodeFunctionData, formatUnits, isAddress, isAddressEqual, zeroAddress } from 'viem'
 import { campaignAbi } from '../abi/campaign'
 import { SignInButton } from '../components/AccountMenu'
-import { PendingBridgeTracker } from '../components/CrossChainDonate'
+import { PendingBridgeTracker } from '../components/PendingBridgeTracker'
 import { TxStatus, useTx } from '../components/TxStatus'
 import { ARC_DOMAIN, CHAIN_LABELS } from '../config'
 import { useCampaign } from '../hooks/useCampaigns'
-import { useSender, useWalletChoice } from '../hooks/useSender'
+import { useSender } from '../hooks/useSender'
 import { chainByKey, savePendingPayout } from '../lib/bridge'
 import { BALANCES_KEY } from '../lib/deposit'
 import type { CampaignView } from '../lib/campaigns'
@@ -515,7 +515,7 @@ function ConnectNotice() {
   return (
     <section className="notice">
       <h1>Manage this Fundit</h1>
-      <p>Sign in with the organiser's wallet to manage this Fundit.</p>
+      <p>Sign in with the Fundit account that started this Fundit to manage it.</p>
       <SignInButton />
     </section>
   )
@@ -526,7 +526,6 @@ export function Manage() {
   const valid = isAddress(param)
   const query = useCampaign(valid ? param : undefined)
   const sender = useSender()
-  const choice = useWalletChoice()
 
   if (!valid || query.data === 'not-a-campaign') {
     return (
@@ -557,18 +556,6 @@ export function Manage() {
   const view = query.data
   if (!sender) return <ConnectNotice />
   if (!isAddressEqual(sender.address, view.summary.creator)) {
-    // The organiser's wallet is connected, but the passkey wallet acts. Say so instead of leaving the page.
-    if (sender.kind === 'passkey' && choice.external && isAddressEqual(choice.external, view.summary.creator)) {
-      return (
-        <section className="notice">
-          <h1>Manage this Fundit</h1>
-          <p>You are using your Fundit account. Switch to your connected wallet to manage this Fundit.</p>
-          <button type="button" className="btn" onClick={() => choice.setActive('external')}>
-            Use connected wallet
-          </button>
-        </section>
-      )
-    }
     // Only the organiser can sign these calls. Anyone else sees the public page.
     return <Navigate to={`/c/${view.address}`} replace />
   }

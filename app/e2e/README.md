@@ -4,6 +4,9 @@ The specs drive the built app in Chromium against a local fork of Arc mainnet. E
 deploys `CampaignFactory` with `contracts/script/Deploy.s.sol`, builds the app in `e2e` mode and serves it
 with `vite preview`.
 
+The current specs are skipped. They sign in with a mock wallet, and sign-in is now passkey only. Plan 5
+Task 4 replaces them with specs on Arc testnet that use a virtual passkey.
+
 ## Prerequisites
 
 - Arc Foundry `v0.8.0-2`. Install it as described in `contracts/README.md` under **Install Arc Foundry**.

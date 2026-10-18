@@ -16,8 +16,3 @@ export function useAppKitAccount() {
   const { address, isConnected } = useConnection()
   return { address, isConnected }
 }
-
-// The modal never shows in e2e: open() connects straight away.
-export function useAppKitState() {
-  return { open: false }
-}

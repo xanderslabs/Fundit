@@ -4,24 +4,15 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 
-const flags = vi.hoisted(() => ({ passkeys: true }))
-vi.mock('./config', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./config')>()),
-  get PASSKEYS_ENABLED() {
-    return flags.passkeys
-  },
-}))
 // The layout and the pages are tested on their own. Here only the routing matters.
 vi.mock('./components/Layout', async () => {
   const { Outlet } = await import('react-router')
   return { Layout: () => <Outlet /> }
 })
 vi.mock('./pages/AddMoney', () => ({ AddMoney: () => <h1>Add money</h1> }))
+vi.mock('./pages/Recover', () => ({ Recover: () => <h1>Recover your account</h1> }))
 
-afterEach(() => {
-  cleanup()
-  flags.passkeys = true
-})
+afterEach(cleanup)
 
 function renderAt(path: string) {
   render(
@@ -40,15 +31,14 @@ describe('App routes', () => {
     expect(await screen.findByRole('heading', { name: 'Add money' })).toBeTruthy()
   })
 
-  it('serves /add-money with passkeys on', async () => {
+  // Every account is a Fundit account, so these pages are always there, with no feature flag.
+  it('serves /add-money with no feature flag', async () => {
     renderAt('/add-money')
     expect(await screen.findByRole('heading', { name: 'Add money' })).toBeTruthy()
   })
 
-  // Without passkeys there is no Fundit account to add money to.
-  it.each(['/fund', '/add-money'])('shows Page not found for %s with passkeys off', (path) => {
-    flags.passkeys = false
-    renderAt(path)
-    expect(screen.getByRole('heading', { name: 'Page not found' })).toBeTruthy()
+  it('serves /recover with no feature flag', async () => {
+    renderAt('/recover')
+    expect(await screen.findByRole('heading', { name: 'Recover your account' })).toBeTruthy()
   })
 })

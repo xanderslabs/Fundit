@@ -40,11 +40,7 @@ export type NetworkConfig = {
   eurc: Address
   // Same address on Arc and on every CCTP source chain of the network.
   tokenMessengerV2: Address
-  memo: Address
-  gatewayWallet: Address
-  gatewayMinter: Address
   irisUrl: string
-  gatewayUrl: string
   // Appended to the Modular Wallets client URL for the Arc bundler transport.
   modularChainPath: '/arc' | '/arcTestnet'
   cctpChains: readonly CctpChain[]
@@ -74,11 +70,7 @@ export const NETWORKS: Record<ArcNetwork, NetworkConfig> = {
     usdc: '0x3600000000000000000000000000000000000000',
     eurc: '0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1',
     tokenMessengerV2: '0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d',
-    memo: '0x5294E9927c3306DcBaDb03fe70b92e01cCede505',
-    gatewayWallet: '0x77777777Dcc4d5A8B6E418Fd04D8997ef11000eE',
-    gatewayMinter: '0x2222222d7164433c4C09B0b0D809a9b52C04C205',
     irisUrl: 'https://iris-api.circle.com',
-    gatewayUrl: 'https://gateway-api.circle.com',
     modularChainPath: '/arc',
     cctpChains: [
       { key: 'Ethereum', chainId: 1, domain: 0, usdc: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', viemChain: mainnet, rpcUrl: MAINNET_RPC_URL, fast: true, bridgeKitChain: 'Ethereum' },
@@ -106,11 +98,7 @@ export const NETWORKS: Record<ArcNetwork, NetworkConfig> = {
     usdc: '0x3600000000000000000000000000000000000000',
     eurc: '0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a',
     tokenMessengerV2: '0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA',
-    memo: '0x5294E9927c3306DcBaDb03fe70b92e01cCede505',
-    gatewayWallet: '0x0077777d7EBA4688BDeF3E311b846F25870A19B9',
-    gatewayMinter: '0x0022222ABE238Cc2C7Bb1f21003F0a260052475B',
     irisUrl: 'https://iris-api-sandbox.circle.com',
-    gatewayUrl: 'https://gateway-api-testnet.circle.com',
     modularChainPath: '/arcTestnet',
     // Only the two source chains whose USDC was checked on-chain. Public RPCs as viem lists them.
     cctpChains: [
@@ -158,7 +146,6 @@ export const TOKENS: Record<TokenSymbol, { address: Address; decimals: 6; symbol
   EURC: { address: NETWORK.eurc, decimals: 6, symbol: 'EURC' },
 }
 
-export const MEMO_ADDRESS: Address = NETWORK.memo
 export const TOKEN_MESSENGER_V2: Address = NETWORK.tokenMessengerV2
 
 // Used as the wagmi transport for Arc. VITE_ARC_RPC_URL overrides it (the e2e fork).
@@ -190,16 +177,14 @@ export const FACTORY_ADDRESS: Address = deploy.factoryAddress
 export const FACTORY_DEPLOY_BLOCK: bigint = deploy.factoryDeployBlock
 export const REOWN_PROJECT_ID: string = deploy.reownProjectId
 export const CIRCLE_CLIENT_KEY: string = env.VITE_CIRCLE_CLIENT_KEY ?? ''
-export const PASSKEYS_ENABLED: boolean = env.VITE_PASSKEYS === '1'
 // Arc network fees are paid in USDC from the sender's own balance. This much stays free for them (a Fundit
 // account, and a regular wallet adding USDC to one).
 export const PASSKEY_GAS_BUFFER = 50_000n
-// Donations from another chain and from a Gateway unified balance, and bridging into a passkey wallet. Off by
-// default. Entries already saved in the browser are tracked and still block a second donation either way.
+// Add money from another chain (bridging USDC into the Fundit account). Off by default. A transfer already saved
+// in the browser is still tracked either way.
 export const CROSSCHAIN_ENABLED: boolean = env.VITE_CROSSCHAIN === '1'
 
 export const IRIS_URL: string = NETWORK.irisUrl
-export const GATEWAY_URL: string = NETWORK.gatewayUrl
 export const MODULAR_WALLETS_URL = 'https://modular-sdk.circle.com'
 
 // Public RPC limits: 10,000 blocks and 2,000 logs per eth_getLogs.
@@ -217,7 +202,6 @@ export function networkHosts(n: NetworkConfig): string[] {
     BASE_RPC_URL,
     ...n.cctpChains.map((c) => c.rpcUrl),
     n.irisUrl,
-    n.gatewayUrl,
     MODULAR_WALLETS_URL,
   ]
 }
