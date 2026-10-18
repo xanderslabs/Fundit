@@ -64,7 +64,7 @@ describe('Recover', () => {
     expect(
       screen.getByText("Enter the 12 words of your recovery key. We'll make a new passkey on this device and move your account to it."),
     ).toBeTruthy()
-    for (let i = 1; i <= 12; i++) expect(screen.getByLabelText(`Word ${i}`)).toBeTruthy()
+    for (let i = 1; i <= 12; i++) expect(screen.getByRole('textbox', { name: `Word ${i}` })).toBeTruthy()
     expect(screen.getByLabelText('Name for your new passkey')).toBeTruthy()
   })
 
@@ -104,9 +104,9 @@ describe('Recover', () => {
       expect(input.getAttribute('autocomplete')).toBe('off')
       expect(input.getAttribute('spellcheck')).toBe('false')
       expect(input.getAttribute('autocapitalize')).toBe('none')
-      // The visible label is the word's number.
-      expect(grid.querySelector(`label[for="${input.id}"]`)!.textContent).toBe(`Word ${i + 1}`)
-      expect(grid.querySelector(`label[for="${input.id}"] [aria-hidden="true"]`)?.textContent).toBe(`${i + 1}`)
+      // Screen readers announce each box by its number. The visible label is the number alone.
+      expect(within(grid).getByRole('textbox', { name: `Word ${i + 1}` })).toBe(input)
+      expect(grid.querySelector(`label[for="${input.id}"] .recover-num`)?.textContent).toBe(`${i + 1}`)
     })
   })
 

@@ -704,6 +704,19 @@ describe('recoverWithPhrase', () => {
     expect(localStorage.getItem(pendingKey)).toBeNull()
   })
 
+  // My page shows the new passkey's name, but only once that passkey owns the account.
+  it('remembers the new passkey name only after the recovery confirms', async () => {
+    kit.bundler.waitForUserOperationReceipt.mockResolvedValueOnce(receipt(false))
+    await expect(recoverWithPhrase({ phrase: PHRASE, username: 'ana-failed' })).rejects.toThrow('The recovery did not go through')
+    expect(readPasskeyUsername(RECOVERED)).toBeNull()
+
+    kit.bundler.waitForUserOperationReceipt.mockRejectedValueOnce(new Error('slow'))
+    expect((await recoverWithPhrase({ phrase: PHRASE, username: 'ana-slow' })).status).toBe('pending')
+    expect(readPasskeyUsername(RECOVERED)).toBeNull()
+    expect((await checkPendingRecovery(RECOVERED)).status).toBe('recovered')
+    expect(readPasskeyUsername(RECOVERED)).toBe('ana-slow')
+  })
+
   // The old recovery key should be treated as exposed, so My page asks for a new one.
   it('asks for a new recovery key after a recovery', async () => {
     markBackupSaved(RECOVERED)

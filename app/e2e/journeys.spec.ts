@@ -30,6 +30,7 @@ let page: Page
 let passkeys: Awaited<ReturnType<typeof addVirtualAuthenticator>>
 let factory: Address
 let account: Address
+let username: string
 let campaign: Address
 let funder: Address
 let funderStart: bigint
@@ -76,7 +77,8 @@ async function settled(scope: Locator, success: string, timeout = 90_000) {
 }
 
 async function openMenuItem(name: string) {
-  await page.getByRole('banner').getByRole('button', { name: `${account.slice(0, 6)}...${account.slice(-4)}` }).click()
+  // The account pill shows the passkey username chosen at sign-up.
+  await page.getByRole('banner').getByRole('button', { name: username, exact: true }).click()
   await page.getByRole('menuitem', { name }).click()
 }
 
@@ -113,7 +115,8 @@ test('signs up with a passkey', async () => {
   await page.getByRole('banner').getByRole('button', { name: 'Sign in' }).click()
   await page.getByRole('button', { name: 'Create one now' }).click()
   // Circle takes 5 to 50 characters from A-Z, a-z, 0-9 and _@.:+- only.
-  await page.getByLabel('Username').fill(`e2e-${Date.now()}`)
+  username = `e2e-${Date.now()}`
+  await page.getByLabel('Username').fill(username)
   await page.getByRole('button', { name: 'Create account' }).click()
 
   // Sign-up lands on My page with the Add money panel open on Your address, which shows the account's address.
@@ -125,7 +128,7 @@ test('signs up with a passkey', async () => {
   expect(shown).toBeTruthy()
   account = getAddress(shown!)
   console.log(`Fundit account ${account}: ${NET.explorerUrl}/address/${account}`)
-  await expect(page.getByRole('banner').getByRole('button', { name: `${account.slice(0, 6)}...${account.slice(-4)}` })).toBeVisible()
+  await expect(page.getByRole('banner').getByRole('button', { name: username, exact: true })).toBeVisible()
 
   // The passkey is on the virtual authenticator, bound to localhost (Circle's rpId for this client key).
   const creds = await passkeys.credentials()

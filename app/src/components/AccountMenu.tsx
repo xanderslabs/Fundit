@@ -2,8 +2,8 @@ import { type KeyboardEvent, type ReactNode, type Ref, type RefObject, useCallba
 import { Link, useNavigate } from 'react-router'
 import type { Address } from 'viem'
 import { useDisconnect } from 'wagmi'
+import { dismissBackupPrompt, logoutPasskey, readPasskeyUsername, type StoredPasskey, useBackupPrompt, usePasskeySession } from '../lib/passkey'
 import { ADD_MONEY_PATH } from '../lib/urls'
-import { dismissBackupPrompt, logoutPasskey, type StoredPasskey, useBackupPrompt, usePasskeySession } from '../lib/passkey'
 import { AddBackupPasskey, confirmLeave } from './AddBackupPasskey'
 import { Name } from './Name'
 import { PasskeyLogin } from './PasskeyLogin'
@@ -221,6 +221,8 @@ export function useSignOut(): () => boolean {
 
 function AccountMenu({ address, onSignedOut }: { address: Address; onSignedOut: () => void }) {
   const signOutNow = useSignOut()
+  // The passkey's username when this browser knows it, else the name or short address.
+  const username = readPasskeyUsername(address)
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   const button = useRef<HTMLButtonElement>(null)
@@ -286,7 +288,13 @@ function AccountMenu({ address, onSignedOut }: { address: Address; onSignedOut: 
         onClick={() => setOpen((v) => !v)}
         onKeyDown={onButtonKeyDown}
       >
-        <Name address={address} link={false} />
+        {username ? (
+          <span className="name" title={address}>
+            <span className="name-text">{username}</span>
+          </span>
+        ) : (
+          <Name address={address} link={false} />
+        )}
         <ChevronDown />
       </button>
       {open && (

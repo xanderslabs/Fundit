@@ -16,7 +16,6 @@ import { destDomain, type PayoutDest } from '../lib/payout'
 import type { Sender } from '../lib/sender'
 import { ADD_MONEY_PATH } from '../lib/urls'
 import { ADDRESS_TYPO, parseTypedAddress } from '../lib/validate'
-import { PendingBridgeTracker } from './PendingBridgeTracker'
 import { TxStatus, useTx } from './TxStatus'
 
 const FEE_CHANGED = 'The transfer fee changed. Check the new amount and confirm again.'
@@ -24,7 +23,8 @@ const OVER_HELD = 'That is more than your Fundit account holds.'
 // The reserve is what the account must keep for the network fee (passkeyReserve), shown as the real number.
 const keepGas = (reserve: bigint) => `Leave at least ${formatAmount(reserve, 'USDC')} in your Fundit account for the network fee.`
 const ONE_AT_A_TIME =
-  'Your last transfer to another chain is still on its way. You can send another once it arrives. If it takes much longer than expected, a Dismiss button appears below.'
+  'Your last transfer to another chain is still on its way. You can send another once it arrives. Follow it, or dismiss it if it takes much longer than expected, in the Account tab.'
+// Transfers on their way are tracked in the Account tab on My page only. The form points there.
 const QUOTE_DEBOUNCE_MS = 400
 
 // Sends USDC or EURC out of a Fundit account, on Arc or as USDC to another chain. The organiser's payout form
@@ -329,7 +329,7 @@ function SendOutForm({ sender }: { sender: Sender }) {
           </button>
         )}
       </form>
-      <PendingBridgeTracker campaign={account} kind="payout" />
+      {inFlight && <p className="hint">A transfer you sent to another chain is on its way. Follow it in the Account tab.</p>}
     </section>
   )
 }

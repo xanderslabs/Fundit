@@ -171,11 +171,12 @@ export function Recover() {
               <legend>Your recovery key</legend>
               {words.map((w, i) => (
                 <div className="recover-word" key={i}>
+                  {/* The visible label is the number. The input's own name says "Word 1" to screen readers. */}
                   <label htmlFor={`recover-word-${i + 1}`}>
-                    <span className="sr-only">Word </span>
-                    <span aria-hidden="true">{i + 1}</span>
+                    <span className="recover-num">{i + 1}</span>
                   </label>
                   <input
+                    aria-label={`Word ${i + 1}`}
                     id={`recover-word-${i + 1}`}
                     autoComplete="off"
                     autoCapitalize="none"

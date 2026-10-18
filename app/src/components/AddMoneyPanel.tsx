@@ -23,14 +23,14 @@ import { fetchForwardFee } from '../lib/iris'
 import { shortAddress } from '../lib/names'
 import { wagmiSender } from '../lib/sender'
 import { AddressQr, CopyAddress } from './AddressTools'
-import { PendingBridgeTracker } from './PendingBridgeTracker'
 import { Tabs } from './Tabs'
 import { TxStatus, useTx } from './TxStatus'
 
 const BALANCE_POLL_MS = 15_000
 const QUOTE_DEBOUNCE_MS = 400
 
-const BRIDGE_PENDING = 'A transfer to your Fundit account is still on its way. Wait for it to arrive before you send another.'
+const BRIDGE_PENDING =
+  'A transfer to your Fundit account is still on its way. Wait for it to arrive before you send another. Follow it in the Account tab.'
 const NO_WALLETS = 'Connecting a wallet is not available on this site right now.'
 
 // Opens the AppKit wallet modal. Without a Reown project id, or when the modal fails to open, the person sees
@@ -59,7 +59,8 @@ function useBalances(address: Address | null) {
 }
 
 // Bridge Kit from an external wallet on another chain. Circle's forwarder mints the USDC to the Fundit account on Arc.
-function BridgeToAccount({ recipient }: { recipient: Address }) {
+// onBusyChange tells the panel while the wallet is signing, so the wallet tab keeps Disconnect locked meanwhile.
+function BridgeToAccount({ recipient, onBusyChange }: { recipient: Address; onBusyChange: (busy: boolean) => void }) {
   const modal = useWalletModal()
   const { isConnected, address, connector } = useConnection()
   const wallet = isConnected && connector ? connector : null
@@ -110,6 +111,7 @@ function BridgeToAccount({ recipient }: { recipient: Address }) {
   const arrives = amount !== null && quote !== undefined ? amount - quote : null
   const tooSmall = arrives !== null && arrives <= 0n
   const busy = phase.kind === 'sending'
+  useEffect(() => onBusyChange(busy), [busy, onBusyChange])
   const canSubmit = wallet !== null && amount !== null && arrives !== null && !tooSmall && !busy
 
   async function submit(e: FormEvent) {
@@ -208,7 +210,7 @@ function BridgeToAccount({ recipient }: { recipient: Address }) {
         {phase.kind === 'sent' && (
           <div className="status-box status-success">
             <p>
-              <strong>Your USDC is on its way.</strong> Follow it below.
+              <strong>Your USDC is on its way.</strong> Follow it in the Account tab.
             </p>
           </div>
         )}
@@ -236,7 +238,7 @@ function BridgeToAccount({ recipient }: { recipient: Address }) {
 
 // A regular wallet on Arc sends USDC or EURC straight to the Fundit account. It uses the connected wallet's own
 // sender: the Fundit account is where the money goes. Add money is the only place a wallet connects.
-function WalletDeposit({ account }: { account: Address }) {
+function WalletDeposit({ account, bridging }: { account: Address; bridging: boolean }) {
   const modal = useWalletModal()
   const { mutate: disconnect } = useDisconnect()
   const config = useConfig()
@@ -285,7 +287,7 @@ function WalletDeposit({ account }: { account: Address }) {
           </code>
         </p>
         {/* To switch wallets, disconnect this one and connect another. */}
-        <button type="button" className="btn btn-outline" disabled={tx.locked} onClick={() => disconnect()}>
+        <button type="button" className="btn btn-outline" disabled={tx.locked || bridging} onClick={() => disconnect()}>
           Disconnect
         </button>
       </div>
@@ -353,6 +355,8 @@ function WalletDeposit({ account }: { account: Address }) {
 // The Add money panel on My page: the account's own address, a connected wallet on Arc and, when switched on,
 // a bridge from another chain. Each way is a tab. Visited tabs stay mounted, so a send in flight keeps its state.
 export function AddMoneyPanel({ account }: { account: Address }) {
+  // True while a transfer from another chain is being signed in the shared wallet connection.
+  const [bridging, setBridging] = useState(false)
   const tabs = [
     {
       id: 'address',
@@ -374,7 +378,7 @@ export function AddMoneyPanel({ account }: { account: Address }) {
       content: (
         <div className="deposit-tab">
           <p className="hint">Send USDC or EURC from a regular wallet on Arc.</p>
-          <WalletDeposit account={account} />
+          <WalletDeposit account={account} bridging={bridging} />
         </div>
       ),
     },
@@ -386,8 +390,7 @@ export function AddMoneyPanel({ account }: { account: Address }) {
             content: (
               <div className="deposit-tab">
                 <p className="hint">Move USDC from a wallet on another chain. Circle delivers it to your Fundit account on Arc.</p>
-                <BridgeToAccount recipient={account} />
-                <PendingBridgeTracker campaign={account} destination="your Fundit account" />
+                <BridgeToAccount recipient={account} onBusyChange={setBridging} />
               </div>
             ),
           },

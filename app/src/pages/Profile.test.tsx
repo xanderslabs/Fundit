@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { EXPLORER_URL, TOKENS } from '../config'
 import type { CampaignView } from '../lib/campaigns'
 import type { StoredPasskey } from '../lib/passkey'
-import type { Sender } from '../lib/sender'
+import type { Sender, TxResult } from '../lib/sender'
 import { Profile } from './Profile'
 
 const ME = '0x00000000000000000000000000000000000000cC' as Address
@@ -65,6 +65,7 @@ vi.mock('../lib/passkey', async (importOriginal) => ({
   useBackupPending: () => false,
   syncBackupFromChain: () => backup.chain(),
   canPayBackupGas: async () => true,
+  passkeyReserve: async () => 50_000n,
   readPasskeyUsername: () => state.username,
   logoutPasskey: () => logoutPasskey(),
 }))
@@ -231,6 +232,43 @@ describe('My page Add money and Send panels', () => {
     expect(sendPanel()).toBeNull()
     await user.click(toggle('Send'))
     expect((within(sendPanel()!).getByLabelText('Amount') as HTMLInputElement).value).toBe('4')
+  })
+
+  // The real guarantee: a send that is still going keeps its Sending state and lock after the panel closes, so
+  // reopening it can never start the same send again.
+  it('keeps a send in flight locked after the panel is closed and opened again', async () => {
+    const send = vi.fn((): Promise<TxResult> => new Promise(() => {}))
+    state.sender = { kind: 'passkey', address: ME, send }
+    const user = renderProfile()
+    await user.click(toggle('Send'))
+    const panel = sendPanel()!
+    await within(panel).findByText(/You have 12.50 USDC/)
+    await user.type(within(panel).getByLabelText('Amount'), '1')
+    await user.type(within(panel).getByLabelText('Recipient'), '0x2222222222222222222222222222222222222222')
+    await user.click(within(panel).getByRole('button', { name: 'Send' }))
+    await within(panel).findByRole('button', { name: 'Sending...' })
+    expect(send).toHaveBeenCalledTimes(1)
+    await user.click(screen.getByRole('button', { name: 'Close Send' }))
+    expect(sendPanel()).toBeNull()
+    await user.click(toggle('Send'))
+    const again = sendPanel()!
+    expect((within(again).getByRole('button', { name: 'Sending...' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(within(again).getByLabelText('Amount').closest('fieldset')!.disabled).toBe(true)
+    expect(send).toHaveBeenCalledTimes(1)
+  })
+
+  // The close button is drawn at the top right, so it comes first in the Tab order too. Escape closes as well.
+  it('puts Close first in the panel and closes on Escape, returning focus to the button', async () => {
+    signIn()
+    const user = renderProfile()
+    await user.click(toggle('Add money'))
+    const close = screen.getByRole('button', { name: 'Close Add money' })
+    const firstTab = within(addPanel()!).getByRole('tab', { name: 'Your address' })
+    expect(close.compareDocumentPosition(firstTab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    firstTab.focus()
+    await user.keyboard('{Escape}')
+    expect(addPanel()).toBeNull()
+    expect(document.activeElement).toBe(toggle('Add money'))
   })
 
   it('shows one panel at a time', async () => {

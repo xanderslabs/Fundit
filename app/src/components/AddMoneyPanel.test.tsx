@@ -50,10 +50,19 @@ const disconnect = vi.hoisted(() => vi.fn())
 vi.mock('wagmi', () => ({
   useConfig: () => ({}),
   useConnection: () =>
-    state.external ? { isConnected: true, address: state.external, connector: { name: 'MetaMask' } } : { isConnected: false },
+    state.external
+      ? { isConnected: true, address: state.external, connector: { name: 'MetaMask', getProvider: async () => ({}) } }
+      : { isConnected: false },
   useDisconnect: () => ({ mutate: disconnect }),
 }))
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: openWallet }) }))
+// Bridge Kit itself is covered in lib/bridge.test.ts. Here only the panel's busy state matters.
+const bridgeKit = vi.hoisted(() => ({ donateCrossChain: vi.fn(), estimateCrossChain: vi.fn() }))
+vi.mock('../lib/bridge', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/bridge')>()),
+  donateCrossChain: (...a: unknown[]) => bridgeKit.donateCrossChain(...a),
+  estimateCrossChain: (...a: unknown[]) => bridgeKit.estimateCrossChain(...a),
+}))
 
 beforeEach(() => {
   core.getChainId.mockReturnValue(ARC_CHAIN_ID)
@@ -146,6 +155,38 @@ describe('AddMoneyPanel', () => {
     await user.click(screen.getByRole('button', { name: 'Disconnect' }))
     expect(disconnect).toHaveBeenCalledTimes(1)
     expect(core.sendTransaction).not.toHaveBeenCalled()
+  })
+
+  // Disconnecting mid-send would cut the wallet out of a transfer it is signing.
+  it('disables Disconnect while a deposit is in flight', async () => {
+    state.external = EXTERNAL
+    state.balances.set(EXTERNAL.toLowerCase(), { usdc: 10_000000n, eurc: 0n })
+    core.sendTransaction.mockReturnValue(new Promise(() => {}))
+    renderPage()
+    await fillDeposit('5')
+    await waitFor(() => expect(core.sendTransaction).toHaveBeenCalledTimes(1))
+    const button = screen.getByRole('button', { name: 'Disconnect' }) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    await userEvent.setup().click(button)
+    expect(disconnect).not.toHaveBeenCalled()
+  })
+
+  // The wallet tab and the bridge tab share one wallet connection, so a bridge being signed also locks Disconnect.
+  it('disables Disconnect while a transfer from another chain is being sent', async () => {
+    flags.crosschain = true
+    state.external = EXTERNAL
+    state.balances.set(EXTERNAL.toLowerCase(), { usdc: 10_000000n, eurc: 0n })
+    bridgeKit.estimateCrossChain.mockResolvedValue(10_000n)
+    bridgeKit.donateCrossChain.mockReturnValue(new Promise(() => {}))
+    renderPage()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('tab', { name: 'From another chain' }))
+    await user.type(screen.getByLabelText('Amount'), '5')
+    await screen.findByText(/^At least /)
+    await user.click(screen.getByRole('button', { name: 'Bridge USDC' }))
+    await waitFor(() => expect(bridgeKit.donateCrossChain).toHaveBeenCalledTimes(1))
+    await user.click(screen.getByRole('tab', { name: 'From a wallet' }))
+    expect((screen.getByRole('button', { name: 'Disconnect' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   // Without a Reown project id AppKit cannot connect. The person gets a plain sentence, never a raw error.
@@ -255,7 +296,13 @@ describe('AddMoneyPanel', () => {
     )
     renderPage()
     await userEvent.setup().click(screen.getByRole('tab', { name: 'From another chain' }))
-    expect(screen.getByText('A transfer to your Fundit account is still on its way. Wait for it to arrive before you send another.')).toBeTruthy()
+    expect(
+      screen.getByText(
+        'A transfer to your Fundit account is still on its way. Wait for it to arrive before you send another. Follow it in the Account tab.',
+      ),
+    ).toBeTruthy()
+    // The row itself shows only in the Account tab on My page.
+    expect(screen.queryByText(/25 USDC from Base: Submitted/)).toBeNull()
     expect(screen.queryByRole('button', { name: 'Bridge USDC' })).toBeNull()
   })
 

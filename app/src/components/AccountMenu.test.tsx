@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import type { Address } from 'viem'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { storageKey } from '../config'
 import type { StoredPasskey } from '../lib/passkey'
 import { AccountControl } from './AccountMenu'
 
@@ -74,6 +75,17 @@ describe('AccountControl signed in', () => {
     expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull()
     expect(pill().getAttribute('aria-haspopup')).toBe('menu')
     expect(pill().getAttribute('aria-expanded')).toBe('false')
+  })
+
+  // People know their account by the name they gave the passkey. The address stays in the tooltip.
+  it('shows the passkey username on the pill when this browser knows it', () => {
+    state.session = ACCOUNT
+    localStorage.setItem(storageKey(`passkey.username.${ACCOUNT.address.toLowerCase()}`), 'ana.phone')
+    render(ui())
+    const named = screen.getByRole('button', { name: 'ana.phone' })
+    expect(named.getAttribute('aria-haspopup')).toBe('menu')
+    expect(named.querySelector('[title]')?.getAttribute('title')).toBe(ACCOUNT.address)
+    localStorage.clear()
   })
 
   // Start a Fundit lives here because only signed-in people can start one. The order is the product spec.

@@ -14,8 +14,9 @@ const ACCOUNT = '0x00000000000000000000000000000000000000cC' as Address
 const FRIEND = '0x1111111111111111111111111111111111111111'
 const HASH = `0x${'1'.repeat(64)}` as Hex
 const PENDING_KEY = 'fundit.pendingBridges'
+const POINTER = 'A transfer you sent to another chain is on its way. Follow it in the Account tab.'
 const BLOCKED =
-  'Your last transfer to another chain is still on its way. You can send another once it arrives. If it takes much longer than expected, a Dismiss button appears below.'
+  'Your last transfer to another chain is still on its way. You can send another once it arrives. Follow it, or dismiss it if it takes much longer than expected, in the Account tab.'
 
 const balances = vi.hoisted(() => ({ usdc: 0n, eurc: 0n }))
 const fetchAccountBalances = vi.hoisted(() => vi.fn(async () => ({ ...balances })))
@@ -292,11 +293,13 @@ describe('AccountWithdraw', () => {
     expect(JSON.parse(localStorage.getItem(PENDING_KEY)!)).toMatchObject([
       { kind: 'payout', campaign: getAddress(ACCOUNT), burnTx: HASH, srcDomain: 26, destDomain: 6, amount: '1.85' },
     ])
-    expect(await screen.findByText('1.85 USDC to Base is on its way.')).toBeTruthy()
+    // The transfer is tracked in one place, the Account tab on My page. The form only points there.
+    expect(await screen.findByText(POINTER)).toBeTruthy()
+    expect(screen.queryByText('1.85 USDC to Base is on its way.')).toBeNull()
 
     cleanup()
     renderForm()
-    expect(await screen.findByText('1.85 USDC to Base is on its way.')).toBeTruthy()
+    expect(await screen.findByText(POINTER)).toBeTruthy()
   })
 
   // Two sends to another chain at once are easy to make by mistake and hard to undo. Arc sends stay open.

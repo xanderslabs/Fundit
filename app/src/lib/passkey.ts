@@ -315,8 +315,10 @@ function rememberPasskeyUsername(address: Address, username: string) {
 // Creates a new passkey on this device and the smart account it owns on Arc. If this fails after the browser
 // saved the passkey, loginPasskey with that passkey opens the same account.
 export async function registerPasskey(username: string): Promise<PasskeySession> {
-  start(await credentialFor('Register', { username }))
-  rememberPasskeyUsername(live!.account.address, username)
+  const next = await credentialFor('Register', { username })
+  // Saved before the session, so the account pill shows the name from its first render.
+  rememberPasskeyUsername(next.account.address, username)
+  start(next)
   newAccount = live!.account.address.toLowerCase()
   notify()
   return { address: live!.account.address, username }
@@ -725,7 +727,16 @@ const RECOVERY_TRIED_KEY = storageKey('recovery.tried.')
 const INVALID_PHRASE = "Those words don't form a valid recovery key. Check the order and spelling."
 
 // publicKey is the new passkey's (x and y, as Circle serializes it), to find it among the owners after Start over.
-export type PendingRecovery = { account: Address; hash: Hex; hashKind: 'userop'; createdAt: number; credentialId: string; publicKey?: Hex }
+// username is the new passkey's name, shown on My page once the recovery confirms.
+export type PendingRecovery = {
+  account: Address
+  hash: Hex
+  hashKind: 'userop'
+  createdAt: number
+  credentialId: string
+  publicKey?: Hex
+  username?: string
+}
 export type RecoveryResult = { status: 'recovered'; session: StoredPasskey } | { status: 'pending'; account: Address }
 
 // The account cannot pay the recovery's network fee yet. The page shows its address so it can be funded.
@@ -763,7 +774,16 @@ export function readPendingRecovery(account: Address): PendingRecovery | null {
       return null
     }
     const publicKey = typeof x.publicKey === 'string' && isHex(x.publicKey) ? x.publicKey : undefined
-    return { account: x.account, hash: x.hash, hashKind: 'userop', createdAt: x.createdAt, credentialId: x.credentialId, ...(publicKey && { publicKey }) }
+    const username = typeof x.username === 'string' && x.username.length <= 50 ? x.username : undefined
+    return {
+      account: x.account,
+      hash: x.hash,
+      hashKind: 'userop',
+      createdAt: x.createdAt,
+      credentialId: x.credentialId,
+      ...(publicKey && { publicKey }),
+      ...(username && { username }),
+    }
   } catch {
     return null
   }
@@ -873,6 +893,7 @@ function settleRecovery(pending: PendingRecovery, res: TxResult): RecoveryResult
   if (res.status === 'timeout') return { status: 'pending', account: pending.account }
   clearPendingRecovery(pending.account)
   if (res.status !== 'success') throw new PlainError('The recovery did not go through. Nothing changed. Try again.')
+  if (pending.username) rememberPasskeyUsername(pending.account, pending.username)
   return finishRecovery(pending.account, pending.credentialId)
 }
 
@@ -921,7 +942,6 @@ export async function recoverWithPhrase(p: { phrase: string; username: string })
     mode: sdk.WebAuthnMode.Register,
     username,
   })
-  rememberPasskeyUsername(account, username)
   type AccountParams = Parameters<typeof sdk.toCircleSmartAccount>[0]
   const smart = await sdk.toCircleSmartAccount({
     client: client as unknown as AccountParams['client'],
@@ -941,7 +961,7 @@ export async function recoverWithPhrase(p: { phrase: string; username: string })
     preVerificationGas: gas.preVerificationGas,
     verificationGasLimit: gas.verificationGasLimit,
   } as Params)
-  const record: PendingRecovery = { account, hash, hashKind: 'userop', createdAt: Date.now(), credentialId: credential.id, publicKey: credential.publicKey }
+  const record: PendingRecovery = { account, hash, hashKind: 'userop', createdAt: Date.now(), credentialId: credential.id, publicKey: credential.publicKey, username }
   savePendingRecovery(record)
   return settleRecovery(record, await userOperationResult(bundler as unknown as ReceiptBundler, hash))
 }

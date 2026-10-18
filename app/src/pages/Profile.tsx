@@ -284,12 +284,24 @@ function DashPanel({ id, label, open, onClose, children }: { id: string; label: 
   useEffect(() => {
     if (open) ref.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
   }, [open])
+  // Close comes first in the DOM, so the Tab order matches where it is drawn (top right). Escape closes too.
   return (
-    <div ref={ref} id={id} className="dash-panel" hidden={!open}>
-      {children}
+    <div
+      ref={ref}
+      id={id}
+      className="dash-panel"
+      hidden={!open}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && !e.defaultPrevented) {
+          e.preventDefault()
+          onClose()
+        }
+      }}
+    >
       <button type="button" className="share-close dash-panel-close" aria-label={`Close ${label}`} onClick={onClose}>
         <CloseIcon />
       </button>
+      {children}
     </div>
   )
 }
