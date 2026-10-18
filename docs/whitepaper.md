@@ -63,8 +63,8 @@ Fundit uses these Circle and Arc products:
 Fundit has two parts:
 
 - **Contracts.** `CampaignFactory` and `Campaign`, written in Solidity and tested with Foundry.
-- **App.** A React and TypeScript single-page app for `fundit.fun`, served as static files from
-  Cloudflare Pages.
+- **App.** A React and TypeScript single-page app, live at `fundit.fun` and served as static files
+  from Cloudflare Pages.
 
 ```
 Connected wallet on Arc, or USDC on another chain (Add money)
@@ -272,7 +272,9 @@ As of October 2026:
 
   The deploy block is `26452579`.
 - Contracts on Arc testnet: not deployed yet. Addresses: `TBD`.
-- App: sign-in is passkey only. Add money from another chain is behind `VITE_CROSSCHAIN`.
+- App: `fundit.fun` runs on Arc mainnet. Passkey sign-in ships with the next release, once the
+  `fundit.fun` Circle client key is set. In that release, sign-in is passkey only. Add money from
+  another chain is behind `VITE_CROSSCHAIN`.
 - Traction: none yet. Metrics in this paper are placeholders until launch.
 
 ## 9. Launch plan
@@ -281,7 +283,7 @@ As of October 2026:
 2. Run the end-to-end specs on Arc testnet with a virtual passkey: sign up, save a recovery key, add
    money, create a fundraiser, give, withdraw and send money out.
 3. Run a manual passkey check on a testnet build.
-4. Deploy the app to `fundit.fun` on Arc mainnet with the `fundit.fun` client key.
+4. Set the `fundit.fun` client key and release passkey sign-in on `fundit.fun`.
 
 ## 10. Roadmap and grant milestones
 
@@ -290,7 +292,7 @@ brackets are placeholders to agree with the program.
 
 | Milestone | Deliverable | Evidence |
 | --- | --- | --- |
-| M1: Mainnet launch | Factory deployed (done) and app live on `fundit.fun` | Arc explorer links, live transactions |
+| M1: Mainnet launch | Factory deployed and app live on `fundit.fun` (both done), passkey sign-in released | Arc explorer links, live transactions |
 | M2: Add money from other chains | `VITE_CROSSCHAIN` enabled after testnet checks | Live transactions for each source chain |
 | M3: Audit | Third-party review of `Campaign` and `CampaignFactory`, fixes in a new factory if needed | Published report |
 | M4: Adoption | [placeholder: number of campaigns] campaigns and [placeholder: USDC volume] raised | On-chain factory data |

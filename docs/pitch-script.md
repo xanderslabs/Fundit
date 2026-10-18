@@ -86,8 +86,9 @@ The app is a static site, and no Fundit server ever holds a key that can move mo
 
 ## 3:15 to 3:45. Traction plan
 
-We're pre-launch. The contracts are deployed on Arc mainnet and verified on Sourcify. They're tested
-with unit, fuzz, invariant and fork tests. The app goes live on fundit.fun once the testnet runs pass.
+We're early. The contracts are deployed on Arc mainnet and verified on Sourcify. They're tested with
+unit, fuzz, invariant and fork tests. fundit.fun runs on Arc mainnet today. Passkey sign-in ships with
+the next release.
 Our first users come from:
 
 - Diaspora fundraisers, where cross-border payouts hurt most.
@@ -101,7 +102,7 @@ USDC raised. We'll report every number from on-chain data.
 
 We're applying for a Circle Developer Grant with milestone-based USDC payments:
 
-1. The app live on fundit.fun, on the deployed mainnet factory.
+1. Passkey sign-in released on fundit.fun, on the deployed mainnet factory.
 2. Adding money from other chains switched on after testnet checks.
 3. A third-party audit of the two contracts.
 4. Card donations through Onramp Kit in V2.

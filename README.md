@@ -6,8 +6,11 @@ inflow and outflow on chain. Fundit has no backend, no database and no server th
 
 ## What Fundit is
 
-- A static React app for `fundit.fun`, hosted on Cloudflare Pages, and two Solidity contracts deployed
-  on Arc mainnet (chain ID `5042`, CCTP domain `26`). See [Deployed addresses](#deployed-addresses).
+- A static React app, live at [fundit.fun](https://fundit.fun) on Cloudflare Pages, and two Solidity
+  contracts deployed on Arc mainnet (chain ID `5042`, CCTP domain `26`). See
+  [Deployed addresses](#deployed-addresses).
+- fundit.fun runs on Arc mainnet. Passkey sign-in ships with the next release, once the `fundit.fun`
+  Circle client key is set.
 - People sign in with a Fundit account only. A Fundit account is a passkey smart account from Circle
   Modular Wallets. There is no wallet sign-in.
 - `CampaignFactory` deploys one `Campaign` per fundraiser as an EIP-1167 clone with CREATE2.
@@ -319,7 +322,8 @@ a virtual passkey replace them once the testnet factory exists. See
 - Contracts: deployed on Arc mainnet and verified on Sourcify. See
   [Deployed addresses](#deployed-addresses). Tested with unit, fuzz, invariant and Arc mainnet fork tests.
 - Contracts on Arc testnet: not deployed yet.
-- App: sign-in is passkey only. Unit tests run with mocks.
+- App: live at [fundit.fun](https://fundit.fun) on Arc mainnet. Passkey-only sign-in (this branch)
+  ships with the next release, once the `fundit.fun` Circle client key is set. Unit tests run with mocks.
 - `VITE_CROSSCHAIN`: off by default.
 - EURC: Arc only. On Arc mainnet, CCTP cannot burn EURC today
   (`depositForBurn(EURC)` reverts with "Burn token not supported" on a fork for domains 0, 1, 6 and
