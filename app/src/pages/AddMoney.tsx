@@ -7,13 +7,13 @@ import { AddressQr, CopyAddress } from '../components/AddressTools'
 import { PasskeyLogin } from '../components/PasskeyLogin'
 import { PendingBridgeTracker } from '../components/CrossChainDonate'
 import { TxStatus, useTx } from '../components/TxStatus'
-import { ARC_DOMAIN, CCTP_CHAINS, CHAIN_LABELS, type CctpChainKey, CROSSCHAIN_ENABLED, TOKENS, type TokenSymbol } from '../config'
+import { ARC_DOMAIN, CCTP_CHAINS, CHAIN_LABELS, type CctpChainKey, CROSSCHAIN_ENABLED, PASSKEY_GAS_BUFFER, TOKENS, type TokenSymbol } from '../config'
 import { useWalletChoice } from '../hooks/useSender'
 import { blockingEntry, chainByKey, donateCrossChain, estimateCrossChain, notifyPending, subscribePending } from '../lib/bridge'
 import { arcClient } from '../lib/clients'
-import { buildDepositCall, fetchAccountBalances } from '../lib/deposit'
+import { BALANCES_KEY, balancesKey, buildDepositCall, fetchAccountBalances } from '../lib/deposit'
 import { explainAfterApproval } from '../lib/errors'
-import { formatAmount, parseAmount } from '../lib/format'
+import { formatAmount, formatExact, parseAmount } from '../lib/format'
 import { fetchForwardFee } from '../lib/iris'
 import { usePasskeySession } from '../lib/passkey'
 import { wagmiSender } from '../lib/sender'
@@ -23,12 +23,9 @@ const QUOTE_DEBOUNCE_MS = 400
 
 const BRIDGE_PENDING = 'A transfer to your Fundit account is still on its way. Wait for it to arrive before you send another.'
 
-// The shared query key prefix for Arc balances read here and on My page, so one refresh updates both.
-const BALANCES_KEY = 'account-balances'
-
 function useBalances(address: Address | null) {
   return useQuery({
-    queryKey: [BALANCES_KEY, address?.toLowerCase()],
+    queryKey: balancesKey(address),
     queryFn: () => fetchAccountBalances(arcClient, address!),
     enabled: address !== null,
     refetchInterval: BALANCE_POLL_MS,
@@ -228,7 +225,9 @@ function WalletDeposit({ account }: { account: Address }) {
   const amount = parsed?.ok ? parsed.value : null
   const held = funds.data ? (symbol === 'USDC' ? funds.data.usdc : funds.data.eurc) : undefined
   const tooMuch = amount !== null && held !== undefined && amount > held
-  const canSubmit = external !== null && amount !== null && held !== undefined && !tooMuch && !tx.locked
+  // Arc gas is paid in USDC from this same wallet, so a USDC deposit leaves the usual gas buffer behind.
+  const noGas = !tooMuch && symbol === 'USDC' && amount !== null && held !== undefined && amount > held - PASSKEY_GAS_BUFFER
+  const canSubmit = external !== null && amount !== null && held !== undefined && !tooMuch && !noGas && !tx.locked
 
   function submit(e: FormEvent) {
     e.preventDefault()
@@ -265,7 +264,7 @@ function WalletDeposit({ account }: { account: Address }) {
               placeholder="25"
               value={amountText}
               onChange={(e) => setAmountText(e.target.value)}
-              aria-invalid={(parsed && !parsed.ok) || tooMuch ? true : undefined}
+              aria-invalid={(parsed && !parsed.ok) || tooMuch || noGas ? true : undefined}
             />
             <span className="donate-symbol">{symbol}</span>
           </div>
@@ -277,6 +276,11 @@ function WalletDeposit({ account }: { account: Address }) {
           {tooMuch && (
             <p className="field-error" role="alert">
               That is more than this wallet holds on Arc.
+            </p>
+          )}
+          {noGas && (
+            <p className="field-error" role="alert">
+              Leave at least {formatExact(PASSKEY_GAS_BUFFER, 'USDC')} in this wallet for the network fee.
             </p>
           )}
         </div>

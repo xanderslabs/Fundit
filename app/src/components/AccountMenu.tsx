@@ -352,7 +352,7 @@ function AccountMenu({ address, onSignedOut }: { address: Address; onSignedOut: 
       {open && (
         <div className="popover account-popover">
           {choice.both && (
-            <p className="account-note">Using your {choice.active === 'passkey' ? 'passkey wallet' : 'connected wallet'}</p>
+            <p className="account-note">Using your {choice.active === 'passkey' ? 'Fundit account' : 'connected wallet'}</p>
           )}
           <ul ref={menu} id={menuId} role="menu" aria-label="Account" className="account-menu" onKeyDown={onMenuKeyDown}>
             <li role="none">
@@ -383,7 +383,7 @@ function AccountMenu({ address, onSignedOut }: { address: Address; onSignedOut: 
                     close(true)
                   }}
                 >
-                  {choice.active === 'passkey' ? 'Use connected wallet' : 'Use passkey wallet'}
+                  {choice.active === 'passkey' ? 'Use connected wallet' : 'Use Fundit account'}
                 </button>
               </li>
             )}

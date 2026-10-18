@@ -16,7 +16,7 @@ import { readMessage } from '../lib/anon'
 import { myCampaigns } from '../lib/campaigns'
 import { useBackupNeeded, usePasskeySession } from '../lib/passkey'
 import { arcClient } from '../lib/clients'
-import { fetchAccountBalances } from '../lib/deposit'
+import { balancesKey, fetchAccountBalances } from '../lib/deposit'
 import { formatAmount } from '../lib/format'
 
 const EXPLORER_URL = arc.blockExplorers.default.url
@@ -50,7 +50,7 @@ function DonationRow({ item, time }: { item: DonationItem; time: bigint | undefi
 // A Fundit account only holds what was added to it, so My page shows the balance and the way to add more.
 function AccountBalance({ address }: { address: Address }) {
   const balances = useQuery({
-    queryKey: ['account-balances', address.toLowerCase()],
+    queryKey: balancesKey(address),
     queryFn: () => fetchAccountBalances(arcClient, address),
     staleTime: 15_000,
   })

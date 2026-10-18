@@ -20,7 +20,7 @@ import type { Sender } from '../lib/sender'
 import { byteLength, MAX_DESCRIPTION, MAX_LINKS, MAX_TITLE, validateCampaign } from '../lib/validate'
 
 const CLOSE_TEXT = 'Closing is permanent. Funds that arrive later can still be withdrawn.'
-const PASSKEY_WARNING = 'Your passkey wallet may not exist on that chain. Send to an address you control there.'
+const PASSKEY_WARNING = 'Your Fundit account may not exist on that chain. Send to an address you control there.'
 const CROSS_CHAIN_NOTE = 'Cross-chain payouts are new. Try a small amount first.'
 const FEE_CHANGED = 'The transfer fee changed. Check the new amount and confirm again.'
 const TOO_SMALL = 'This amount is too small to cover the transfer fee.'
@@ -559,7 +559,7 @@ export function Manage() {
       return (
         <section className="notice">
           <h1>Manage this Fundit</h1>
-          <p>You are using your passkey wallet. Switch to your connected wallet to manage this Fundit.</p>
+          <p>You are using your Fundit account. Switch to your connected wallet to manage this Fundit.</p>
           <button type="button" className="btn" onClick={() => choice.setActive('external')}>
             Use connected wallet
           </button>

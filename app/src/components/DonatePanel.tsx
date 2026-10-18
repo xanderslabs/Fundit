@@ -175,7 +175,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   const overBalance = breakdown !== null && balance !== undefined && breakdown.total + gasBuffer > balance
   const notEnough = (have: bigint) =>
     gasBuffer > 0n
-      ? `Your balance is ${formatAmount(have, symbol)}. Keep about ${formatExact(gasBuffer, symbol)} more for the network fee, which your passkey wallet pays in USDC.`
+      ? `Your balance is ${formatAmount(have, symbol)}. Keep about ${formatExact(gasBuffer, symbol)} more for the network fee, which your Fundit account pays in USDC.`
       : `Your balance is ${formatAmount(have, symbol)}, which is not enough ${symbol} for this amount and tip.`
 
   const busy = phase.kind === 'sending' || phase.kind === 'checking'

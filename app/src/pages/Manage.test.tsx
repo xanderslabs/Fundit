@@ -129,7 +129,7 @@ describe('Manage', () => {
     fakeSender('passkey', STRANGER)
     state.external = CREATOR
     renderPage()
-    expect(screen.getByText('You are using your passkey wallet. Switch to your connected wallet to manage this Fundit.')).toBeTruthy()
+    expect(screen.getByText('You are using your Fundit account. Switch to your connected wallet to manage this Fundit.')).toBeTruthy()
     expect(screen.queryByText('Campaign page')).toBeNull()
     await userEvent.setup().click(button('Use connected wallet'))
     expect(setActive).toHaveBeenCalledWith('external')
@@ -187,7 +187,7 @@ describe('Manage', () => {
     state.view = view()
     fakeSender('passkey')
     renderPage()
-    const warning = 'Your passkey wallet may not exist on that chain. Send to an address you control there.'
+    const warning = 'Your Fundit account may not exist on that chain. Send to an address you control there.'
     expect(screen.queryByText(warning)).toBeNull()
     await screen.findByRole('option', { name: 'Base' })
     await userEvent.setup().selectOptions(screen.getByLabelText('Send to'), 'Base')
@@ -202,7 +202,7 @@ describe('Manage', () => {
     renderPage()
     await screen.findByRole('option', { name: 'Base' })
     await userEvent.setup().selectOptions(screen.getByLabelText('Send to'), 'Base')
-    expect(screen.queryByText(/passkey wallet may not exist/)).toBeNull()
+    expect(screen.queryByText(/Fundit account may not exist/)).toBeNull()
   })
 
   // Optimism's own name for its chain is OP Mainnet. Every chain label in the app uses it.

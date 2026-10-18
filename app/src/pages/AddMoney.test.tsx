@@ -208,4 +208,22 @@ describe('AddMoney', () => {
     expect(screen.getByText('A transfer to your Fundit account is still on its way. Wait for it to arrive before you send another.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Bridge USDC' })).toBeNull()
   })
+
+  // Arc gas is paid in USDC from the same wallet, so sending every last USDC would fail at the fee.
+  it('keeps a gas reserve in the wallet for a USDC deposit', async () => {
+    state.external = EXTERNAL
+    state.balances.set(EXTERNAL.toLowerCase(), { usdc: 10_000000n, eurc: 0n })
+    renderPage()
+    await fillDeposit('9.96')
+    expect(screen.getByText('Leave at least 0.05 USDC in this wallet for the network fee.')).toBeTruthy()
+    expect(core.sendTransaction).not.toHaveBeenCalled()
+  })
+
+  it('allows a USDC deposit that leaves the gas reserve', async () => {
+    state.external = EXTERNAL
+    state.balances.set(EXTERNAL.toLowerCase(), { usdc: 10_000000n, eurc: 0n })
+    renderPage()
+    await fillDeposit('9.95')
+    await waitFor(() => expect(core.sendTransaction).toHaveBeenCalledTimes(1))
+  })
 })

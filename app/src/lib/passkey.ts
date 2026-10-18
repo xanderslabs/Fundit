@@ -158,7 +158,7 @@ let live: Live | null = null
 let liveSession: StoredPasskey | null = null
 
 function clientKey(): string {
-  if (!PASSKEYS_ENABLED || CIRCLE_CLIENT_KEY === '') throw new Error('Passkey wallets are not set up on this site yet.')
+  if (!PASSKEYS_ENABLED || CIRCLE_CLIENT_KEY === '') throw new Error('Fundit accounts are not set up on this site yet.')
   return CIRCLE_CLIENT_KEY
 }
 

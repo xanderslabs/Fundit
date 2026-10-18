@@ -83,7 +83,8 @@ export const FACTORY_DEPLOY_BLOCK: bigint = deploy.factoryDeployBlock
 export const REOWN_PROJECT_ID: string = deploy.reownProjectId
 export const CIRCLE_CLIENT_KEY: string = env.VITE_CIRCLE_CLIENT_KEY ?? ''
 export const PASSKEYS_ENABLED: boolean = env.VITE_PASSKEYS === '1'
-// A passkey wallet pays its network fee in USDC from its own balance. This much stays free for it.
+// Arc network fees are paid in USDC from the sender's own balance. This much stays free for them (a Fundit
+// account, and a regular wallet adding USDC to one).
 export const PASSKEY_GAS_BUFFER = 50_000n
 // Donations from another chain and from a Gateway unified balance, and bridging into a passkey wallet. Off by
 // default. Entries already saved in the browser are tracked and still block a second donation either way.

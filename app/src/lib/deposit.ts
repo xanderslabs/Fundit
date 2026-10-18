@@ -3,6 +3,10 @@ import { erc20Abi } from '../abi/erc20'
 import { TOKENS } from '../config'
 import type { Call } from './sender'
 
+// The query key for an address's Arc balances. Add money and My page share it, so one refresh updates both.
+export const BALANCES_KEY = 'account-balances'
+export const balancesKey = (address: Address | null) => [BALANCES_KEY, address?.toLowerCase()] as const
+
 // Money added from a regular wallet on Arc is a plain ERC-20 transfer to the Fundit account.
 export function buildDepositCall(token: Address, to: Address, amount: bigint): Call {
   return { to: token, data: encodeFunctionData({ abi: erc20Abi, functionName: 'transfer', args: [to, amount] }) }

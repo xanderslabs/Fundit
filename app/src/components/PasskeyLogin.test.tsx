@@ -240,7 +240,7 @@ describe('Account menu with a passkey session', () => {
     state.external = EXTERNAL
     renderControl()
     await openMenu('0x0000...00cc')
-    expect(screen.getByText('Using your passkey wallet')).toBeTruthy()
+    expect(screen.getByText('Using your Fundit account')).toBeTruthy()
     await userEvent.setup().click(screen.getByRole('menuitem', { name: 'Use connected wallet' }))
     expect(setActive).toHaveBeenCalledWith('external')
   })
@@ -252,7 +252,7 @@ describe('Account menu with a passkey session', () => {
     renderControl()
     await openMenu('0x1111...1111')
     expect(screen.getByText('Using your connected wallet')).toBeTruthy()
-    await act(async () => userEvent.setup().click(screen.getByRole('menuitem', { name: 'Use passkey wallet' })))
+    await act(async () => userEvent.setup().click(screen.getByRole('menuitem', { name: 'Use Fundit account' })))
     expect(setActive).toHaveBeenCalledWith('passkey')
   })
 
