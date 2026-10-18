@@ -9,16 +9,21 @@ results on Arc testnet with viem.
 
 `journeys.spec.ts` runs these steps in order with one new Fundit account. Each step needs the one before it.
 
-1. Signs up with a passkey and reads the new account address from **Add money**.
-2. Adds money: the funder sends 3 USDC to that address with an ERC-20 `transfer`.
-3. Saves the recovery key: shows the 12 words, types back the three the page asks for, and checks on Arc that
-   the key's address is now an owner of the account.
+1. Signs up with a passkey. Sign-up lands on **My page** with the **Add money** panel open, and the suite
+   reads the new account address from its **Your address** tab.
+2. Adds money: the funder sends 3 USDC to that address with an ERC-20 `transfer`. The balance card must show
+   it. The **Add money** button then closes and opens the panel, and its tabs switch.
+3. Saves the recovery key: **Save now** in the banner shows the 12 words, the suite types back the three the
+   page asks for, and checks on Arc that the key's address is now an owner of the account. The banner goes
+   away and the **Account** tab says **Recovery key saved**.
 4. Creates a Fundit with a goal of 10 USDC.
 5. Gives 0.2 USDC anonymously with a message. The activity must show "Anonymous" and the message, with no
    `[anon]` text. The `Donated` event must name the account and carry `[anon]` at the start of the message.
 6. Withdraws everything on Arc from **Manage** to the account.
-7. Sends the money out on Arc from **My page** back to the funder with **Max**. Max keeps back the
-   estimated prefund for the send, and the funder must receive exactly the Max amount.
+7. Checks **My page**: **Your Fundits** has a **Manage** link for the new Fundit, and **Your gifts** lists
+   the gift with the message and the label "Given with name hidden", with no `[anon]` text.
+8. Opens the **Send** panel on **My page** and sends the money out on Arc back to the funder with **Max**.
+   Max keeps back the estimated prefund for the send, and the funder must receive exactly the Max amount.
 
 Each step prints the explorer link of its transaction, for example:
 

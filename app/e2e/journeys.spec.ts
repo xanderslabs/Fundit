@@ -116,10 +116,12 @@ test('signs up with a passkey', async () => {
   await page.getByLabel('Username').fill(`e2e-${Date.now()}`)
   await page.getByRole('button', { name: 'Create account' }).click()
 
-  // Sign-up lands on Add money, which shows the new account's address.
-  await expect(page).toHaveURL(/\/add-money$/, { timeout: 60_000 })
-  const panel = page.getByRole('region', { name: 'Send to your Fundit account' })
-  const shown = /0x[0-9a-fA-F]{40}/.exec(await panel.innerText())?.[0]
+  // Sign-up lands on My page with the Add money panel open on Your address, which shows the account's address.
+  await expect(page).toHaveURL(/\/me\?add=1$/, { timeout: 60_000 })
+  const panel = page.getByRole('region', { name: 'Add money' })
+  await expect(panel.getByRole('tab', { name: 'Your address' })).toHaveAttribute('aria-selected', 'true')
+  await expect(panel.getByRole('img', { name: 'QR code of your Fundit account address' })).toBeVisible()
+  const shown = /0x[0-9a-fA-F]{40}/.exec(await panel.getByRole('tabpanel', { name: 'Your address' }).innerText())?.[0]
   expect(shown).toBeTruthy()
   account = getAddress(shown!)
   console.log(`Fundit account ${account}: ${NET.explorerUrl}/address/${account}`)
@@ -144,13 +146,31 @@ test('adds money: the funder sends USDC to the account address', async () => {
   const hash = await fundFromFunder(account, TOP_UP)
   logTx('Add money (funder transfer)', hash)
   expect(await usdcBalance(account)).toBe(TOP_UP)
-  // The page polls every 15 seconds.
-  await expect(page.getByText(`Balance: ${formatAmount(TOP_UP, 'USDC')} and 0.00 EURC`)).toBeVisible({ timeout: 45_000 })
+  // The balance card polls every 15 seconds.
+  const card = page.getByRole('region', { name: 'Your Fundit account' })
+  const usdc = card.locator('.dash-balances div', { hasText: 'USDC' }).locator('dd')
+  await expect(usdc).toHaveText(formatAmount(TOP_UP, 'USDC').split(' ')[0]!, { timeout: 45_000 })
+  // The Add money button closes the panel and opens it again. The address bar follows.
+  const addMoney = card.getByRole('button', { name: 'Add money' })
+  await expect(addMoney).toHaveAttribute('aria-expanded', 'true')
+  await addMoney.click()
+  await expect(page.getByRole('region', { name: 'Add money' })).toBeHidden()
+  await expect(page).toHaveURL(/\/me$/)
+  await addMoney.click()
+  await expect(page).toHaveURL(/\/me\?add=1$/)
+  const panel = page.getByRole('region', { name: 'Add money' })
+  await panel.getByRole('tab', { name: 'From a wallet' }).click()
+  await expect(panel.getByRole('tabpanel', { name: 'From a wallet' })).toBeVisible()
+  await panel.getByRole('tab', { name: 'Your address' }).click()
 })
 
 test('saves the recovery key after confirming three words', async () => {
   await openMenuItem('My page')
   await expect(page).toHaveURL(/\/me$/)
+  // The banner shows until the chain has a recovery key on the account. Save now opens the recovery key flow.
+  const banner = page.getByRole('region', { name: 'Recovery key', exact: true })
+  await expect(banner.getByText('Save a recovery key so you never lose this account')).toBeVisible()
+  await banner.getByRole('button', { name: 'Save now' }).click()
   const backup = page.getByRole('region', { name: 'Add a recovery key' })
   await backup.getByRole('button', { name: 'Show my recovery key' }).click()
   const phrase = backup.locator('ol.recovery-phrase li')
@@ -177,6 +197,9 @@ test('saves the recovery key after confirming three words', async () => {
   const [ownerIds, owners] = await arc.readContract({ address: CIRCLE_MULTISIG_PLUGIN, abi: ownershipAbi, functionName: 'ownershipInfoOf', args: [account] })
   expect(ownerIds).toHaveLength(2)
   expect(owners.map((o) => o.addr.toLowerCase())).toContain(recovery.toLowerCase())
+  await expect(banner).toHaveCount(0)
+  await page.getByRole('tab', { name: 'Account' }).click()
+  await expect(page.getByRole('tabpanel', { name: 'Account' }).getByText('Recovery key saved')).toBeVisible()
 })
 
 test('creates a Fundit', async () => {
@@ -215,8 +238,8 @@ test('gives anonymously with a message, and the activity shows Anonymous', async
   await expect(give.getByText(/Your balance: /)).toBeVisible()
   await give.getByRole('textbox', { name: 'Amount' }).fill(GIFT)
   await give.getByLabel('Message (optional)').fill(MESSAGE)
-  // No tip: the gift checks below expect a zero tip.
-  await expect(give.getByRole('group', { name: 'Tip Fundit (optional)' }).getByRole('radio', { name: 'No tip' })).toBeChecked()
+  // No tip (0%): the gift checks below expect a zero tip.
+  await expect(give.getByRole('group', { name: 'Tip Fundit (optional)' }).getByRole('radio', { name: '0%', exact: true })).toBeChecked()
   await give.getByRole('switch', { name: 'Hide my name' }).check()
   await expect(give.getByText(`${new TextEncoder().encode(MESSAGE).length} of 274 bytes`)).toBeVisible()
   // The account's real reserve estimate, shown as the most the network fee can take.
@@ -272,9 +295,25 @@ test('withdraws on Arc from Manage', async () => {
   await expect(withdraw.getByText('Available: 0.00 USDC')).toBeVisible({ timeout: 30_000 })
 })
 
-test('sends money out on Arc back to the funder', async () => {
+test('My page lists the Fundit and the gift, labelled Given with name hidden', async () => {
   await openMenuItem('My page')
   await expect(page).toHaveURL(/\/me$/)
+  const fundits = page.getByRole('tabpanel', { name: 'Your Fundits' })
+  await expect(fundits.getByRole('link', { name: 'Manage E2E testnet garden fund' })).toHaveAttribute('href', `/manage/${campaign}`)
+  await page.getByRole('tab', { name: 'Your gifts' }).click()
+  const gifts = page.getByRole('tabpanel', { name: 'Your gifts' })
+  const row = gifts.getByRole('listitem').filter({ hasText: 'E2E testnet garden fund' })
+  await expect(row).toContainText(`You gave ${formatAmount(parseUnits(GIFT, 6), 'USDC')} to E2E testnet garden fund`, { timeout: 30_000 })
+  await expect(row.getByText('Given with name hidden', { exact: true })).toBeVisible()
+  await expect(row.getByText(MESSAGE, { exact: true })).toBeVisible()
+  await expect(gifts.getByText(/\[anon\]/)).toHaveCount(0)
+})
+
+test('sends money out on Arc back to the funder', async () => {
+  await expect(page).toHaveURL(/\/me$/)
+  // Send opens the Send money out panel under the balance card.
+  await page.getByRole('region', { name: 'Your Fundit account' }).getByRole('button', { name: 'Send' }).click()
+  await expect(page).toHaveURL(/\/me\?send=1$/)
   const send = page.getByRole('region', { name: 'Send money out' })
   const held = await usdcBalance(account)
   const before = await usdcBalance(funder)
