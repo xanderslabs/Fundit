@@ -9,7 +9,7 @@ inflow and outflow on chain. Fundit has no backend, no database and no server th
 
 ## What Fundit is
 
-- A static React app (planned for `fundit.xyz` on Cloudflare Pages) and two Solidity contracts on
+- A static React app (planned for `fundit.fun` on Cloudflare Pages) and two Solidity contracts on
   Arc mainnet (chain ID `5042`, CCTP domain `26`).
 - `CampaignFactory` deploys one `Campaign` per fundraiser as an EIP-1167 clone with CREATE2.
 - Each `Campaign` holds exactly one token, USDC or EURC, chosen by the creator at creation.
@@ -114,6 +114,67 @@ findings. The short version:
 - **Creator recovery.** A creator can name an optional backup address. The backup can start a
   recovery, and after a 7-day wait (`RECOVERY_DELAY`) it becomes the creator. The creator keeps every
   power during the wait and can cancel it at any time.
+
+## Fundit accounts (passkeys)
+
+A Fundit account is a Circle Modular Wallets smart account on Arc. The owner signs with a passkey (a
+fingerprint, face or device PIN), so no wallet app is needed. Fundit accounts are off unless the build sets
+`VITE_PASSKEYS=1` ([`app/src/config.ts`](app/src/config.ts)). The account pays its own gas in USDC, with no
+paymaster. Every action that spends USDC leaves 0.05 USDC (`PASSKEY_GAS_BUFFER`) in the account for the
+network fee.
+
+### What a person can do
+
+- **Sign in.** **Sign in** opens a dialog with **Continue with passkey** first. On the next step the person
+  enters a name for a new passkey and selects **Create my Fundit account**, or selects **Sign in with a
+  passkey** to use one already on the device. **Use a crypto wallet instead** opens the wallet modal. After a
+  passkey sign-in from the top bar, the app opens **Add money**. See
+  [`AccountMenu.tsx`](app/src/components/AccountMenu.tsx) and
+  [`PasskeyLogin.tsx`](app/src/components/PasskeyLogin.tsx).
+- **Add a recovery key.** Right after sign-up, a dialog offers a recovery key: 12 words that the person writes
+  down and keeps safe. The person types 3 of the words back. The account then registers the key's address
+  with Circle's `registerRecoveryAddress`. The words never leave the browser. Only the derived address does.
+  The account needs 0.05 USDC first, for the network fee. Until a key is saved, **My page** keeps asking. See
+  [`AddBackupPasskey.tsx`](app/src/components/AddBackupPasskey.tsx).
+- **Recover the account.** `/recover` takes the 12 words, creates a new passkey on this device and adds it
+  as an owner with `executeRecovery`. The sign-in dialog links to it as **Lost your passkey? Recover your
+  account**. After a recovery, **My page** asks for a new recovery key. See
+  [`Recover.tsx`](app/src/pages/Recover.tsx).
+- **Add money.** `/add-money` shows the account address and its QR code, for USDC or EURC sent on Arc from
+  any wallet or exchange. It also has a form to send from a connected wallet. The app switches that wallet
+  to Arc first and never sends on another chain. With `VITE_CROSSCHAIN=1`, the page also takes USDC from
+  another chain through Bridge Kit. See [`AddMoney.tsx`](app/src/pages/AddMoney.tsx).
+- **Give.** A Fundit account calls `donate` on the campaign directly, in one user operation. It does not
+  use Arc Memo, which accepts only an EOA caller.
+- **Send money out.** **My page** has a **Send money out** form. It sends USDC or EURC to any address on
+  Arc, or USDC to another CCTP chain with the Forwarding Service, in one passkey confirmation. It refuses
+  the account's own address, and any USDC amount that leaves less than 0.05 USDC behind. See
+  [`AccountWithdraw.tsx`](app/src/components/AccountWithdraw.tsx).
+
+### Set up Circle Console
+
+Passkeys are bound to `fundit.fun`. The WebAuthn relying party comes from the client key's domain, so a
+passkey created on one domain does not work on another.
+
+1. In Circle Console, create a client key under **Keys** > **Client Key**. Set the passkey domain and the
+   allowed domain to `fundit.fun`.
+2. Create a second client key for `localhost`. Use it only for development, with throwaway accounts.
+3. Set `VITE_CIRCLE_CLIENT_KEY` to the key and `VITE_PASSKEYS=1`. For development, put them in `app/.env`
+   with the `localhost` key. For production, put them in the Cloudflare Pages build variables with the
+   `fundit.fun` key. See [`app/.env.example`](app/.env.example).
+
+## Give anonymously
+
+The **Give** panel has a **Give anonymously** box. When the donor ticks it, the app puts the ASCII marker
+`[anon]` (6 bytes) at the start of the message. The message limit drops from 280 bytes
+(`MAX_MESSAGE_BYTES`) to 274 bytes, and the form blocks a longer message before anything is sent. Fundit
+pages then show "Anonymous" in place of the donor's name, and show the message without the marker. Any
+message that starts with `[anon]` counts as anonymous, whether or not the box was ticked. See
+[`app/src/lib/anon.ts`](app/src/lib/anon.ts).
+
+Give anonymously hides the name on Fundit only. The gift stays public on chain. The `Donated` event
+records the donor's address, and anyone can read it on Arc. From a regular wallet, the marked message also
+goes into the Arc Memo `memoData`.
 
 ## Deployed addresses
 
