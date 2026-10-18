@@ -13,14 +13,14 @@ const success: TxResult = { status: 'success', hash: TX_HASH, receipt: { status:
 const waitForResult = vi.hoisted(() => vi.fn())
 vi.mock('../lib/sender', async (importOriginal) => ({ ...(await importOriginal<typeof import('../lib/sender')>()), waitForResult }))
 
-function Harness({ sender }: { sender: Sender }) {
+function Harness({ sender, wallet }: { sender: Sender; wallet?: boolean }) {
   const tx = useTx(() => {})
   return (
     <>
       <button type="button" onClick={() => void tx.run(sender, () => CALL, 'Test')}>
         Go
       </button>
-      <TxStatus tx={tx} noun="change" successText="Saved." startOverWarning="Start over?" />
+      <TxStatus tx={tx} noun="change" successText="Saved." startOverWarning="Start over?" wallet={wallet} />
     </>
   )
 }
@@ -31,6 +31,20 @@ afterEach(() => {
 })
 
 describe('useTx with TxStatus', () => {
+  // Sign-in is passkey only, so a send asks for the passkey. Only Add money sends from a regular wallet.
+  it('asks for the passkey while sending, or the wallet when told it is one', async () => {
+    const sender: Sender = { kind: 'passkey', address: '0x00000000000000000000000000000000000000cc', send: () => new Promise(() => {}) }
+    const user = userEvent.setup()
+    const { unmount } = render(<Harness sender={sender} />)
+    await user.click(screen.getByRole('button', { name: 'Go' }))
+    expect(await screen.findByText(/^Confirm with your passkey, then wait for the network\./)).toBeTruthy()
+    expect(screen.queryByText(/wallet/)).toBeNull()
+    unmount()
+    render(<Harness sender={{ ...sender, kind: 'eoa' }} wallet />)
+    await user.click(screen.getByRole('button', { name: 'Go' }))
+    expect(await screen.findByText(/^Confirm in your wallet, then wait for the network\./)).toBeTruthy()
+  })
+
   // A passkey timeout holds a user operation hash. Only the sender's bundler can find it, never the explorer.
   it('rechecks a passkey timeout through sender.recheck and then links the real transaction', async () => {
     const recheck = vi.fn(async () => success)

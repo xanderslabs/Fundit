@@ -431,7 +431,7 @@ function BackupSection({ view, sender }: { view: CampaignView; sender: Sender })
   const typed = raw === '' ? null : parseTypedAddress(raw)
   let error: string | undefined
   if (typed && !typed.ok) error = typed.error === 'typo' ? ADDRESS_TYPO : 'Enter a valid address (0x and 40 characters).'
-  else if (typed?.ok && isAddressEqual(typed.address, sender.address)) error = 'Use a different address from the wallet you are connected with.'
+  else if (typed?.ok && isAddressEqual(typed.address, sender.address)) error = 'Use a different address from your Fundit account.'
   else if (typed?.ok && isAddressEqual(typed.address, zeroAddress)) error = 'Use Remove backup to remove it.'
 
   const setBackup = (backup: Address, label: string) =>
@@ -447,8 +447,8 @@ function BackupSection({ view, sender }: { view: CampaignView; sender: Sender })
     <section className="panel manage-section" aria-labelledby="backup-heading">
       <h2 id="backup-heading">Backup address</h2>
       <p className="hint">
-        If you lose this wallet, the backup address can ask to take over the Fundit. It becomes the organiser after a
-        7-day wait, and you can cancel from this wallet during those 7 days.
+        If you lose your Fundit account, the backup address can ask to take over the Fundit. It becomes the organiser
+        after a 7-day wait, and you can cancel from your Fundit account during those 7 days.
       </p>
       <p>
         Current backup: <span className="manage-address">{hasBackup ? summary.backup : 'None'}</span>

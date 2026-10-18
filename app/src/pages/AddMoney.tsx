@@ -296,6 +296,7 @@ function WalletDeposit({ account }: { account: Address }) {
       <TxStatus
         tx={tx}
         noun="transfer"
+        wallet
         successText="Money added to your Fundit account."
         startOverWarning="The earlier transfer may still go through. If it does and you send again, you will add the money twice. Start over anyway?"
       />

@@ -120,16 +120,21 @@ export function TxStatus({
   noun,
   successText,
   startOverWarning,
+  wallet = false,
 }: {
   tx: ReturnType<typeof useTx>
   noun: string
   successText: string
   startOverWarning: string
+  // A regular wallet sends this one (Add money). Every other send is from the Fundit account, with a passkey.
+  wallet?: boolean
 }) {
   const { phase } = tx
   return (
     <div className="tx-status" aria-live="polite">
-      {phase.kind === 'sending' && <p>Confirm in your wallet, then wait for the network. This can take a few seconds.</p>}
+      {phase.kind === 'sending' && (
+        <p>Confirm {wallet ? 'in your wallet' : 'with your passkey'}, then wait for the network. This can take a few seconds.</p>
+      )}
       {phase.kind === 'checking' && <p>Checking the transaction again...</p>}
       {phase.kind === 'success' && (
         <div className="status-box status-success">

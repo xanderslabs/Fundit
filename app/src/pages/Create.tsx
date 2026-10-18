@@ -352,9 +352,9 @@ export function Create() {
             aria-describedby="backup-hint backup-error"
           />
           <p id="backup-hint" className="hint">
-            If you lose this wallet, the backup address can ask to take over the Fundit. It becomes the organiser after
-            a 7-day wait, and you can cancel from this wallet during those 7 days. Use a wallet you control that is not
-            this one. Leave it empty for no backup.
+            If you lose your Fundit account, the backup address can ask to take over the Fundit. It becomes the
+            organiser after a 7-day wait, and you can cancel from your Fundit account during those 7 days. Use a wallet
+            you control that is not your Fundit account. Leave it empty for no backup.
           </p>
           <FieldError id="backup-error" message={shown('backup')} />
         </div>
@@ -385,7 +385,7 @@ export function Create() {
         </section>
 
         <div className="create-status" aria-live="polite">
-          {phase.kind === 'sending' && <p>Confirm in your wallet, then wait for the network. This can take a few seconds.</p>}
+          {phase.kind === 'sending' && <p>Confirm with your passkey, then wait for the network. This can take a few seconds.</p>}
           {phase.kind === 'checking' && <p>Checking the transaction again...</p>}
           {phase.kind === 'timeout' && (
             <div className="status-box">

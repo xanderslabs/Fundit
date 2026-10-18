@@ -404,7 +404,7 @@ describe('Manage', () => {
     renderPage()
     const user = userEvent.setup()
     await user.type(screen.getByLabelText('New backup address'), CREATOR)
-    expect(screen.getByText('Use a different address from the wallet you are connected with.')).toBeTruthy()
+    expect(screen.getByText('Use a different address from your Fundit account.')).toBeTruthy()
     expect(button('Save backup').disabled).toBe(true)
   })
 })
