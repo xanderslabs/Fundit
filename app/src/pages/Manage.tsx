@@ -17,7 +17,7 @@ import { bpsToPercent, formatAmount, parseAmount } from '../lib/format'
 import { fetchForwardFee } from '../lib/iris'
 import { buildWithdrawCall, destDomain, netAfterWithdrawFee, type PayoutDest, payoutOptions } from '../lib/payout'
 import type { Sender } from '../lib/sender'
-import { byteLength, MAX_DESCRIPTION, MAX_LINKS, MAX_TITLE, validateCampaign } from '../lib/validate'
+import { ADDRESS_TYPO, byteLength, MAX_DESCRIPTION, MAX_LINKS, MAX_TITLE, parseTypedAddress, validateCampaign } from '../lib/validate'
 
 const CLOSE_TEXT = 'Closing is permanent. Funds that arrive later can still be withdrawn.'
 const PASSKEY_WARNING = 'Your Fundit account may not exist on that chain. Send to an address you control there.'
@@ -185,12 +185,12 @@ function WithdrawSection({ view, sender }: { view: CampaignView; sender: Sender 
   const overAvailable = amount !== null && amount > available
   const net = amount === null ? null : netAfterWithdrawFee(amount, summary.withdrawFeeBps)
 
-  const recipientRaw = (recipientText ?? sender.address).trim()
+  const typed = parseTypedAddress((recipientText ?? sender.address).trim())
   let recipientError: string | undefined
-  if (!isAddress(recipientRaw, { strict: false })) recipientError = 'Enter a valid address (0x and 40 characters).'
-  else if (isAddressEqual(recipientRaw, zeroAddress)) recipientError = 'Enter a recipient address.'
-  else if (isAddressEqual(recipientRaw, campaign)) recipientError = 'Choose a different recipient.'
-  const recipient = recipientError ? null : (recipientRaw as Address)
+  if (!typed.ok) recipientError = typed.error === 'typo' ? ADDRESS_TYPO : 'Enter a valid address (0x and 40 characters).'
+  else if (isAddressEqual(typed.address, zeroAddress)) recipientError = 'Enter a recipient address.'
+  else if (isAddressEqual(typed.address, campaign)) recipientError = 'Choose a different recipient.'
+  const recipient: Address | null = typed.ok && !recipientError ? typed.address : null
 
   const [quoteNet, setQuoteNet] = useState<bigint | null>(null)
   useEffect(() => {
@@ -424,20 +424,19 @@ function BackupSection({ view, sender }: { view: CampaignView; sender: Sender })
   const hasBackup = summary.backup !== zeroAddress
   const pending = summary.recoveryReadyAt !== 0n
   const raw = text.trim()
+  const typed = raw === '' ? null : parseTypedAddress(raw)
   let error: string | undefined
-  if (raw !== '') {
-    if (!isAddress(raw, { strict: false })) error = 'Enter a valid address (0x and 40 characters).'
-    else if (isAddressEqual(raw, sender.address)) error = 'Use a different address from the wallet you are connected with.'
-    else if (isAddressEqual(raw, zeroAddress)) error = 'Use Remove backup to remove it.'
-  }
+  if (typed && !typed.ok) error = typed.error === 'typo' ? ADDRESS_TYPO : 'Enter a valid address (0x and 40 characters).'
+  else if (typed?.ok && isAddressEqual(typed.address, sender.address)) error = 'Use a different address from the wallet you are connected with.'
+  else if (typed?.ok && isAddressEqual(typed.address, zeroAddress)) error = 'Use Remove backup to remove it.'
 
   const setBackup = (backup: Address, label: string) =>
     tx.run(sender, () => ({ to: campaign, data: encodeFunctionData({ abi: campaignAbi, functionName: 'setBackup', args: [backup] }) }), label)
 
   function submit(e: FormEvent) {
     e.preventDefault()
-    if (raw === '' || error || tx.locked) return
-    void setBackup(raw as Address, 'Set backup')
+    if (!typed?.ok || error || tx.locked) return
+    void setBackup(typed.address, 'Set backup')
   }
 
   return (

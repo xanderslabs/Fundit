@@ -38,8 +38,9 @@ export function ExplorerLink({ hash }: { hash: Hex }) {
   )
 }
 
-// One single-call action on Arc, with the same no-double-send rules as donating: a send or check already
-// running blocks another, and a timed-out transaction blocks a new one until a check settles it.
+// One action on Arc (a single call, or a passkey batch sent as one user operation), with the same
+// no-double-send rules as donating: a send or check already running blocks another, and a timed-out
+// transaction blocks a new one until a check settles it.
 // onSuccess gets the hash of the mined transaction.
 export function useTx(onSuccess: (hash: Hex) => void) {
   const [phase, setPhase] = useState<TxPhase>({ kind: 'idle' })
@@ -66,7 +67,8 @@ export function useTx(onSuccess: (hash: Hex) => void) {
   }
 
   // build runs inside the guard, so a quote it fetches or a check it makes cannot overlap a second click.
-  // Several calls go to the sender in one send, so a passkey account signs them as one user operation.
+  // Several calls go to the sender in one send. A passkey sender makes them one user operation, so they
+  // succeed or fail together. A wallet sender sends them one by one, so only pass an array to a passkey.
   async function run(sender: Sender, build: () => Call | Call[] | Promise<Call | Call[]>, label: string) {
     if (inFlight.current) return
     inFlight.current = true

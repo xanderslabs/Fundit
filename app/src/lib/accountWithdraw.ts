@@ -1,9 +1,10 @@
-import { type Address, encodeFunctionData, isAddressEqual, pad, parseAbi, zeroAddress, zeroHash } from 'viem'
+import { type Address, encodeFunctionData, isAddress, isAddressEqual, pad, parseAbi, zeroAddress, zeroHash } from 'viem'
 import { erc20Abi } from '../abi/erc20'
 import { CCTP_CHAINS, CHAIN_LABELS, FORWARD_HOOK_DATA, TOKEN_MESSENGER_V2, TOKENS } from '../config'
 import { PlainError } from './errors'
 import type { PayoutDest } from './payout'
 import type { Call } from './sender'
+import { ADDRESS_TYPO } from './validate'
 
 // CCTP finality thresholds: 1000 is a Fast transfer, 2000 is Standard.
 const FAST_THRESHOLD = 1000
@@ -30,6 +31,8 @@ export function buildAccountSendCalls(p: {
   fast: boolean
   account: Address
 }): Call[] {
+  // Strict: pad() does not check the checksum, so a mistyped address would otherwise get the burned USDC.
+  if (!isAddress(p.recipient)) throw new PlainError(ADDRESS_TYPO)
   if (isAddressEqual(p.recipient, zeroAddress) || isAddressEqual(p.recipient, p.account)) throw new PlainError(OWN_ADDRESS)
   if (p.dest === 'Arc') {
     return [{ to: p.token, data: encodeFunctionData({ abi: erc20Abi, functionName: 'transfer', args: [p.recipient, p.amount] }) }]

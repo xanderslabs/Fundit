@@ -1,10 +1,34 @@
 import { zeroAddress } from 'viem'
 import { describe, expect, it } from 'vitest'
 import { TOKENS } from '../config'
-import { type CampaignInput, validateCampaign } from './validate'
+import { ADDRESS_TYPO, type CampaignInput, parseTypedAddress, validateCampaign } from './validate'
 
 const SENDER = '0x1111111111111111111111111111111111111111'
 const OTHER = '0x2222222222222222222222222222222222222222'
+// The same address with valid EIP-55 case, with one letter's case flipped, and with no checksum at all.
+const CHECKSUMMED = '0xABcdEFABcdEFabcdEfAbCdefabcdeFABcDEFabCD'
+const BAD_CHECKSUM = '0xaBcdEFABcdEFabcdEfAbCdefabcdeFABcDEFabCD'
+const LOWER = '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd'
+
+describe('parseTypedAddress', () => {
+  // Mixed case is a checksum. When it does not match, a character was most likely mistyped, and money sent
+  // there is lost. One case throughout carries no checksum, so there is nothing to check.
+  it('refuses a mixed-case address with a bad checksum as a typo', () => {
+    expect(parseTypedAddress(BAD_CHECKSUM)).toEqual({ ok: false, error: 'typo' })
+    expect(ADDRESS_TYPO).toBe('This address has a typo. Check it and paste it again.')
+  })
+
+  it('accepts all-lowercase, all-uppercase and checksummed addresses, as the checksummed form', () => {
+    expect(parseTypedAddress(LOWER)).toEqual({ ok: true, address: CHECKSUMMED })
+    expect(parseTypedAddress(`0x${LOWER.slice(2).toUpperCase()}`)).toEqual({ ok: true, address: CHECKSUMMED })
+    expect(parseTypedAddress(CHECKSUMMED)).toEqual({ ok: true, address: CHECKSUMMED })
+  })
+
+  it('refuses text that is not an address', () => {
+    expect(parseTypedAddress('not an address')).toEqual({ ok: false, error: 'invalid' })
+    expect(parseTypedAddress('0x1234')).toEqual({ ok: false, error: 'invalid' })
+  })
+})
 
 function input(over: Partial<CampaignInput> = {}): CampaignInput {
   return {
@@ -87,5 +111,12 @@ describe('validateCampaign', () => {
     expect(errorsOf({ backup: 'not an address' }).backup).toBeDefined()
     const res = validateCampaign(input({ backup: OTHER }))
     expect(res.ok && res.backup).toBe(OTHER)
+  })
+
+  // Recovery goes to the backup, so a mistyped backup could take the Fundit away from its organiser.
+  it('refuses a backup with a bad checksum', () => {
+    expect(errorsOf({ backup: BAD_CHECKSUM }).backup).toBe(ADDRESS_TYPO)
+    const res = validateCampaign(input({ backup: LOWER }))
+    expect(res.ok && res.backup).toBe(CHECKSUMMED)
   })
 })

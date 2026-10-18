@@ -34,6 +34,14 @@ function view(symbol: TokenSymbol): CampaignView {
 const decode = (data: `0x${string}`) => decodeFunctionData({ abi: campaignAbi, data })
 
 describe('buildWithdrawCall', () => {
+  // pad() does not check the checksum, so a payout to another chain would burn to a mistyped address.
+  it('refuses a recipient with a bad checksum', () => {
+    const bad = '0xaBcdEFABcdEFabcdEfAbCdefabcdeFABcDEFabCD' as Address
+    const p = { campaign: CAMPAIGN, amount: 50_000000n, recipient: bad, fee: { maxFee: 1n }, fast: true }
+    expect(() => buildWithdrawCall({ ...p, dest: 'Base' })).toThrow('This address has a typo. Check it and paste it again.')
+    expect(() => buildWithdrawCall({ ...p, dest: 'Arc' })).toThrow('This address has a typo. Check it and paste it again.')
+  })
+
   // On Arc the contract pays the recipient directly. CCTP fields must be zero and the hook empty.
   it('pays out on Arc with domain 26, the padded recipient and no CCTP fields', () => {
     const call = buildWithdrawCall({ campaign: CAMPAIGN, amount: 50_000000n, dest: 'Arc', recipient: ME, fast: true })

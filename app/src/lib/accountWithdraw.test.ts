@@ -72,6 +72,24 @@ describe('buildAccountSendCalls', () => {
   })
 })
 
+describe('buildAccountSendCalls address checks', () => {
+  const BAD_CHECKSUM = '0xaBcdEFABcdEFabcdEfAbCdefabcdeFABcDEFabCD' as Address
+  const LOWER = '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd' as Address
+
+  // pad() does not check the checksum, so without this a burn would mint to the mistyped address.
+  it('refuses a bad checksum before encoding anything', () => {
+    const p = { token: USDC, amount: 2_000000n, recipient: BAD_CHECKSUM, maxFee: 1n, fast: true, account: ACCOUNT }
+    expect(() => buildAccountSendCalls({ ...p, dest: 'Base' })).toThrow('This address has a typo. Check it and paste it again.')
+    expect(() => buildAccountSendCalls({ ...p, dest: 'Arc' })).toThrow('This address has a typo. Check it and paste it again.')
+  })
+
+  it('accepts an all-lowercase address', () => {
+    const calls = buildAccountSendCalls({ token: USDC, amount: 2_000000n, dest: 'Base', recipient: LOWER, maxFee: 1n, fast: true, account: ACCOUNT })
+    const burn = decodeFunctionData({ abi: messengerAbi, data: calls[1]!.data })
+    expect(burn.args[2]).toBe(pad(LOWER, { size: 32 }))
+  })
+})
+
 describe('maxAccountSend', () => {
   // The account pays Arc gas in USDC, so the buffer always stays behind.
   it('keeps the gas buffer and never goes below zero', () => {

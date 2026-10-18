@@ -2,10 +2,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
-import { type Address, decodeFunctionData, type Hex } from 'viem'
+import { type Address, decodeFunctionData, type Hex, pad, parseAbi, zeroHash } from 'viem'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { erc20Abi } from '../abi/erc20'
-import { TOKEN_MESSENGER_V2, TOKENS } from '../config'
+import { FORWARD_HOOK_DATA, TOKEN_MESSENGER_V2, TOKENS } from '../config'
 import type { Sender, TxResult } from '../lib/sender'
 import { AccountWithdraw } from './AccountWithdraw'
 
@@ -14,10 +14,14 @@ const FRIEND = '0x1111111111111111111111111111111111111111'
 const HASH = `0x${'1'.repeat(64)}` as Hex
 
 const balances = vi.hoisted(() => ({ usdc: 0n, eurc: 0n }))
+const fetchAccountBalances = vi.hoisted(() => vi.fn(async () => ({ ...balances })))
 vi.mock('../lib/deposit', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/deposit')>()),
-  fetchAccountBalances: async () => ({ ...balances }),
+  fetchAccountBalances,
 }))
+const messengerAbi = parseAbi([
+  'function depositForBurnWithHook(uint256 amount, uint32 destinationDomain, bytes32 mintRecipient, address burnToken, bytes32 destinationCaller, uint256 maxFee, uint32 minFinalityThreshold, bytes hookData)',
+])
 const fetchForwardFee = vi.hoisted(() => vi.fn())
 vi.mock('../lib/iris', async (importOriginal) => ({ ...(await importOriginal<typeof import('../lib/iris')>()), fetchForwardFee }))
 vi.mock('../lib/clients', () => ({ arcClient: {} }))
@@ -36,8 +40,8 @@ afterEach(() => {
   balances.eurc = 0n
 })
 
-function renderForm() {
-  const sender: Sender = { kind: 'passkey', address: ACCOUNT, send }
+function renderForm(kind: Sender['kind'] = 'passkey') {
+  const sender: Sender = { kind, address: ACCOUNT, send }
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <MemoryRouter>
@@ -55,6 +59,12 @@ async function fill(amount: string, recipient: string) {
 const submitButton = () => screen.getByRole('button', { name: 'Send' })
 
 describe('AccountWithdraw', () => {
+  // A wallet would send approve and burn as two transactions, so a failed burn could leave an open approval.
+  it('renders nothing for a regular wallet', () => {
+    renderForm('eoa')
+    expect(screen.queryByRole('heading', { name: 'Send money out' })).toBeNull()
+  })
+
   // The account's own address would only burn gas, and spending the gas buffer would strand the account.
   it('refuses own address and gas-buffer overdraw', async () => {
     balances.usdc = 1_000000n
@@ -149,12 +159,64 @@ describe('AccountWithdraw', () => {
     expect((screen.getByRole('radio', { name: /Fast/ }) as HTMLInputElement).checked).toBe(true)
     await fill('2', FRIEND)
     await screen.findByText('At least 1.85 USDC')
+    // The quote at send time is lower than the preview, so the burn must carry the fresh fee, not the preview's.
+    fetchForwardFee.mockResolvedValueOnce({ maxFee: 120_000n, protocolFee: 0n, forwardFee: 120_000n })
     await userEvent.click(submitButton())
     await screen.findByText(/It arrives on Base in about a minute/)
     expect(fetchForwardFee).toHaveBeenLastCalledWith(26, 6, 2_000000n, true)
     expect(send).toHaveBeenCalledTimes(1)
     const [calls] = send.mock.calls[0]!
     expect(calls.map((c) => c.to)).toEqual([TOKENS.USDC.address, TOKEN_MESSENGER_V2])
+    expect(decodeFunctionData({ abi: erc20Abi, data: calls[0]!.data }).args).toEqual([TOKEN_MESSENGER_V2, 2_000000n])
+    expect(decodeFunctionData({ abi: messengerAbi, data: calls[1]!.data }).args).toEqual([
+      2_000000n,
+      6,
+      pad(FRIEND, { size: 32 }),
+      TOKENS.USDC.address,
+      zeroHash,
+      120_000n,
+      1000,
+      FORWARD_HOOK_DATA,
+    ])
+  })
+
+  // A mixed-case address carries a checksum. If it does not match, a character was mistyped, and a burn to
+  // another chain would mint to that wrong address with no way back.
+  it('refuses a recipient with a bad checksum and accepts all lowercase', async () => {
+    balances.usdc = 10_000000n
+    renderForm()
+    await screen.findByText(/You have 10.00 USDC/)
+    await userEvent.selectOptions(screen.getByLabelText('Send to'), 'Base')
+    await fill('2', '0xaBcdEFABcdEFabcdEfAbCdefabcdeFABcDEFabCD')
+    expect(screen.getByText('This address has a typo. Check it and paste it again.')).toBeTruthy()
+    expect((submitButton() as HTMLButtonElement).disabled).toBe(true)
+    await userEvent.click(submitButton())
+    expect(send).not.toHaveBeenCalled()
+
+    await userEvent.clear(screen.getByLabelText('Recipient'))
+    await userEvent.type(screen.getByLabelText('Recipient'), '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd')
+    expect(screen.queryByText('This address has a typo. Check it and paste it again.')).toBeNull()
+    await screen.findByText('At least 1.85 USDC')
+    await userEvent.click(submitButton())
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+    const [calls] = send.mock.calls[0]!
+    expect(decodeFunctionData({ abi: messengerAbi, data: calls[1]!.data }).args[2]).toBe(
+      pad('0xabcdefabcdefabcdefabcdefabcdefabcdefabcd', { size: 32 }),
+    )
+  })
+
+  // A stale balance after a send would let the next send be built on money that already left.
+  it('reads the balance again after a send', async () => {
+    balances.usdc = 10_000000n
+    renderForm()
+    await screen.findByText(/You have 10.00 USDC/)
+    await fill('2', FRIEND)
+    const readsBefore = fetchAccountBalances.mock.calls.length
+    balances.usdc = 8_000000n
+    await userEvent.click(submitButton())
+    await screen.findByText('Your money was sent.')
+    await screen.findByText(/You have 8.00 USDC/)
+    expect(fetchAccountBalances.mock.calls.length).toBeGreaterThan(readsBefore)
   })
 
   it('stops when the fee went up between the preview and the send', async () => {

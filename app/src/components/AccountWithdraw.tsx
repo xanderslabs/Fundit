@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
-import { type Address, formatUnits, isAddress, isAddressEqual, zeroAddress } from 'viem'
+import { type Address, formatUnits, isAddressEqual, zeroAddress } from 'viem'
 import { ARC_DOMAIN, CCTP_CHAINS, CHAIN_LABELS, PASSKEY_GAS_BUFFER, TOKENS, type TokenSymbol } from '../config'
 import { buildAccountSendCalls, maxAccountSend, OWN_ADDRESS, TOO_SMALL } from '../lib/accountWithdraw'
 import { chainByKey } from '../lib/bridge'
@@ -12,6 +12,7 @@ import { formatAmount, parseAmount } from '../lib/format'
 import { fetchForwardFee } from '../lib/iris'
 import { destDomain, type PayoutDest } from '../lib/payout'
 import type { Sender } from '../lib/sender'
+import { ADDRESS_TYPO, parseTypedAddress } from '../lib/validate'
 import { TxStatus, useTx } from './TxStatus'
 
 const FEE_CHANGED = 'The transfer fee changed. Check the new amount and confirm again.'
@@ -19,7 +20,13 @@ const QUOTE_DEBOUNCE_MS = 400
 
 // Sends USDC or EURC out of a Fundit account, on Arc or as USDC to another chain. The organiser's payout form
 // in Manage is the model: the same fee preview, a fresh quote at send time, and Fast as the default.
+// Passkey senders only: they send approve and burn as one user operation. A wallet would send them as two
+// transactions, and a failed burn would leave an open approval behind.
 export function AccountWithdraw({ sender }: { sender: Sender }) {
+  return sender.kind === 'passkey' ? <SendOutForm sender={sender} /> : null
+}
+
+function SendOutForm({ sender }: { sender: Sender }) {
   const account = sender.address
   const queryClient = useQueryClient()
   const [symbol, setSymbol] = useState<TokenSymbol>('USDC')
@@ -64,12 +71,11 @@ export function AccountWithdraw({ sender }: { sender: Sender }) {
   const overMax = !overHeld && amount !== null && max !== undefined && amount > max
 
   const recipientRaw = recipientText.trim()
+  const typed = recipientRaw === '' ? null : parseTypedAddress(recipientRaw)
   let recipientError: string | undefined
-  if (recipientRaw !== '') {
-    if (!isAddress(recipientRaw, { strict: false })) recipientError = 'Enter a valid address (0x and 40 characters).'
-    else if (isAddressEqual(recipientRaw, zeroAddress) || isAddressEqual(recipientRaw, account)) recipientError = OWN_ADDRESS
-  }
-  const recipient = recipientRaw === '' || recipientError ? null : (recipientRaw as Address)
+  if (typed && !typed.ok) recipientError = typed.error === 'typo' ? ADDRESS_TYPO : 'Enter a valid address (0x and 40 characters).'
+  else if (typed?.ok && (isAddressEqual(typed.address, zeroAddress) || isAddressEqual(typed.address, account))) recipientError = OWN_ADDRESS
+  const recipient: Address | null = typed?.ok && !recipientError ? typed.address : null
 
   const [quoteAmount, setQuoteAmount] = useState<bigint | null>(null)
   useEffect(() => {

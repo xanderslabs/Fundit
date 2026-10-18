@@ -1,7 +1,19 @@
-import { type Address, isAddress, isAddressEqual, zeroAddress } from 'viem'
+import { type Address, getAddress, isAddress, isAddressEqual, zeroAddress } from 'viem'
 import { TOKENS, type TokenSymbol } from '../config'
 import { parseAmount } from './format'
 import { safeHttpsUrl } from './urls'
+
+export const ADDRESS_TYPO = 'This address has a typo. Check it and paste it again.'
+
+// For an address a person typed or pasted. Mixed case is an EIP-55 checksum, and a mismatch almost always
+// means a mistyped character, so it is a 'typo'. One case throughout carries no checksum and is accepted.
+// The address comes back checksummed, which viem's encoders need.
+export function parseTypedAddress(raw: string): { ok: true; address: Address } | { ok: false; error: 'invalid' | 'typo' } {
+  if (!isAddress(raw, { strict: false })) return { ok: false, error: 'invalid' }
+  const hex = raw.slice(2)
+  if (hex !== hex.toLowerCase() && hex !== hex.toUpperCase() && !isAddress(raw)) return { ok: false, error: 'typo' }
+  return { ok: true, address: getAddress(raw) }
+}
 
 // Limits from contracts/src/MetadataLib.sol. All are UTF-8 bytes, as the contract counts them.
 export const MAX_TITLE = 100
@@ -80,12 +92,13 @@ export function validateCampaign(input: CampaignInput): CampaignResult {
   let backup: Address = zeroAddress
   const rawBackup = input.backup.trim()
   if (rawBackup !== '') {
-    if (!isAddress(rawBackup, { strict: false })) {
-      errors.backup = 'Enter a valid address (0x and 40 characters), or leave it empty.'
-    } else if (input.sender && isAddressEqual(rawBackup, input.sender)) {
+    const parsed = parseTypedAddress(rawBackup)
+    if (!parsed.ok) {
+      errors.backup = parsed.error === 'typo' ? ADDRESS_TYPO : 'Enter a valid address (0x and 40 characters), or leave it empty.'
+    } else if (input.sender && isAddressEqual(parsed.address, input.sender)) {
       errors.backup = 'Use a different address from the wallet you are connected with.'
     } else {
-      backup = rawBackup
+      backup = parsed.address
     }
   }
 

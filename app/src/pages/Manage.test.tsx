@@ -172,6 +172,28 @@ describe('Manage', () => {
     expect(decode(calls[0]!.data).args).toEqual([50_000000n, 26, pad(CREATOR, { size: 32 }), 0n, 0, '0x'])
   })
 
+  // A cross-chain payout pads the recipient without checking it, so a typo would mint to the wrong address.
+  it('refuses a payout recipient with a bad checksum', async () => {
+    state.view = view()
+    const send = fakeSender()
+    renderPage()
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText('Amount'), '50')
+    await user.clear(screen.getByLabelText('Recipient'))
+    await user.type(screen.getByLabelText('Recipient'), '0xaBcdEFABcdEFabcdEfAbCdefabcdeFABcDEFabCD')
+    expect(screen.getByText('This address has a typo. Check it and paste it again.')).toBeTruthy()
+    expect(button('Withdraw').disabled).toBe(true)
+    await user.click(button('Withdraw'))
+    expect(send).not.toHaveBeenCalled()
+
+    // All lowercase has no checksum, so it is accepted.
+    await user.clear(screen.getByLabelText('Recipient'))
+    await user.type(screen.getByLabelText('Recipient'), '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd')
+    await user.click(button('Withdraw'))
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+    expect(decode(send.mock.calls[0]![0][0]!.data).args[2]).toBe(pad('0xabcdefabcdefabcdefabcdefabcdefabcdefabcd', { size: 32 }))
+  })
+
   it('blocks an amount above what is available', async () => {
     state.view = view()
     fakeSender()
@@ -372,6 +394,16 @@ describe('Manage', () => {
     await userEvent.setup().click(button('Cancel recovery'))
     await waitFor(() => expect(send).toHaveBeenCalledTimes(1))
     expect(decode(send.mock.calls[0]![0][0]!.data).functionName).toBe('cancelRecovery')
+  })
+
+  // Recovery goes to the backup, so a mistyped backup could take the Fundit away from its organiser.
+  it('refuses a backup address with a bad checksum', async () => {
+    state.view = view()
+    fakeSender()
+    renderPage()
+    await userEvent.setup().type(screen.getByLabelText('New backup address'), '0xaBcdEFABcdEFabcdEfAbCdefabcdeFABcDEFabCD')
+    expect(screen.getByText('This address has a typo. Check it and paste it again.')).toBeTruthy()
+    expect(button('Save backup').disabled).toBe(true)
   })
 
   // setBackup(creator) reverts InvalidBackup, so the form catches it first.

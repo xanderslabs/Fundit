@@ -1,8 +1,10 @@
-import { type Address, encodeFunctionData, isAddressEqual, pad, zeroAddress } from 'viem'
+import { type Address, encodeFunctionData, isAddress, isAddressEqual, pad, zeroAddress } from 'viem'
 import { campaignAbi } from '../abi/campaign'
 import { ARC_DOMAIN, CCTP_CHAINS, CHAIN_LABELS, type CctpChainKey, FORWARD_HOOK_DATA } from '../config'
 import type { CampaignView } from './campaigns'
+import { PlainError } from './errors'
 import type { Call } from './sender'
+import { ADDRESS_TYPO } from './validate'
 
 export type PayoutDest = 'Arc' | CctpChainKey
 
@@ -31,6 +33,8 @@ export function buildWithdrawCall(p: {
   fee?: { maxFee: bigint }
   fast: boolean
 }): Call {
+  // Strict: pad() does not check the checksum, so a mistyped address would otherwise get the payout.
+  if (!isAddress(p.recipient)) throw new PlainError(ADDRESS_TYPO)
   if (isAddressEqual(p.recipient, zeroAddress)) throw new Error('Enter a recipient address.')
   // On Arc the contract reverts. On another chain no one holds the campaign's address, so the money is lost.
   if (isAddressEqual(p.recipient, p.campaign)) throw new Error('Choose a different recipient.')
