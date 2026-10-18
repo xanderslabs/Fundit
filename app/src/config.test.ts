@@ -3,7 +3,7 @@ import headers from '../public/_headers?raw'
 import redirects from '../public/_redirects?raw'
 import { campaignAbi } from './abi/campaign'
 import { factoryAbi } from './abi/factory'
-import { ARC_RPC_FALLBACKS, ARC_RPC_URL, CCTP_CHAINS, cctpChainNames, EXTERNAL_HOSTS, FORWARD_HOOK_DATA, NETWORK, NETWORKS, networkHosts, TOKENS } from './config'
+import { ARC_RPC_FALLBACKS, ARC_RPC_URL, CCTP_CHAINS, cctpChainNames, EXTERNAL_HOSTS, FORWARD_HOOK_DATA, NETWORK, NETWORKS, networkHosts, storageKey, TOKENS } from './config'
 import { connectSrcAllows } from './deployConfig'
 
 describe('config', () => {
@@ -139,6 +139,36 @@ describe('VITE_ARC_NETWORK=testnet', () => {
       vi.unstubAllEnvs()
       vi.resetModules()
     }
+  })
+})
+
+// localStorage is per origin, and one dev origin can be rebuilt for either network. Mainnet keys must keep their
+// names, or live users would lose their session and pending records. Testnet keys must never equal a mainnet key.
+describe('storageKey', () => {
+  const names = ['passkey', 'backup.', 'backup.pending.', 'recovery.pending.', 'recovery.tried.', 'pendingBridges']
+
+  it('keeps the original mainnet key names', () => {
+    expect(names.map((n) => storageKey(n, 'mainnet'))).toEqual([
+      'fundit.passkey',
+      'fundit.backup.',
+      'fundit.backup.pending.',
+      'fundit.recovery.pending.',
+      'fundit.recovery.tried.',
+      'fundit.pendingBridges',
+    ])
+  })
+
+  it('gives testnet its own keys that no mainnet key or prefix can match', () => {
+    const mainnet = names.map((n) => storageKey(n, 'mainnet'))
+    for (const n of names) {
+      const key = storageKey(n, 'testnet')
+      expect(key).toBe(`fundit.testnet.${n}`)
+      expect(mainnet.some((m) => key.startsWith(m) || m.startsWith(key))).toBe(false)
+    }
+  })
+
+  it('uses the build network by default', () => {
+    expect(storageKey('passkey')).toBe(storageKey('passkey', NETWORK.name))
   })
 })
 

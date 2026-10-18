@@ -1,12 +1,12 @@
 import { type Address, type Chain, createPublicClient, type EIP1193Provider, getAddress, type Hex, http, isAddress, isHex, parseUnits, UserRejectedRequestError } from 'viem'
-import { ARC_CHAIN_ID, ARC_DOMAIN, ARC_RPC_URL, NETWORK, CCTP_CHAINS, CHAIN_LABELS, type CctpChain, type CctpChainKey } from '../config'
+import { ARC_CHAIN_ID, ARC_DOMAIN, ARC_RPC_URL, NETWORK, CCTP_CHAINS, CHAIN_LABELS, type CctpChain, type CctpChainKey, storageKey } from '../config'
 import { isUserRejection } from './errors'
 
 // One localStorage key holds everything that must survive a reload: cross-chain transfers on their way
 // to Arc (with a burn hash, or only 'submitted' when the wallet has sent but no burn hash is known yet),
 // at most one unconfirmed Arc donation per campaign, and payouts from Arc to another chain. Storage can throw (private windows,
 // blocked site data), so every access is wrapped and a failure only loses the reminder, never money.
-const KEY = 'fundit.pendingBridges'
+const KEY = storageKey('pendingBridges')
 // Fired on window after every change, so open trackers re-read the store.
 export const PENDING_EVENT = 'fundit:pending'
 // Entries older than this are dropped on read, so stale reminders do not pile up.

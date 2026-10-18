@@ -50,8 +50,19 @@ export type NetworkConfig = {
   chainLabels: Record<'Arc' | CctpChainKey, string>
 }
 
-// Vite fills import.meta.env. The e2e suite also reads NETWORKS in Node, where there is none.
-const env = import.meta.env ?? ({} as ImportMetaEnv)
+// Vite fills import.meta.env. The e2e suite also reads NETWORKS in Node, where there is none. Each value is read
+// by name, so the bundle inlines only these values and never the whole env object.
+const env = {
+  PROD: import.meta.env?.PROD ?? false,
+  VITE_ARC_NETWORK: import.meta.env?.VITE_ARC_NETWORK,
+  VITE_ARC_RPC_URL: import.meta.env?.VITE_ARC_RPC_URL,
+  VITE_MAINNET_RPC_URL: import.meta.env?.VITE_MAINNET_RPC_URL,
+  VITE_FACTORY_ADDRESS: import.meta.env?.VITE_FACTORY_ADDRESS,
+  VITE_FACTORY_DEPLOY_BLOCK: import.meta.env?.VITE_FACTORY_DEPLOY_BLOCK,
+  VITE_REOWN_PROJECT_ID: import.meta.env?.VITE_REOWN_PROJECT_ID,
+  VITE_CIRCLE_CLIENT_KEY: import.meta.env?.VITE_CIRCLE_CLIENT_KEY,
+  VITE_CROSSCHAIN: import.meta.env?.VITE_CROSSCHAIN,
+}
 
 // Free public RPCs. Every host here must also be in public/_headers connect-src.
 export const MAINNET_RPC_URL: string = env.VITE_MAINNET_RPC_URL || 'https://ethereum-rpc.publicnode.com'
@@ -121,6 +132,13 @@ export const NETWORKS: Record<ArcNetwork, NetworkConfig> = {
 
 // The network this build runs on (VITE_ARC_NETWORK, mainnet by default).
 export const NETWORK: NetworkConfig = NETWORKS[parseArcNetwork(env.VITE_ARC_NETWORK)]
+
+// The localStorage key for a fundit.<name> record on this network. Mainnet keeps the original names, so live
+// sessions and pending records carry over. Testnet keys read fundit.testnet.<name>, so a dev origin rebuilt for
+// the other network never sees the first network's session, backup flags or pending transfers.
+export function storageKey(name: string, network: ArcNetwork = NETWORK.name): string {
+  return network === 'mainnet' ? `fundit.${name}` : `fundit.${network}.${name}`
+}
 
 // Backstop for the build guard in deployConfig.ts: a testnet bundle never runs on fundit.fun.
 if (typeof window !== 'undefined' && testnetRefusedOn(NETWORK.name, window.location.hostname)) {

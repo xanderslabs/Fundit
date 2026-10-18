@@ -9,6 +9,7 @@ import {
   MODULAR_WALLETS_URL,
   NETWORK,
   PASSKEY_GAS_BUFFER,
+  storageKey,
   FALLBACK_GAS_DEPLOYED,
   FALLBACK_GAS_NEW_ACCOUNT,
   TOKENS,
@@ -30,7 +31,7 @@ const ARC_CHAIN_HEX = numberToHex(ARC_CHAIN.id)
 
 // Only the address and credential id are kept. Storage can throw (private windows, blocked site data),
 // so every access is wrapped; without storage the person just logs in again.
-const KEY = 'fundit.passkey'
+const KEY = storageKey('passkey')
 export const PASSKEY_EVENT = 'fundit:passkey'
 
 export type PasskeySession = { address: Address; username?: string }
@@ -340,9 +341,9 @@ export function storedPasskeySender(stored: StoredPasskey): Sender {
 // Account safety. Losing every passkey loses the account, so a new account is asked to add a recovery key
 // (Circle's recovery support: the key's address becomes an extra owner of the account). syncBackupFromChain
 // reads the owners on Arc, and "saved" is cached per account in this browser.
-const BACKUP_KEY = 'fundit.backup.'
+const BACKUP_KEY = storageKey('backup.')
 // A backup user operation that was sent but not confirmed yet. Only the account and the hash, never the words.
-const PENDING_KEY = 'fundit.backup.pending.'
+const PENDING_KEY = storageKey('backup.pending.')
 // The account created on this page load, until the person picks Later. Never stored.
 let newAccount: string | null = null
 // Accounts marked saved on this page load, for when storage throws.
@@ -697,9 +698,9 @@ export async function checkPendingBackup(stored: StoredPasskey): Promise<BackupS
 
 // Recovery with the recovery key. The words stay in memory: they are never stored, logged or sent. Only the
 // key's address, the account address, the new passkey and signatures go out.
-const RECOVERY_PENDING_KEY = 'fundit.recovery.pending.'
+const RECOVERY_PENDING_KEY = storageKey('recovery.pending.')
 // The passkey of a recovery the person started over from. Never the words. recoverWithPhrase looks for it on chain.
-const RECOVERY_TRIED_KEY = 'fundit.recovery.tried.'
+const RECOVERY_TRIED_KEY = storageKey('recovery.tried.')
 const INVALID_PHRASE = "Those words don't form a valid recovery key. Check the order and spelling."
 
 // publicKey is the new passkey's (x and y, as Circle serializes it), to find it among the owners after Start over.

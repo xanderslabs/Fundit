@@ -91,6 +91,26 @@ describe('pending store', () => {
     expect(pendingArc(CAMPAIGN)).toBeNull()
   })
 
+  // Testnet entries on domains 0 and 6 look valid on mainnet, which would then poll mainnet Iris for them.
+  it('keeps testnet entries under their own key, apart from mainnet ones', async () => {
+    const entry = { kind: 'arc', campaign: CAMPAIGN, hash: BURN, approve: false, createdAt: Date.now() }
+    localStorage.setItem(KEY, JSON.stringify([entry]))
+    vi.stubEnv('VITE_ARC_NETWORK', 'testnet')
+    vi.resetModules()
+    try {
+      const fresh = await import('./bridge')
+      expect(fresh.pendingArc(CAMPAIGN)).toBeNull()
+      localStorage.setItem('fundit.testnet.pendingBridges', JSON.stringify([entry]))
+      expect(fresh.pendingArc(CAMPAIGN)).toMatchObject({ hash: BURN })
+      fresh.clearPendingArc(CAMPAIGN)
+      expect(localStorage.getItem('fundit.testnet.pendingBridges')).toBeNull()
+      expect(JSON.parse(localStorage.getItem(KEY)!)).toEqual([entry])
+    } finally {
+      vi.unstubAllEnvs()
+      vi.resetModules()
+    }
+  })
+
   it('ignores corrupt or foreign data under the key', () => {
     localStorage.setItem(KEY, '{not json')
     expect(pendingBridges()).toEqual([])
