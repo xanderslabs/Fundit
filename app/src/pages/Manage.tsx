@@ -19,6 +19,7 @@ import { fetchForwardFee } from '../lib/iris'
 import { buildWithdrawCall, destDomain, netAfterWithdrawFee, type PayoutDest, payoutOptions } from '../lib/payout'
 import type { Sender } from '../lib/sender'
 import { ADDRESS_TYPO, byteLength, MAX_DESCRIPTION, MAX_LINKS, MAX_TITLE, parseTypedAddress, validateCampaign } from '../lib/validate'
+import { NotFound } from './NotFound'
 
 const CLOSE_TEXT = 'Closing is permanent. Funds that arrive later can still be withdrawn.'
 const PASSKEY_WARNING = 'Your Fundit account may not exist on that chain. Send to an address you control there.'
@@ -527,14 +528,8 @@ export function Manage() {
   const query = useCampaign(valid ? param : undefined)
   const sender = useSender()
 
-  if (!valid || query.data === 'not-a-campaign') {
-    return (
-      <section className="notice">
-        <h1>Not a Fundit</h1>
-        <p>This address was not created by the Fundit factory.</p>
-      </section>
-    )
-  }
+  if (!valid || query.data === 'not-a-campaign') return <NotFound fundit />
+
   if (query.isError) {
     return (
       <section className="notice">

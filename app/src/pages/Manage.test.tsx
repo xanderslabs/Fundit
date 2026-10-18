@@ -60,10 +60,10 @@ function fakeSender(kind: Sender['kind'] = 'eoa', address = CREATOR, ...results:
   return send
 }
 
-function renderPage(client = new QueryClient()) {
+function renderPage(client = new QueryClient(), path = `/manage/${CAMPAIGN}`) {
   render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[`/manage/${CAMPAIGN}`]}>
+      <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path="/manage/:address" element={<Manage />} />
           <Route path="/c/:address" element={<p>Campaign page</p>} />
@@ -102,6 +102,21 @@ afterEach(() => {
 })
 
 describe('Manage', () => {
+  // A bad Manage link looks the same as a bad Fundit link: the Fundit 404, with ways back into the app.
+  it('shows the Fundit 404 for an address the factory did not create', async () => {
+    state.view = 'not-a-campaign' as unknown as CampaignView
+    renderPage()
+    expect(await screen.findByRole('heading', { name: "This Fundit doesn't exist or the link is wrong." })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Explore Fundits' })).toBeTruthy()
+    expect(screen.queryByText('Not a Fundit')).toBeNull()
+  })
+
+  it('shows the Fundit 404 for a path that is not an address', () => {
+    renderPage(new QueryClient(), '/manage/not-an-address')
+    expect(screen.getByRole('heading', { name: "This Fundit doesn't exist or the link is wrong." })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Go home' })).toBeTruthy()
+  })
+
   // Only the organiser can sign these calls. Anyone else would only meet reverts, so they go to the public page.
   it('sends a connected non-creator to the campaign page', async () => {
     state.view = view()
