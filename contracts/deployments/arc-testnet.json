@@ -1,0 +1,26 @@
+{
+  "chainId": 5042002,
+  "network": "Arc testnet",
+  "deployedAt": 1792341770,
+  "deployBlock": 67870064,
+  "deployTx": "0xbf0bbbbb106dbca7294a4e72a3ab1c153519b6c1269589684a45f55aaf80a728",
+  "deployer": "0x3552E9c14C7b6050839009A5B160A4446a1e916D",
+  "contracts": {
+    "CampaignFactory": "0x6890D40a9A472D0d05aDb5938D85B07059ad54ab",
+    "CampaignImplementation": "0xC7109CAAA5375EE740b95a3DeE52c4C92A02Ba8E"
+  },
+  "constructorArgs": {
+    "owner": "0x3552E9c14C7b6050839009A5B160A4446a1e916D",
+    "treasury": "0x3552E9c14C7b6050839009A5B160A4446a1e916D",
+    "usdc": "0x3600000000000000000000000000000000000000",
+    "eurc": "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a",
+    "tokenMessenger": "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA",
+    "donationFeeBps": 100,
+    "withdrawFeeBps": 100,
+    "eurcPayoutDomains": []
+  },
+  "explorer": {
+    "factory": "https://explorer.testnet.arc.io/address/0x6890D40a9A472D0d05aDb5938D85B07059ad54ab",
+    "deployTx": "https://explorer.testnet.arc.io/tx/0xbf0bbbbb106dbca7294a4e72a3ab1c153519b6c1269589684a45f55aaf80a728"
+  }
+}
