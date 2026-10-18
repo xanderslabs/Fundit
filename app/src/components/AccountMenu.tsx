@@ -29,7 +29,7 @@ type SignInProps = {
   onStart?: () => void
   // Runs when the sign-in dialog closes without a sign-in (Escape, a click on the backdrop, or Close).
   onDismiss?: () => void
-  // Runs after a passkey sign-in. The top bar sends a new passkey user to fund their wallet.
+  // Runs after a passkey sign-in. The top bar sends a new passkey user to add money to their account.
   onPasskeyDone?: () => void
   buttonRef?: Ref<HTMLButtonElement>
 }
@@ -264,7 +264,7 @@ export function AccountControl() {
 
   const address = choice.active === 'passkey' ? session?.address : choice.active === 'external' ? choice.external : null
   if (!address) {
-    return <SignInButton buttonRef={signIn} onPasskeyDone={() => navigate('/fund')} />
+    return <SignInButton buttonRef={signIn} onPasskeyDone={() => navigate('/add-money')} />
   }
   return (
     <>
@@ -367,8 +367,8 @@ function AccountMenu({ address, onSignedOut }: { address: Address; onSignedOut: 
             </li>
             {PASSKEYS_ENABLED && session && (
               <li role="none">
-                <Link role="menuitem" tabIndex={-1} to="/fund" onClick={() => close(false)}>
-                  Passkey wallet
+                <Link role="menuitem" tabIndex={-1} to="/add-money" onClick={() => close(false)}>
+                  Add money
                 </Link>
               </li>
             )}

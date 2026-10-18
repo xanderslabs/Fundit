@@ -21,6 +21,10 @@ vi.mock('../lib/campaigns', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/campaigns')>()),
   myCampaigns: () => state.mine ?? new Promise(() => {}),
 }))
+vi.mock('../lib/deposit', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/deposit')>()),
+  fetchAccountBalances: async () => ({ usdc: 12_500000n, eurc: 3_000000n }),
+}))
 vi.mock('../hooks/useActivity', () => ({ blockTimes: async () => new Map() }))
 vi.mock('../hooks/useName', () => ({ useName: () => ({ data: undefined }) }))
 const backup = vi.hoisted(() => ({ needed: false }))
@@ -142,5 +146,19 @@ describe('Profile', () => {
     expect(await screen.findByText('Given anonymously')).toBeTruthy()
     expect(screen.getByText('good luck')).toBeTruthy()
     expect(document.body.textContent).not.toContain('[anon]')
+  })
+
+  // A passkey account only has the money that was added to it, so My page shows what is there and how to add more.
+  it('shows the Fundit account balance and an Add money button for a passkey account', async () => {
+    state.sender = { kind: 'passkey', address: '0x00000000000000000000000000000000000000cC', send: vi.fn() }
+    renderProfile()
+    expect(await screen.findByText('12.50 USDC and 3.00 EURC')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/add-money')
+  })
+
+  it('shows no Add money button for a regular wallet', () => {
+    state.sender = { kind: 'eoa', address: '0x1111111111111111111111111111111111111111', send: vi.fn() }
+    renderProfile()
+    expect(screen.queryByRole('link', { name: 'Add money' })).toBeNull()
   })
 })

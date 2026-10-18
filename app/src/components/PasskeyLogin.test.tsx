@@ -256,7 +256,7 @@ describe('Account menu with a passkey session', () => {
     expect(setActive).toHaveBeenCalledWith('passkey')
   })
 
-  it('shows no switch with only the passkey, and keeps the spec order around the passkey wallet link', async () => {
+  it('shows no switch with only the passkey, and keeps the spec order around the Add money link', async () => {
     state.session = { address: PASSKEY, credentialId: 'cred-1' }
     renderControl()
     await openMenu('0x0000...00cc')
@@ -264,9 +264,17 @@ describe('Account menu with a passkey session', () => {
     expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual([
       'Start a Fundit',
       'My page',
-      'Passkey wallet',
+      'Add money',
       'Sign out',
     ])
+    expect(screen.getByRole('menuitem', { name: 'Add money' }).getAttribute('href')).toBe('/add-money')
+  })
+
+  it('has no Add money item for a connected wallet alone', async () => {
+    state.external = EXTERNAL
+    renderControl()
+    await openMenu('0x1111...1111')
+    expect(screen.queryByRole('menuitem', { name: 'Add money' })).toBeNull()
   })
 
   // Signing out ends every session this browser holds, so nobody else can act as this person afterwards.

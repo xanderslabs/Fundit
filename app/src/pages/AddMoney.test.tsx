@@ -1,0 +1,211 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router'
+import { type Address, decodeFunctionData, type Hex, UserRejectedRequestError } from 'viem'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { erc20Abi } from '../abi/erc20'
+import { ARC_CHAIN_ID, TOKENS } from '../config'
+import type { WalletChoice } from '../hooks/useSender'
+import { AddMoney } from './AddMoney'
+
+const ACCOUNT = '0x00000000000000000000000000000000000000cc' as Address
+const EXTERNAL = '0x1111111111111111111111111111111111111111' as Address
+const HASH = `0x${'1'.repeat(64)}` as Hex
+
+const flags = vi.hoisted(() => ({ crosschain: false }))
+vi.mock('../config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../config')>()),
+  get CROSSCHAIN_ENABLED() {
+    return flags.crosschain
+  },
+}))
+
+const state = vi.hoisted(() => ({ external: null as Address | null, balances: new Map<string, { usdc: bigint; eurc: bigint }>() }))
+const passkeySend = vi.hoisted(() => vi.fn())
+vi.mock('../lib/passkey', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/passkey')>()),
+  usePasskeySession: () => ({ address: '0x00000000000000000000000000000000000000cc', credentialId: 'cred-1' }),
+  storedPasskeySender: () => ({ kind: 'passkey', address: '0x00000000000000000000000000000000000000cc', send: passkeySend }),
+}))
+// The passkey is the active wallet, with a regular wallet connected next to it.
+vi.mock('../hooks/useSender', () => ({
+  useWalletChoice: (): WalletChoice => ({
+    both: state.external !== null,
+    active: 'passkey',
+    external: state.external,
+    setActive: () => {},
+  }),
+}))
+const fetchAccountBalances = vi.hoisted(() =>
+  vi.fn(async (_client: unknown, who: Address) => state.balances.get(who.toLowerCase()) ?? { usdc: 0n, eurc: 0n }),
+)
+vi.mock('../lib/deposit', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/deposit')>()),
+  fetchAccountBalances,
+}))
+
+const core = vi.hoisted(() => ({ getChainId: vi.fn(), switchChain: vi.fn(), sendTransaction: vi.fn() }))
+vi.mock('@wagmi/core', () => core)
+const arc = vi.hoisted(() => ({ estimateGas: vi.fn(), waitForTransactionReceipt: vi.fn(), getTransaction: vi.fn(), call: vi.fn() }))
+vi.mock('../lib/clients', () => ({ arcClient: arc }))
+const openWallet = vi.hoisted(() => vi.fn())
+vi.mock('wagmi', () => ({ useConfig: () => ({}), useConnection: () => ({ isConnected: false }) }))
+vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: openWallet }) }))
+
+beforeEach(() => {
+  core.getChainId.mockReturnValue(ARC_CHAIN_ID)
+  core.sendTransaction.mockResolvedValue(HASH)
+  arc.estimateGas.mockResolvedValue(50_000n)
+  arc.waitForTransactionReceipt.mockResolvedValue({ transactionHash: HASH, status: 'success', blockNumber: 1n, logs: [] })
+})
+
+afterEach(() => {
+  cleanup()
+  vi.clearAllMocks()
+  localStorage.clear()
+  flags.crosschain = false
+  state.external = null
+  state.balances.clear()
+})
+
+function renderPage() {
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter>
+        <AddMoney />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+}
+
+async function fillDeposit(amount: string) {
+  const user = userEvent.setup()
+  await screen.findByText(/^Your wallet holds 10\.00 USDC on Arc\./)
+  await user.type(screen.getByLabelText('Amount'), amount)
+  await user.click(screen.getByRole('button', { name: 'Add to my Fundit account' }))
+}
+
+describe('AddMoney', () => {
+  it('shows the account address, a QR code and a working copy button', async () => {
+    // userEvent.setup() puts in its own clipboard, so the spy goes in after it.
+    const user = userEvent.setup()
+    const writeText = vi.fn(async () => {})
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    renderPage()
+    expect(screen.getByRole('heading', { name: 'Send to your Fundit account' })).toBeTruthy()
+    expect(screen.getByText(ACCOUNT)).toBeTruthy()
+    expect(screen.getByText('Send USDC or EURC on Arc to this address from any wallet or exchange.')).toBeTruthy()
+    expect(await screen.findByRole('img', { name: 'QR code of your Fundit account address' })).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Copy address' }))
+    expect(writeText).toHaveBeenCalledWith(ACCOUNT)
+    expect(screen.getByRole('button', { name: 'Copied' })).toBeTruthy()
+    expect(screen.getByText('Card and bank coming soon.')).toBeTruthy()
+  })
+
+  it('asks to connect a wallet when none is connected, using the wallet modal', async () => {
+    renderPage()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Connect a wallet' }))
+    expect(openWallet).toHaveBeenCalledTimes(1)
+  })
+
+  // Review focus 4: a deposit must never go out on another chain.
+  describe('switches to Arc before sending', () => {
+    it('switches from Base to Arc first, then sends on Arc', async () => {
+      state.external = EXTERNAL
+      state.balances.set(EXTERNAL.toLowerCase(), { usdc: 10_000000n, eurc: 0n })
+      core.getChainId.mockReturnValue(8453)
+      core.switchChain.mockResolvedValue({ id: ARC_CHAIN_ID })
+      renderPage()
+      await fillDeposit('5')
+      await waitFor(() => expect(core.sendTransaction).toHaveBeenCalledTimes(1))
+      expect(core.switchChain).toHaveBeenCalledWith(expect.anything(), { chainId: ARC_CHAIN_ID })
+      expect(core.switchChain.mock.invocationCallOrder[0]!).toBeLessThan(core.sendTransaction.mock.invocationCallOrder[0]!)
+      expect(core.sendTransaction.mock.calls[0]![1].chainId).toBe(ARC_CHAIN_ID)
+    })
+
+    it('sends nothing when the switch is refused', async () => {
+      state.external = EXTERNAL
+      state.balances.set(EXTERNAL.toLowerCase(), { usdc: 10_000000n, eurc: 0n })
+      core.getChainId.mockReturnValue(8453)
+      core.switchChain.mockRejectedValue(new UserRejectedRequestError(new Error('User rejected')))
+      renderPage()
+      await fillDeposit('5')
+      expect(await screen.findByText('You cancelled the request.')).toBeTruthy()
+      expect(core.sendTransaction).not.toHaveBeenCalled()
+      expect(passkeySend).not.toHaveBeenCalled()
+    })
+  })
+
+  // The money comes out of the regular wallet. The passkey account is where it goes, so it must not pay.
+  it('sends with the connected wallet, never the passkey, even when the passkey is active', async () => {
+    state.external = EXTERNAL
+    state.balances.set(EXTERNAL.toLowerCase(), { usdc: 10_000000n, eurc: 0n })
+    renderPage()
+    await fillDeposit('5')
+    await waitFor(() => expect(core.sendTransaction).toHaveBeenCalledTimes(1))
+    const sent = core.sendTransaction.mock.calls[0]![1]
+    expect(sent.account).toBe(EXTERNAL)
+    expect(sent.to).toBe(TOKENS.USDC.address)
+    const decoded = decodeFunctionData({ abi: erc20Abi, data: sent.data })
+    expect(decoded.args).toEqual([ACCOUNT, 5_000000n])
+    expect(passkeySend).not.toHaveBeenCalled()
+  })
+
+  it('refuses an amount above the wallet balance on Arc', async () => {
+    state.external = EXTERNAL
+    state.balances.set(EXTERNAL.toLowerCase(), { usdc: 10_000000n, eurc: 0n })
+    renderPage()
+    await fillDeposit('11')
+    expect(screen.getByText('That is more than this wallet holds on Arc.')).toBeTruthy()
+    expect(core.sendTransaction).not.toHaveBeenCalled()
+  })
+
+  // Success is shown only after the receipt, and the account balance shown then is the new one.
+  it('refreshes balances after a successful deposit', async () => {
+    state.external = EXTERNAL
+    state.balances.set(EXTERNAL.toLowerCase(), { usdc: 10_000000n, eurc: 0n })
+    renderPage()
+    expect(await screen.findByText('0.00 USDC and 0.00 EURC')).toBeTruthy()
+    arc.waitForTransactionReceipt.mockImplementation(async () => {
+      state.balances.set(ACCOUNT.toLowerCase(), { usdc: 5_000000n, eurc: 0n })
+      return { transactionHash: HASH, status: 'success', blockNumber: 1n, logs: [] }
+    })
+    await fillDeposit('5')
+    expect(await screen.findByText('Money added to your Fundit account.')).toBeTruthy()
+    expect(await screen.findByText('5.00 USDC and 0.00 EURC')).toBeTruthy()
+  })
+
+  it('leaves out Add from another chain when cross-chain is off', () => {
+    renderPage()
+    expect(screen.queryByRole('heading', { name: 'Add from another chain' })).toBeNull()
+  })
+
+  it('offers Add from another chain when cross-chain is on', () => {
+    flags.crosschain = true
+    renderPage()
+    expect(screen.getByRole('heading', { name: 'Add from another chain' })).toBeTruthy()
+  })
+
+  // A transfer started before the flag went off may still arrive. Its row stays in view.
+  it('still tracks a transfer on its way to the account when cross-chain is off', () => {
+    localStorage.setItem(
+      'fundit.pendingBridges',
+      JSON.stringify([{ kind: 'submitted', id: 's-1', campaign: ACCOUNT, srcDomain: 6, amount: '25', createdAt: Date.now() }]),
+    )
+    renderPage()
+    expect(screen.getByText(/25 USDC from Base: Submitted/)).toBeTruthy()
+  })
+
+  // A second bridge while the first is still on its way could send the money twice, so the form waits.
+  it('blocks a new transfer from another chain while one to the account is on its way', () => {
+    flags.crosschain = true
+    localStorage.setItem(
+      'fundit.pendingBridges',
+      JSON.stringify([{ kind: 'submitted', id: 's-1', campaign: ACCOUNT, srcDomain: 6, amount: '25', createdAt: Date.now() }]),
+    )
+    renderPage()
+    expect(screen.getByText('A transfer to your Fundit account is still on its way. Wait for it to arrive before you send another.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Bridge USDC' })).toBeNull()
+  })
+})

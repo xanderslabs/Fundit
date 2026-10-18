@@ -99,6 +99,14 @@ describe('AccountControl signed in', () => {
     expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Start a Fundit' }))
   })
 
+  // The Add money page only exists with passkeys on, so the menu must not link to it otherwise.
+  it('has no Add money item with passkeys off, even with a passkey session', async () => {
+    state.session = { address: '0x00000000000000000000000000000000000000cC', credentialId: 'cred-1' }
+    render(ui())
+    await userEvent.setup().click(screen.getByRole('button', { name: '0x0000...00cC' }))
+    expect(screen.queryByRole('menuitem', { name: 'Add money' })).toBeNull()
+  })
+
   it('moves between items with the arrow keys, wrapping at the ends', async () => {
     state.external = EXTERNAL
     render(ui())

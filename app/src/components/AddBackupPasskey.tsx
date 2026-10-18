@@ -247,7 +247,7 @@ export function AddBackupPasskey({ stored, onLater, onDone, headingId, onGuardCh
     body = (
       <p>
         Add a little money first. The backup costs a small network fee.{' '}
-        <Link to="/fund" onClick={onLater}>
+        <Link to="/add-money" onClick={onLater}>
           Add money
         </Link>
       </p>

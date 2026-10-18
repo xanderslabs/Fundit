@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { Route, Routes } from 'react-router'
+import { Navigate, Route, Routes } from 'react-router'
 import { Layout } from './components/Layout'
 import { PASSKEYS_ENABLED } from './config'
 import { CampaignPage } from './pages/CampaignPage'
@@ -13,7 +13,7 @@ import { Profile } from './pages/Profile'
 import { Terms } from './pages/Terms'
 
 // Only passkey users need this page, so it loads on demand.
-const FundWallet = lazy(() => import('./pages/FundWallet').then((m) => ({ default: m.FundWallet })))
+const AddMoney = lazy(() => import('./pages/AddMoney').then((m) => ({ default: m.AddMoney })))
 const Recover = lazy(() => import('./pages/Recover').then((m) => ({ default: m.Recover })))
 
 export function App() {
@@ -27,14 +27,16 @@ export function App() {
         <Route path="manage/:address" element={<Manage />} />
         {PASSKEYS_ENABLED && (
           <Route
-            path="fund"
+            path="add-money"
             element={
               <Suspense fallback={<p className="muted">Loading...</p>}>
-                <FundWallet />
+                <AddMoney />
               </Suspense>
             }
           />
         )}
+        {/* The old address of the Add money page. */}
+        {PASSKEYS_ENABLED && <Route path="fund" element={<Navigate to="/add-money" replace />} />}
         {PASSKEYS_ENABLED && (
           <Route
             path="recover"

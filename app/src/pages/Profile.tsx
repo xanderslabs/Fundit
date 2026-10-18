@@ -16,6 +16,7 @@ import { readMessage } from '../lib/anon'
 import { myCampaigns } from '../lib/campaigns'
 import { useBackupNeeded, usePasskeySession } from '../lib/passkey'
 import { arcClient } from '../lib/clients'
+import { fetchAccountBalances } from '../lib/deposit'
 import { formatAmount } from '../lib/format'
 
 const EXPLORER_URL = arc.blockExplorers.default.url
@@ -43,6 +44,32 @@ function DonationRow({ item, time }: { item: DonationItem; time: bigint | undefi
         {time === undefined ? `Block ${item.blockNumber}` : new Date(Number(time) * 1000).toLocaleString()}
       </a>
     </li>
+  )
+}
+
+// A Fundit account only holds what was added to it, so My page shows the balance and the way to add more.
+function AccountBalance({ address }: { address: Address }) {
+  const balances = useQuery({
+    queryKey: ['account-balances', address.toLowerCase()],
+    queryFn: () => fetchAccountBalances(arcClient, address),
+    staleTime: 15_000,
+  })
+  return (
+    <section className="section profile-balance" aria-label="Fundit account balance">
+      <p>
+        Fundit account balance:{' '}
+        <strong>
+          {balances.data !== undefined
+            ? `${formatAmount(balances.data.usdc, 'USDC')} and ${formatAmount(balances.data.eurc, 'EURC')}`
+            : balances.isError
+              ? 'Could not read it'
+              : 'Loading...'}
+        </strong>
+      </p>
+      <Link to="/add-money" className="btn btn-outline">
+        Add money
+      </Link>
+    </section>
   )
 }
 
@@ -147,6 +174,7 @@ export function Profile() {
           Start a Fundit
         </Link>
       </section>
+      {sender.kind === 'passkey' && <AccountBalance address={sender.address} />}
       {passkey && backupNeeded && (
         <section className="section notice">
           <AddBackupPasskey stored={passkey} />
