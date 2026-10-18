@@ -19,7 +19,7 @@ export function CampaignCard({ view, featured = false }: Props) {
           <StatusBadge summary={summary} />
           <span className="badge badge-token">{symbol}</span>
         </div>
-        <h3 className="card-title">{summary.meta.title || 'Untitled fundraiser'}</h3>
+        <h3 className="card-title">{summary.meta.title || 'Untitled Fundit'}</h3>
         <p className="card-by muted">
           by <Name address={summary.creator} link={false} avatar={false} />
         </p>

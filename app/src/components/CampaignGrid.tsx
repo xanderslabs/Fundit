@@ -2,9 +2,16 @@ import type { ReactNode } from 'react'
 import type { CampaignView } from '../lib/campaigns'
 import { CampaignCard, CardSkeleton } from './CampaignCard'
 
-type Props = { views: CampaignView[] | undefined; loading: boolean; empty: ReactNode; skeletons?: number }
+// action renders below each card, outside the card's link (My page puts a Share button there).
+type Props = {
+  views: CampaignView[] | undefined
+  loading: boolean
+  empty: ReactNode
+  skeletons?: number
+  action?: (view: CampaignView) => ReactNode
+}
 
-export function CampaignGrid({ views, loading, empty, skeletons = 6 }: Props) {
+export function CampaignGrid({ views, loading, empty, skeletons = 6, action }: Props) {
   if (loading) {
     return (
       <div className="grid" aria-busy="true">
@@ -17,9 +24,16 @@ export function CampaignGrid({ views, loading, empty, skeletons = 6 }: Props) {
   if (!views || views.length === 0) return <div className="empty">{empty}</div>
   return (
     <div className="grid">
-      {views.map((v) => (
-        <CampaignCard key={v.address} view={v} />
-      ))}
+      {views.map((v) =>
+        action ? (
+          <div key={v.address} className="card-wrap">
+            <CampaignCard view={v} />
+            <div className="card-action">{action(v)}</div>
+          </div>
+        ) : (
+          <CampaignCard key={v.address} view={v} />
+        ),
+      )}
     </div>
   )
 }

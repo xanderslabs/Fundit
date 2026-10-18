@@ -78,7 +78,16 @@ async function fillValid() {
   return user
 }
 
-const submitButton = () => screen.getByRole('button', { name: 'Create fundraiser' })
+// After a create, the page stays here with the new Fundit's link and share options, then opens the Fundit.
+async function expectCreated(user: ReturnType<typeof userEvent.setup>) {
+  expect(await screen.findByRole('heading', { level: 1, name: 'Your Fundit is live' })).toBeTruthy()
+  const go = screen.getByRole('link', { name: 'Go to your Fundit' })
+  expect(go.getAttribute('href')?.toLowerCase()).toBe(`/c/${NEW_CAMPAIGN}`)
+  await user.click(go)
+  expect(await screen.findByText(`Campaign ${NEW_CAMPAIGN}`)).toBeTruthy()
+}
+
+const submitButton = () => screen.getByRole('button', { name: 'Create a Fundit' })
 
 afterEach(() => {
   cleanup()
@@ -92,10 +101,10 @@ describe('Create signed out', () => {
   // Signed out, /create stays put and asks to sign in, so the form appears here once a wallet connects.
   it('shows the sign-in screen and no form', () => {
     renderCreate()
-    expect(screen.getByRole('heading', { level: 1, name: 'Sign in to start a fundraiser' })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: 'Sign in to start a Fundit' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy()
     expect(screen.queryByLabelText('Title')).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Create fundraiser' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Create a Fundit' })).toBeNull()
   })
 
   it('shows the form once signed in, without leaving /create', () => {
@@ -112,7 +121,7 @@ describe('Create signed out', () => {
         </MemoryRouter>
       </QueryClientProvider>,
     )
-    expect(screen.getByRole('heading', { level: 1, name: 'Start a fundraiser' })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: 'Start a Fundit' })).toBeTruthy()
     expect(screen.getByLabelText('Title')).toBeTruthy()
   })
 })
@@ -142,7 +151,7 @@ describe('Create', () => {
     renderCreate()
     const user = await fillValid()
     await user.click(submitButton())
-    expect(await screen.findByText(`Campaign ${NEW_CAMPAIGN}`)).toBeTruthy()
+    await expectCreated(user)
 
     const [calls] = send.mock.calls[0]! as unknown as [{ to: Address; data: Hex }[]]
     expect(calls).toHaveLength(1)
@@ -151,6 +160,18 @@ describe('Create', () => {
     expect(decoded.functionName).toBe('createCampaign')
     expect(decoded.args?.[0]).toBe(TOKENS.USDC.address)
     expect(decoded.args?.[1]).toBe(5_000_000n)
+  })
+
+  // The moment after creating is when the organiser is most likely to share, so the share options show here,
+  // written in the organiser's voice.
+  it('shows the share panel with the creator message after a create', async () => {
+    fakeSender({ status: 'success', hash: HASH, receipt: createdReceipt() })
+    renderCreate()
+    const user = await fillValid()
+    await user.click(submitButton())
+    expect(await screen.findByRole('heading', { name: 'Share this Fundit' })).toBeTruthy()
+    expect(screen.getByText(/^I started a Fundit for Clean water\. Every gift helps: /)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Copy link' })).toBeTruthy()
   })
 
   // A dropped or slow transaction must never look like success.
@@ -187,7 +208,7 @@ describe('Create', () => {
       await user.click(submitButton())
       expect(await screen.findByText(/not confirmed yet/)).toBeTruthy()
       await user.click(screen.getByRole('button', { name: 'Check again' }))
-      expect(await screen.findByText(`Campaign ${NEW_CAMPAIGN}`)).toBeTruthy()
+      await expectCreated(user)
       expect(recheckSpy).toHaveBeenCalledWith(HASH)
     })
 
@@ -213,7 +234,7 @@ describe('Create', () => {
       expect(screen.queryByText(PROCESSING)).toBeNull()
       expect(screen.getByRole('link', { name: /explorer/i }).getAttribute('href')).toBe(`https://explorer.arc.io/tx/${HASH}`)
       await user.click(screen.getByRole('button', { name: 'Check again' }))
-      expect(await screen.findByText(`Campaign ${NEW_CAMPAIGN}`)).toBeTruthy()
+      await expectCreated(user)
     })
 
     // A check that throws must not leave the page on "Checking..." forever, and must not invite a second create.
@@ -273,7 +294,7 @@ describe('Create', () => {
         </QueryClientProvider>,
       )
       await user.click(screen.getByRole('button', { name: 'Check again' }))
-      expect(await screen.findByText(`Campaign ${NEW_CAMPAIGN}`)).toBeTruthy()
+      await expectCreated(user)
       expect(recheckSpy).toHaveBeenCalledWith(HASH)
     })
   })

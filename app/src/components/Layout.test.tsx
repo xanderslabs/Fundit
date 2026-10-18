@@ -24,7 +24,7 @@ function renderLayout() {
 }
 
 describe('Layout', () => {
-  // The top bar is the logo and the account control only. Start a fundraiser moved into the account menu.
+  // The top bar is the logo and the account control only. Start a Fundit moved into the account menu.
   it('has the logo and Sign in in the top bar, and no page links', () => {
     renderLayout()
     const banner = screen.getByRole('banner')

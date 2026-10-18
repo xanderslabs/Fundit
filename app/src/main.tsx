@@ -10,6 +10,7 @@ import './styles/campaigns.css'
 import './styles/create.css'
 import './styles/donate.css'
 import './styles/manage.css'
+import './styles/share.css'
 import { wagmiConfig } from './wagmi'
 
 const queryClient = new QueryClient()

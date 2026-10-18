@@ -30,15 +30,15 @@ describe('explainError', () => {
     expect(text.length).toBeGreaterThan(0)
   })
 
-  // People see "fundraiser" everywhere else in the app. Error texts use the same word.
-  it.each(abiErrors.map((e) => [e.name, e] as const))('says fundraiser, not campaign, for %s', (_name, abiError) => {
+  // People see "Fundit" everywhere else in the app. Error texts use the same word.
+  it.each(abiErrors.map((e) => [e.name, e] as const))('says Fundit, not campaign, for %s', (_name, abiError) => {
     expect(explainError(revertWith(abiError))).not.toMatch(/campaign/i)
   })
 
   it('uses the agreed wording for two key errors', () => {
     const find = (name: string) => campaignAbi.find((x) => x.type === 'error' && x.name === name) as AbiError
     expect(explainError(revertWith(find('UnsupportedPayoutDomain')))).toBe('EURC can only be paid out on Arc.')
-    expect(explainError(revertWith(find('CampaignClosed')))).toBe('This fundraiser is closed.')
+    expect(explainError(revertWith(find('CampaignClosed')))).toBe('This Fundit is closed.')
   })
 
   // MetaMask-style wallets put the revert hex one or two levels down instead of at error.data.
@@ -46,9 +46,9 @@ describe('explainError', () => {
     const closed = campaignAbi.find((x) => x.type === 'error' && x.name === 'CampaignClosed') as AbiError
     const hex = encodeErrorResult({ abi: [closed], errorName: 'CampaignClosed' } as never)
     const nested = { code: -32603, message: 'Internal JSON-RPC error.', data: { code: 3, data: hex } }
-    expect(explainError(nested)).toBe('This fundraiser is closed.')
+    expect(explainError(nested)).toBe('This Fundit is closed.')
     const original = { code: -32603, message: 'Internal JSON-RPC error.', data: { originalError: { code: 3, data: hex } } }
-    expect(explainError(original)).toBe('This fundraiser is closed.')
+    expect(explainError(original)).toBe('This Fundit is closed.')
   })
 
   it('maps a wallet rejection to a cancel message', () => {

@@ -239,7 +239,7 @@ function AccountMenu({ address, onSignedOut }: { address: Address; onSignedOut: 
           <ul ref={menu} id={menuId} role="menu" aria-label="Account" className="account-menu" onKeyDown={onMenuKeyDown}>
             <li role="none">
               <Link role="menuitem" tabIndex={-1} to="/create" onClick={() => close(false)}>
-                Start a fundraiser
+                Start a Fundit
               </Link>
             </li>
             <li role="none">

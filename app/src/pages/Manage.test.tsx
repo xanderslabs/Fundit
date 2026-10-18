@@ -129,7 +129,7 @@ describe('Manage', () => {
     fakeSender('passkey', STRANGER)
     state.external = CREATOR
     renderPage()
-    expect(screen.getByText('You are using your passkey wallet. Switch to your connected wallet to manage this fundraiser.')).toBeTruthy()
+    expect(screen.getByText('You are using your passkey wallet. Switch to your connected wallet to manage this Fundit.')).toBeTruthy()
     expect(screen.queryByText('Campaign page')).toBeNull()
     await userEvent.setup().click(button('Use connected wallet'))
     expect(setActive).toHaveBeenCalledWith('external')
@@ -147,7 +147,7 @@ describe('Manage', () => {
     state.view = view()
     fakeSender()
     renderPage()
-    expect(screen.getByRole('heading', { name: 'Manage fundraiser' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Manage this Fundit' })).toBeTruthy()
   })
 
   // withdraw(0) reverts ZeroAmount. With nothing to take out, the button must not invite a wasted fee.
@@ -336,12 +336,12 @@ describe('Manage', () => {
     expect(screen.getByText(text)).toBeTruthy()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     const user = userEvent.setup()
-    await user.click(button('Close fundraiser'))
+    await user.click(button('Close this Fundit'))
     expect(confirm).toHaveBeenCalledWith(expect.stringContaining(text))
     expect(send).not.toHaveBeenCalled()
 
     confirm.mockReturnValue(true)
-    await user.click(button('Close fundraiser'))
+    await user.click(button('Close this Fundit'))
     await waitFor(() => expect(send).toHaveBeenCalledTimes(1))
     expect(decode(send.mock.calls[0]![0][0]!.data).functionName).toBe('close')
   })

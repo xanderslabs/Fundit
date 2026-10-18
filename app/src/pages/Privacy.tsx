@@ -16,6 +16,7 @@ export function Privacy() {
         <strong>Draft: review before launch.</strong> This text has not had a legal review yet.
       </p>
       <h1>Privacy Policy</h1>
+      <p>A Fundit is a fundraiser created on Fundit.</p>
 
       <h2>1. Introduction</h2>
       <p>

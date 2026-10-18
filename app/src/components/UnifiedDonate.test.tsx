@@ -242,7 +242,7 @@ describe('UnifiedDonate', () => {
       await waitFor(() => expect(donateButton().disabled).toBe(false))
       silently({ kind: 'arc', hash: ARC_TX, approve: false })
       await user.click(donateButton())
-      expect(await screen.findByText(/Another donation to this fundraiser is not confirmed yet/)).toBeTruthy()
+      expect(await screen.findByText(/Another donation to this Fundit is not confirmed yet/)).toBeTruthy()
       expect(m.donate).not.toHaveBeenCalled()
     })
 

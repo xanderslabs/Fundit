@@ -260,10 +260,10 @@ describe('DonatePanel', () => {
     expect(localStorage.getItem('fundit.pendingBridges')).toBeNull()
   })
 
-  it('is disabled with "This fundraiser is closed." when the fundraiser is closed', () => {
+  it('is disabled with "This Fundit is closed." when the Fundit is closed', () => {
     fakeSender()
     renderPanel(view('USDC', true))
-    expect(screen.getByText('This fundraiser is closed.')).toBeTruthy()
+    expect(screen.getByText('This Fundit is closed.')).toBeTruthy()
     expect(screen.getByLabelText('Amount').matches(':disabled')).toBe(true)
     expect(donateButton().disabled).toBe(true)
   })
@@ -719,7 +719,7 @@ describe('DonatePanel', () => {
       fakeSender()
       state.balance = 1000_000000n
       renderPanel(view('USDC'))
-      expect(await screen.findByText(/reached the fundraiser/)).toBeTruthy()
+      expect(await screen.findByText(/reached the Fundit/)).toBeTruthy()
       await waitFor(() => expect(radio(/Arc wallet/).disabled).toBe(false))
       expect(screen.getByRole('button', { name: 'Give' })).toBeTruthy()
     })

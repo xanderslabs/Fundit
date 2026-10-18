@@ -7,7 +7,7 @@ const B = ACCOUNTS.donor
 test('A creates a USDC campaign, B donates with a tip and message, A withdraws to Arc and closes', async ({ as }) => {
   const usdc = await tokenAddress('USDC')
 
-  // 1. A signs in on Home, opens the account menu, picks Start a fundraiser, creates a USDC fundraiser with a
+  // 1. A signs in on Home, opens the account menu, picks Start a Fundit, creates a USDC Fundit with a
   // goal of 100 and lands on its page.
   const a = await as(A)
   await a.goto('/')
@@ -15,15 +15,35 @@ test('A creates a USDC campaign, B donates with a tip and message, A withdraws t
   const pill = a.getByRole('banner').getByRole('button', { name: `${A.slice(0, 6)}...${A.slice(-4)}` })
   await pill.click()
   await expect(a.getByRole('menu')).toBeVisible()
-  await a.getByRole('menuitem', { name: 'Start a fundraiser' }).click()
+  await a.getByRole('menuitem', { name: 'Start a Fundit' }).click()
   await expect(a).toHaveURL(/\/create$/)
   await a.getByLabel('Title').fill('E2E garden fund')
   await a.getByLabel('Description').fill('Seeds and tools for the community garden.')
   await a.getByLabel('Goal').fill('100')
   await expect(a.getByText('Fundit keeps 1% of each donation.')).toBeVisible()
-  await a.getByRole('button', { name: 'Create fundraiser' }).click()
-  await expect(a).toHaveURL(/\/c\/0x[0-9a-fA-F]{40}$/)
-  const campaign = getAddress(a.url().split('/c/')[1]!) as Address
+  await a.getByRole('button', { name: 'Create a Fundit' }).click()
+
+  // The page right after creating offers the share panel: the link to copy and its QR code.
+  await expect(a.getByRole('heading', { level: 1, name: 'Your Fundit is live' })).toBeVisible()
+  const goTo = a.getByRole('link', { name: 'Go to your Fundit' })
+  const href = await goTo.getAttribute('href')
+  expect(href).toMatch(/^\/c\/0x[0-9a-fA-F]{40}$/)
+  const campaign = getAddress(href!.split('/c/')[1]!) as Address
+  await expect(a.getByRole('button', { name: 'Copy link' })).toBeVisible()
+  await expect(a.getByRole('textbox', { name: 'Link to this Fundit' })).toHaveValue(`http://127.0.0.1:4173/c/${campaign}`)
+  await expect(a.getByRole('img', { name: 'QR code for the link to this Fundit' })).toBeVisible()
+  await expect(a.getByText(/^I started a Fundit for E2E garden fund\. Every gift helps: /)).toBeVisible()
+
+  // The embed card for the new Fundit renders on its own page, with no wallet code.
+  const embed = await a.context().newPage()
+  await embed.goto(`/embed/c/${campaign}`)
+  await expect(embed.getByText('E2E garden fund')).toBeVisible()
+  await expect(embed.getByText(/raised of 100\.00 USDC/)).toBeVisible()
+  await expect(embed.getByRole('link', { name: 'Give' })).toHaveAttribute('href', `http://127.0.0.1:4173/c/${campaign}`)
+  await embed.close()
+
+  await goTo.click()
+  await expect(a).toHaveURL(new RegExp(`/c/${campaign}$`))
   await expect(a.getByRole('heading', { level: 1, name: 'E2E garden fund' })).toBeVisible()
   await expect(a.locator('.stats-raised')).toContainText('0.00 USDC')
   await expect(a.locator('.stats-raised')).toContainText('raised of 100.00 USDC goal')
@@ -56,7 +76,7 @@ test('A creates a USDC campaign, B donates with a tip and message, A withdraws t
   // 3. A opens Manage and withdraws everything available to Arc.
   await a.reload()
   await connect(a, A)
-  await a.getByRole('link', { name: 'Manage fundraiser' }).click()
+  await a.getByRole('link', { name: 'Manage this Fundit' }).click()
   await expect(a).toHaveURL(new RegExp(`/manage/${campaign}$`))
   const withdraw = a.getByRole('region', { name: 'Withdraw' })
   await expect(withdraw.getByText('Available: 9.90 USDC')).toBeVisible()
@@ -96,15 +116,15 @@ test('A creates a USDC campaign, B donates with a tip and message, A withdraws t
   expect((await summary(campaign)).available).toBe(0n)
 
   // 4. A closes the campaign straight after the withdrawal. The confirm dialog is accepted by the fixture.
-  await a.getByRole('button', { name: 'Close fundraiser' }).click()
-  await expect(a.getByText('The fundraiser is closed.')).toBeVisible()
+  await a.getByRole('button', { name: 'Close this Fundit' }).click()
+  await expect(a.getByText('The Fundit is closed.')).toBeVisible()
   expect((await summary(campaign)).closed).toBe(true)
 
   // The donate panel is disabled for B.
   await b.reload()
   await connect(b, B)
   const closedPanel = b.getByRole('region', { name: 'Give' })
-  await expect(closedPanel.getByText('This fundraiser is closed.')).toBeVisible()
+  await expect(closedPanel.getByText('This Fundit is closed.')).toBeVisible()
   await expect(closedPanel.getByRole('textbox', { name: 'Amount' })).toBeDisabled()
   await expect(closedPanel.getByRole('button', { name: 'Give', exact: true })).toBeDisabled()
 })

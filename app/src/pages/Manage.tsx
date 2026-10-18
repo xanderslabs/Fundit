@@ -71,7 +71,7 @@ function EditSection({ view, sender }: { view: CampaignView; sender: Sender }) {
   return (
     <section className="panel manage-section" aria-labelledby="edit-heading">
       <h2 id="edit-heading">Edit details</h2>
-      {closed && <p className="hint">This fundraiser is closed, so its details can no longer be changed.</p>}
+      {closed && <p className="hint">This Fundit is closed, so its details can no longer be changed.</p>}
       <form className="create-form" onSubmit={submit} noValidate>
         <fieldset className="manage-fields" disabled={closed || tx.locked}>
           <div className="form-field">
@@ -387,15 +387,15 @@ function CloseSection({ view, sender }: { view: CampaignView; sender: Sender }) 
   const tx = useTx(() => refresh())
 
   function close() {
-    if (tx.locked || !window.confirm(`${CLOSE_TEXT} Close this fundraiser?`)) return
+    if (tx.locked || !window.confirm(`${CLOSE_TEXT} Close this Fundit?`)) return
     void tx.run(sender, () => ({ to: view.address, data: encodeFunctionData({ abi: campaignAbi, functionName: 'close' }) }), 'Close')
   }
 
   return (
     <section className="panel manage-section" aria-labelledby="close-heading">
-      <h2 id="close-heading">Close fundraiser</h2>
+      <h2 id="close-heading">Close this Fundit</h2>
       {view.summary.closed ? (
-        <p>This fundraiser is closed. It no longer takes donations.</p>
+        <p>This Fundit is closed. It no longer takes donations.</p>
       ) : (
         <>
           <p>Closing stops new donations.</p>
@@ -403,11 +403,11 @@ function CloseSection({ view, sender }: { view: CampaignView; sender: Sender }) 
             <strong>{CLOSE_TEXT}</strong>
           </p>
           <button type="button" className="btn btn-danger" disabled={tx.locked} onClick={close}>
-            Close fundraiser
+            Close this Fundit
           </button>
         </>
       )}
-      <TxStatus tx={tx} noun="transaction" successText="The fundraiser is closed." startOverWarning={RETRY_WARNING} />
+      <TxStatus tx={tx} noun="transaction" successText="The Fundit is closed." startOverWarning={RETRY_WARNING} />
     </section>
   )
 }
@@ -444,7 +444,7 @@ function BackupSection({ view, sender }: { view: CampaignView; sender: Sender })
     <section className="panel manage-section" aria-labelledby="backup-heading">
       <h2 id="backup-heading">Backup address</h2>
       <p className="hint">
-        If you lose this wallet, the backup address can ask to take over the fundraiser. It becomes the organiser after a
+        If you lose this wallet, the backup address can ask to take over the Fundit. It becomes the organiser after a
         7-day wait, and you can cancel from this wallet during those 7 days.
       </p>
       <p>
@@ -511,8 +511,8 @@ function BackupSection({ view, sender }: { view: CampaignView; sender: Sender })
 function ConnectNotice() {
   return (
     <section className="notice">
-      <h1>Manage fundraiser</h1>
-      <p>Sign in with the organiser's wallet to manage this fundraiser.</p>
+      <h1>Manage this Fundit</h1>
+      <p>Sign in with the organiser's wallet to manage this Fundit.</p>
       <SignInButton />
     </section>
   )
@@ -528,7 +528,7 @@ export function Manage() {
   if (!valid || query.data === 'not-a-campaign') {
     return (
       <section className="notice">
-        <h1>Not a Fundit fundraiser</h1>
+        <h1>Not a Fundit</h1>
         <p>This address was not created by the Fundit factory.</p>
       </section>
     )
@@ -536,7 +536,7 @@ export function Manage() {
   if (query.isError) {
     return (
       <section className="notice">
-        <h1>Could not load this fundraiser</h1>
+        <h1>Could not load this Fundit</h1>
         <p>The Arc network did not answer. Check your connection and try again.</p>
         <button type="button" className="btn" onClick={() => query.refetch()}>
           Try again
@@ -547,7 +547,7 @@ export function Manage() {
   if (query.isPending || !query.data) {
     return (
       <section className="notice" aria-busy="true">
-        <p className="muted">Loading fundraiser...</p>
+        <p className="muted">Loading Fundit...</p>
       </section>
     )
   }
@@ -558,8 +558,8 @@ export function Manage() {
     if (sender.kind === 'passkey' && choice.external && isAddressEqual(choice.external, view.summary.creator)) {
       return (
         <section className="notice">
-          <h1>Manage fundraiser</h1>
-          <p>You are using your passkey wallet. Switch to your connected wallet to manage this fundraiser.</p>
+          <h1>Manage this Fundit</h1>
+          <p>You are using your passkey wallet. Switch to your connected wallet to manage this Fundit.</p>
           <button type="button" className="btn" onClick={() => choice.setActive('external')}>
             Use connected wallet
           </button>
@@ -573,9 +573,9 @@ export function Manage() {
   return (
     <section className="manage">
       <header className="page-head">
-        <h1>Manage fundraiser</h1>
+        <h1>Manage this Fundit</h1>
         <p className="muted">
-          <Link to={`/c/${view.address}`}>{view.summary.meta.title || 'Untitled fundraiser'}</Link>
+          <Link to={`/c/${view.address}`}>{view.summary.meta.title || 'Untitled Fundit'}</Link>
         </p>
       </header>
       <WithdrawSection view={view} sender={sender} />

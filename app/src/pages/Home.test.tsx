@@ -118,20 +118,20 @@ describe('Home hero', () => {
     for (const link of within(causes).getAllByRole('link')) expect(link.getAttribute('href')).toBe('/explore')
   })
 
-  it('has no Start a fundraiser link for a signed-out visitor', () => {
+  it('has no Start a Fundit link for a signed-out visitor', () => {
     renderHome()
-    expect(screen.queryByRole('link', { name: 'Start a fundraiser' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Start a Fundit' })).toBeNull()
   })
 
-  it('invites a signed-out visitor to explore when there are no fundraisers', () => {
+  it('invites a signed-out visitor to explore when there are no Fundits', () => {
     renderHome()
-    expect(screen.getByText(/No fundraisers yet\. Sign in to start the first one/)).toBeTruthy()
+    expect(screen.getByText(/No Fundits yet\. Sign in to start the first one/)).toBeTruthy()
   })
 
-  it('invites a signed-in person to start one when there are no fundraisers', () => {
+  it('invites a signed-in person to start one when there are no Fundits', () => {
     state.sender = ME
     renderHome()
-    expect(screen.getByRole('link', { name: 'Start a fundraiser' }).getAttribute('href')).toBe('/create')
+    expect(screen.getByRole('link', { name: 'Start a Fundit' }).getAttribute('href')).toBe('/create')
   })
 
   it('has no Built on Arc with Circle section', () => {

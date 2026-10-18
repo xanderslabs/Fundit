@@ -60,7 +60,7 @@ function faqs(): Faq[] {
         <>
           <p>
             At launch, Fundit keeps 1% of each donation and 1% of each withdrawal. Neither fee can ever go above 5%,
-            and a fundraiser keeps the rates it had on the day it was created. Its page shows them.
+            and a Fundit keeps the rates it had on the day it was created. Its page shows them.
           </p>
           <p>When you give, you can add a tip for Fundit if you want to. You also pay a small network fee in USDC.</p>
         </>
@@ -71,7 +71,7 @@ function faqs(): Faq[] {
       a: (
         <>
           <p>
-            Each fundraiser has its own escrow contract on Arc, and donations go straight into it. Only the organiser
+            Each Fundit has its own escrow contract on Arc, and donations go straight into it. Only the organiser
             can withdraw. Fundit cannot move the money raised; only its fees go to Fundit.
           </p>
           <p>
@@ -86,7 +86,7 @@ function faqs(): Faq[] {
       a: (
         <p>
           The organiser picks an amount and where it goes. They can withdraw on Arc at any time, or have USDC sent to
-          Ethereum, Base, Arbitrum, OP Mainnet, Polygon or Avalanche. EURC fundraisers pay out on Arc only.
+          Ethereum, Base, Arbitrum, OP Mainnet, Polygon or Avalanche. EURC Fundits pay out on Arc only.
         </p>
       ),
     },
@@ -94,9 +94,9 @@ function faqs(): Faq[] {
       q: 'What can I give with?',
       a: (
         <p>
-          Each fundraiser takes one currency: USDC or EURC on Arc. EURC fundraisers take donations on Arc only.
+          Each Fundit takes one currency: USDC or EURC on Arc. EURC Fundits take donations on Arc only.
           {CROSSCHAIN_ENABLED &&
-            ' USDC fundraisers can also take USDC from another chain, or from your Circle unified balance.'}
+            ' USDC Fundits can also take USDC from another chain, or from your Circle unified balance.'}
         </p>
       ),
     },
@@ -163,7 +163,7 @@ export function Home() {
         <h1 id="hero-title">Fundraising for everyone, everywhere.</h1>
         <p>
           Raise money for a cause, a person in need or a public good, and get gifts from anyone in the world in
-          digital dollars or euros. Every gift goes straight into the fundraiser, and only the organiser can take it
+          digital dollars or euros. Every gift goes straight into the Fundit, and only the organiser can take it
           out.
         </p>
         <div className="hero-actions">
@@ -199,7 +199,7 @@ export function Home() {
 
       {featured.data && (
         <section className="section featured" aria-labelledby="featured">
-          <h2 id="featured">Featured fundraiser</h2>
+          <h2 id="featured">Featured Fundit</h2>
           <div className="featured-card">
             <CampaignCard view={featured.data} featured />
           </div>
@@ -208,7 +208,7 @@ export function Home() {
 
       <section className="section" aria-labelledby="newest">
         <div className="section-head">
-          <h2 id="newest">Newest fundraisers</h2>
+          <h2 id="newest">Newest Fundits</h2>
           <Link to="/explore" className="section-link">
             See all
           </Link>
@@ -222,14 +222,14 @@ export function Home() {
             empty={
               signedIn ? (
                 <>
-                  <p>No fundraisers yet. Yours could be the first.</p>
+                  <p>No Fundits yet. Yours could be the first.</p>
                   <Link to="/create" className="btn">
-                    Start a fundraiser
+                    Start a Fundit
                   </Link>
                 </>
               ) : (
                 <>
-                  <p>No fundraisers yet. Sign in to start the first one, or look around.</p>
+                  <p>No Fundits yet. Sign in to start the first one, or look around.</p>
                   <Link to="/explore" className="btn btn-outline">
                     Explore
                   </Link>

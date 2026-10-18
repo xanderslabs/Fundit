@@ -50,7 +50,7 @@ export function BackupBanner({ view }: { view: CampaignView }) {
 
   return (
     <section className="panel backup-banner" aria-label="Backup recovery">
-      <h2>You are the backup for this fundraiser</h2>
+      <h2>You are the backup for this Fundit</h2>
       {!pending && (
         <>
           <p>

@@ -133,7 +133,7 @@ describe('CrossChainDonate', () => {
   // Bridged money arrives as USDC. An EURC campaign would hold the wrong token.
   it('is not offered on an EURC campaign, which says why', () => {
     wrap(<DonatePanel view={view('EURC')} />)
-    expect(screen.getByText('EURC fundraisers take donations on Arc only.')).toBeTruthy()
+    expect(screen.getByText('EURC Fundits take donations on Arc only.')).toBeTruthy()
     expect(screen.queryByLabelText(/USDC on another chain/)).toBeNull()
   })
 
@@ -155,7 +155,7 @@ describe('CrossChainDonate', () => {
     // The real fee can be lower than the quote, so the landed amount is a floor.
     expect(await screen.findByText('At least 24.979175 USDC')).toBeTruthy()
     expect(screen.getByText('0.020825 USDC')).toBeTruthy()
-    expect(screen.getByText('Reaches the fundraiser')).toBeTruthy()
+    expect(screen.getByText('Reaches the Fundit')).toBeTruthy()
     expect(screen.getByText(/about a minute/i)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Sign in to give' })).toBeTruthy()
   })
@@ -208,7 +208,7 @@ describe('CrossChainDonate fees with a wallet', () => {
     await waitFor(() => expect((screen.getByRole('button', { name: 'Give' }) as HTMLButtonElement).disabled).toBe(false))
     localStorage.setItem(KEY, JSON.stringify([{ kind: 'unified', campaign: CAMPAIGN, amount: '5', createdAt: Date.now() }]))
     await user.click(screen.getByRole('button', { name: 'Give' }))
-    expect(await screen.findByText(/Another donation to this fundraiser is not confirmed yet/)).toBeTruthy()
+    expect(await screen.findByText(/Another donation to this Fundit is not confirmed yet/)).toBeTruthy()
     expect(estimate.donations).toBe(0)
   })
 
@@ -256,7 +256,7 @@ describe('PendingBridgeTracker', () => {
     const client = new QueryClient()
     const invalidate = vi.spyOn(client, 'invalidateQueries')
     wrap(<PendingBridgeTracker campaign={CAMPAIGN} />, client)
-    expect(await screen.findByText(/reached the fundraiser/)).toBeTruthy()
+    expect(await screen.findByText(/reached the Fundit/)).toBeTruthy()
     expect(fetchFn.mock.calls[0]![0]).toContain(`/v2/messages/6?transactionHash=${BURN}`)
     const keys = invalidate.mock.calls.map(([f]) => JSON.stringify(f?.queryKey))
     expect(keys).toContain(JSON.stringify(['campaign', CAMPAIGN.toLowerCase()]))
@@ -299,7 +299,7 @@ describe('PendingBridgeTracker', () => {
     savePending(Date.now() - 2 * 60 * 60 * 1000 - 1)
     stubFetch(() => ({ messages: [{ status: 'complete', forwardTxHash: `0x${'ef'.repeat(32)}` }] }))
     wrap(<PendingBridgeTracker campaign={CAMPAIGN} />)
-    expect(await screen.findByText(/reached the fundraiser/)).toBeTruthy()
+    expect(await screen.findByText(/reached the Fundit/)).toBeTruthy()
     expect(screen.queryByRole('link', { name: /Check the explorer/ })).toBeNull()
     expect(JSON.parse(localStorage.getItem(KEY)!)[0]).toMatchObject({ burnTx: BURN, minted: true })
   })

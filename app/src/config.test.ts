@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import headers from '../public/_headers?raw'
+import redirects from '../public/_redirects?raw'
 import { campaignAbi } from './abi/campaign'
 import { factoryAbi } from './abi/factory'
-import { CCTP_CHAINS, EXTERNAL_HOSTS, FORWARD_HOOK_DATA, TOKENS } from './config'
+import { ARC_RPC_FALLBACKS, ARC_RPC_URL, CCTP_CHAINS, EXTERNAL_HOSTS, FORWARD_HOOK_DATA, TOKENS } from './config'
 import { connectSrcAllows } from './deployConfig'
 
 describe('config', () => {
@@ -60,5 +61,48 @@ describe('_headers security headers', () => {
   // Without HSTS a first visit over http can be intercepted before the redirect to https.
   it('sends Strict-Transport-Security for a year, with subdomains', () => {
     expect(headers).toMatch(/^\s+Strict-Transport-Security: max-age=31536000; includeSubDomains$/m)
+  })
+})
+
+// The headers of one _headers rule: the indented lines under its path line.
+function rule(path: string): string[] {
+  const lines = headers.split('\n')
+  const start = lines.findIndex((l) => l === path)
+  if (start < 0) return []
+  const out: string[] = []
+  for (const l of lines.slice(start + 1)) {
+    if (!/^\s+\S/.test(l)) break
+    out.push(l.trim())
+  }
+  return out
+}
+
+describe('_headers framing', () => {
+  // Every page but the embed card refuses to be framed, so no other site can overlay the Give or Withdraw buttons.
+  it("keeps frame-ancestors 'none' for the whole site", () => {
+    const csp = rule('/*').find((h) => h.startsWith('Content-Security-Policy:'))
+    expect(csp).toMatch(/frame-ancestors 'none'$/)
+  })
+
+  // Cloudflare adds the headers of every matching rule. Without the detach line, /embed/* would get both CSPs and
+  // the browser would apply the stricter one, so the card could not be framed anywhere.
+  it('replaces the site CSP on /embed/* with one that any site may frame', () => {
+    const embed = rule('/embed/*')
+    expect(embed[0]).toBe('! Content-Security-Policy')
+    const csps = embed.filter((h) => h.startsWith('Content-Security-Policy:'))
+    expect(csps).toHaveLength(1)
+    expect(csps[0]).toMatch(/frame-ancestors \*$/)
+    expect(embed.some((h) => /x-frame-options/i.test(h))).toBe(false)
+    expect(headers).not.toMatch(/X-Frame-Options/i)
+  })
+
+  // The card reads the Fundit from Arc, through the same RPCs as the app.
+  it.each([ARC_RPC_URL, ...ARC_RPC_FALLBACKS])('lets the embed card call %s', (url) => {
+    const embedCsp = rule('/embed/*').join('\n')
+    expect(connectSrcAllows(embedCsp, url)).toBe(true)
+  })
+
+  it('serves embed.html for /embed/c/:address on Cloudflare', () => {
+    expect(redirects).toMatch(/^\/embed\/\* \/embed 200$/m)
   })
 })

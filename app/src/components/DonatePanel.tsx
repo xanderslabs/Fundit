@@ -320,7 +320,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   return (
     <section className="panel donate" aria-label="Give">
       <h2>Give</h2>
-      {closed && <p className="field-error">This fundraiser is closed.</p>}
+      {closed && <p className="field-error">This Fundit is closed.</p>}
       <PendingBridgeTracker campaign={campaign} />
 
       <fieldset className="form-field donate-source" disabled={closed || locked || crossChainBusy || blocker !== null}>
@@ -333,7 +333,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
             </span>
           </label>
         ))}
-        {symbol !== 'USDC' && <p className="hint">EURC fundraisers take donations on Arc only.</p>}
+        {symbol !== 'USDC' && <p className="hint">EURC Fundits take donations on Arc only.</p>}
       </fieldset>
 
       {activeSource === 'crosschain' ? (
@@ -344,7 +344,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
               <div className="status-box">
                 <p>
                   <strong>Your cross-chain donation of {blocker.amount} USDC is still on its way.</strong> Wait for it to
-                  reach the fundraiser before you give again, so you do not give twice.
+                  reach the Fundit before you give again, so you do not give twice.
                 </p>
                 {!crossChainBusy && (
                   <div className="donate-actions">
@@ -417,7 +417,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
                   </label>
                 ))}
               </div>
-              <p className="hint">The tip goes to Fundit, not to the fundraiser.</p>
+              <p className="hint">The tip goes to the Fundit team, not to this Fundit.</p>
             </fieldset>
 
             <div className="form-field">
@@ -441,7 +441,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
           {breakdown && (
             <dl className="donate-breakdown" aria-label="Breakdown">
               <div>
-                <dt>To the fundraiser</dt>
+                <dt>To the Fundit</dt>
                 <dd>{formatExact(breakdown.toCampaign, symbol)}</dd>
               </div>
               <div>

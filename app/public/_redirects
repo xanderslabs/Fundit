@@ -1,0 +1,3 @@
+# /embed/c/:address is the iframe card. It is its own page, embed.html, with no wallet code. Cloudflare
+# serves embed.html at /embed (a request for /embed.html redirects there), so the rewrite targets /embed.
+/embed/* /embed 200

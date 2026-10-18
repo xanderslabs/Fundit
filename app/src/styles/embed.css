@@ -1,0 +1,199 @@
+/* The embed card (embed.html). It fills its iframe: 360 x 220 by default, and any width the host gives it. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  height: 100%;
+}
+
+.embed {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+  min-height: 180px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.embed-notice {
+  justify-content: center;
+}
+
+.embed-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.embed-logo {
+  display: inline-flex;
+}
+
+.embed-logo img {
+  display: block;
+}
+
+.embed-badge {
+  padding: 1px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: var(--weight-bold);
+}
+
+.embed-badge-done {
+  background: var(--success);
+  color: var(--ink);
+}
+
+.embed-title {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  font-size: 20px;
+  font-weight: var(--weight-display);
+  line-height: 1.25;
+  /* Room for descenders under the clamp. */
+  padding-bottom: 2px;
+  flex-shrink: 0;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.embed-progress {
+  margin-top: auto;
+}
+
+.embed-amounts {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.embed-amounts strong {
+  color: var(--text);
+  font-size: 16px;
+}
+
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.progress-track {
+  flex: 1;
+  height: 8px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.progress-done {
+  background: var(--success);
+}
+
+.progress-label {
+  min-width: 3ch;
+  font-size: 14px;
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.embed-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.embed-muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.embed-give,
+.embed-retry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 112px;
+  padding: 8px 22px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--success);
+  /* Ink on the brand green passes WCAG AA; white on it does not. */
+  color: var(--ink);
+  font: inherit;
+  font-weight: var(--weight-bold);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.embed-retry {
+  align-self: flex-start;
+}
+
+.embed-give:hover,
+.embed-retry:hover {
+  filter: brightness(0.95);
+}
+
+.embed-link {
+  color: var(--text);
+  font-weight: var(--weight-bold);
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+@media (max-width: 300px) {
+  .embed {
+    padding: 14px;
+  }
+
+  .embed-give {
+    min-width: 0;
+  }
+}

@@ -1,0 +1,271 @@
+/* Share panel: link, device share, network links, QR poster, embed code. */
+.share-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.share-panel h2 {
+  margin-bottom: 0;
+}
+
+/* The message the network links prefill, shown so the person knows what they will post. */
+.share-message {
+  margin: 0;
+  padding: 12px 16px;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 12px 12px 0;
+  background: var(--surface);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.share-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.share-url {
+  flex: 1 1 180px;
+  min-width: 0;
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg);
+  color: var(--muted);
+  font: inherit;
+  /* 16px stops iOS from zooming into the field. */
+  font-size: 16px;
+  text-overflow: ellipsis;
+}
+
+.share-url:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.share-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.share-note:empty {
+  display: none;
+}
+
+.share-native {
+  align-self: flex-start;
+}
+
+.share-targets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.share-target {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: var(--weight-bold);
+  text-align: center;
+  text-decoration: none;
+}
+
+.share-target:hover {
+  background: var(--surface);
+}
+
+/* A small copy of the poster: the QR code people scan, on a card shaped like the download. */
+.share-poster {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 4px;
+  padding: 16px;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.share-ticket {
+  display: flex;
+  flex: 0 0 116px;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  aspect-ratio: 4 / 5;
+  padding: 12px 10px 10px;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: var(--shadow-pop);
+  transform: rotate(-2deg);
+}
+
+.share-ticket img {
+  width: 56px;
+  height: auto;
+}
+
+.share-ticket span {
+  font-size: 12px;
+  font-weight: var(--weight-display);
+}
+
+.share-qr {
+  display: block;
+  width: 100%;
+  max-width: 104px;
+  aspect-ratio: 1;
+}
+
+.share-qr-loading {
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.share-poster-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.share-poster-text .btn {
+  white-space: nowrap;
+}
+
+.share-poster-text p {
+  margin: 0;
+  font-size: 15px;
+}
+
+.share-embed summary {
+  font-weight: var(--weight-bold);
+  cursor: pointer;
+}
+
+.share-embed[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.share-embed > p {
+  margin: 4px 0 0;
+}
+
+.share-code {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: none;
+  overflow-wrap: anywhere;
+}
+
+/* Share dialog (My page). */
+.share-dialog {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: var(--shadow-pop);
+}
+
+.share-dialog::backdrop {
+  background: rgb(16 25 40 / 0.45);
+}
+
+.share-dialog-body {
+  position: relative;
+  padding: 24px;
+}
+
+.share-dialog-body .share-panel h2 {
+  padding-right: 48px;
+}
+
+.share-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.share-close:hover {
+  background: var(--surface);
+}
+
+/* My page: a Share button under each card, outside the card's link. */
+.card-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.card-wrap .card {
+  flex: 1;
+}
+
+.card-action {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Create: the page after a Fundit is created. */
+.create-done {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.create-done .page-head .btn {
+  margin-top: 8px;
+}
+
+@media (max-width: 420px) {
+  .share-poster {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .share-ticket {
+    align-self: center;
+  }
+
+  .share-dialog-body {
+    padding: 20px 16px;
+  }
+}

@@ -1,11 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useRef, useState } from 'react'
-import { useNavigate } from 'react-router'
+import { Link } from 'react-router'
 import { type Address, decodeEventLog, encodeFunctionData, type Hex, isAddressEqual, type TransactionReceipt } from 'viem'
 import { arc } from 'viem/chains'
 import { factoryAbi } from '../abi/factory'
 import { SignInButton } from '../components/AccountMenu'
 import { CampaignImage } from '../components/CampaignImage'
+import { SharePanel } from '../components/SharePanel'
 import { PASSKEY_PROCESSING, recheckResult } from '../components/TxStatus'
 import { FACTORY_ADDRESS, type TokenSymbol } from '../config'
 import { useFactoryFees } from '../hooks/useCampaigns'
@@ -25,6 +26,8 @@ type Phase =
   // note explains a re-check that failed to answer. The outcome is still unknown.
   | { kind: 'timeout'; hash: Hex; userop?: boolean; note?: string }
   | { kind: 'error'; message: string; hash?: Hex }
+  // The new Fundit exists. The page shows its link and share options.
+  | { kind: 'created'; address: Address; title: string }
 
 // The new campaign's address is only known from the factory's CampaignCreated log in the receipt.
 function createdCampaign(receipt: TransactionReceipt): Address | null {
@@ -68,7 +71,6 @@ function ExplorerLink({ hash }: { hash: Hex }) {
 export function Create() {
   const sender = useSender()
   const fees = useFactoryFees()
-  const navigate = useNavigate()
   const queryClient = useQueryClient()
 
   const [title, setTitle] = useState('')
@@ -102,13 +104,13 @@ export function Create() {
         if (!campaign) {
           setPhase({
             kind: 'error',
-            message: 'The fundraiser was created, but we could not read its address. You can find it on My page.',
+            message: 'The Fundit was created, but we could not read its address. You can find it on My page.',
             hash: res.hash,
           })
           return
         }
         void queryClient.invalidateQueries({ queryKey: ['campaigns'] })
-        navigate(`/c/${campaign}`)
+        setPhase({ kind: 'created', address: campaign, title: title.trim() })
         return
       }
       case 'reverted':
@@ -159,7 +161,7 @@ export function Create() {
 
   function startOver() {
     const ok = window.confirm(
-      'The earlier transaction may still go through. If it does and you create again, you will have two fundraisers. Start over anyway?',
+      'The earlier transaction may still go through. If it does and you create again, you will have two Fundits. Start over anyway?',
     )
     if (ok) setPhase({ kind: 'idle' })
   }
@@ -175,12 +177,29 @@ export function Create() {
     setTouched((t) => Object.fromEntries(Object.entries(t).filter(([k]) => !k.startsWith('link-'))))
   }
 
+  if (phase.kind === 'created') {
+    return (
+      <section className="create-done">
+        <header className="page-head">
+          <h1>Your Fundit is live</h1>
+          <p className="muted">Share it now, so the first gifts can come in.</p>
+          <Link to={`/c/${phase.address}`} className="btn btn-lg">
+            Go to your Fundit
+          </Link>
+        </header>
+        <section className="panel" aria-labelledby="share-heading">
+          <SharePanel address={phase.address} title={phase.title} isCreator headingId="share-heading" />
+        </section>
+      </section>
+    )
+  }
+
   // Signed out, the page asks to sign in and stays here, so the form shows once a wallet is connected. A
   // transaction already in flight keeps the form and its status on screen even if the wallet goes away.
   if (!sender && phase.kind === 'idle') {
     return (
       <section className="notice">
-        <h1>Sign in to start a fundraiser</h1>
+        <h1>Sign in to start a Fundit</h1>
         <p>Sign in first. Then you can tell your story and set your goal.</p>
         <SignInButton className="btn btn-lg" />
       </section>
@@ -190,8 +209,8 @@ export function Create() {
   return (
     <section className="create">
       <header className="page-head">
-        <h1>Start a fundraiser</h1>
-        <p className="muted">The money people give is held for your fundraiser, and only you can withdraw it.</p>
+        <h1>Start a Fundit</h1>
+        <p className="muted">The money people give is held for your Fundit, and only you can withdraw it.</p>
       </header>
 
       <form className="create-form" onSubmit={submit} noValidate>
@@ -334,7 +353,7 @@ export function Create() {
             aria-describedby="backup-hint backup-error"
           />
           <p id="backup-hint" className="hint">
-            If you lose this wallet, the backup address can ask to take over the fundraiser. It becomes the organiser after
+            If you lose this wallet, the backup address can ask to take over the Fundit. It becomes the organiser after
             a 7-day wait, and you can cancel from this wallet during those 7 days. Use a wallet you control that is not
             this one. Leave it empty for no backup.
           </p>
@@ -351,8 +370,8 @@ export function Create() {
                   : `Fundit keeps ${bpsToPercent(fees.data.donationFeeBps)} of each donation.`}
               </li>
               <li>Fundit keeps {bpsToPercent(fees.data.withdrawFeeBps)} of each withdrawal.</li>
-              <li>These rates are fixed for this fundraiser when you create it.</li>
-              <li>Creating the fundraiser costs a small network fee, paid in USDC.</li>
+              <li>These rates are fixed for this Fundit when you create it.</li>
+              <li>Creating the Fundit costs a small network fee, paid in USDC.</li>
             </ul>
           ) : fees.isError ? (
             <p className="field-error">
@@ -373,7 +392,7 @@ export function Create() {
             <div className="status-box">
               <p>
                 <strong>Your transaction is not confirmed yet.</strong> It may still go through. Check it before you try
-                again, so you do not create the fundraiser twice.
+                again, so you do not create the Fundit twice.
               </p>
               <p>{phase.userop ? PASSKEY_PROCESSING : <ExplorerLink hash={phase.hash} />}</p>
               {phase.note && <p className="field-error">{phase.note}</p>}
@@ -400,7 +419,7 @@ export function Create() {
         </div>
 
         <button type="submit" className="btn btn-lg create-submit" disabled={!canSubmit}>
-          {busy ? 'Creating...' : 'Create fundraiser'}
+          {busy ? 'Creating...' : 'Create a Fundit'}
         </button>
       </form>
     </section>

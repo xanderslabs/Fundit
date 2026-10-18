@@ -47,9 +47,9 @@ function Line({ item, symbol }: { item: ActivityItem; symbol: TokenSymbol }) {
         </p>
       )
     case 'edit':
-      return <p>Organiser edited the fundraiser. Goal is now {amount(d.goal)}.</p>
+      return <p>Organiser edited the Fundit. Goal is now {amount(d.goal)}.</p>
     case 'close':
-      return <p>Organiser closed the fundraiser.</p>
+      return <p>Organiser closed the Fundit.</p>
     case 'fees':
       return <p>Fundit collected {amount(d.amount)} in fees and tips.</p>
     case 'sweep':

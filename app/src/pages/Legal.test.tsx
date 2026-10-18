@@ -27,6 +27,14 @@ function text(page: 'terms' | 'privacy') {
 }
 
 describe.each(['terms', 'privacy'] as const)('%s page', (page) => {
+  // The rest of the site calls a fundraiser "a Fundit". The legal text keeps "fundraiser", so it says once,
+  // before the body, that the two are the same thing.
+  it('defines a Fundit right after the heading', () => {
+    text(page)
+    const heading = screen.getByRole('heading', { level: 1 })
+    expect(heading.nextElementSibling?.textContent).toBe('A Fundit is a fundraiser created on Fundit.')
+  })
+
   // The legal text has not been reviewed yet and must say so on the page.
   it('shows the draft notice', () => {
     text(page)

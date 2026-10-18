@@ -110,7 +110,7 @@ describe('Account menu with a passkey session', () => {
     await openMenu('0x0000...00cc')
     expect(screen.queryByText(/Using your/)).toBeNull()
     expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual([
-      'Start a fundraiser',
+      'Start a Fundit',
       'My page',
       'Passkey wallet',
       'Sign out',

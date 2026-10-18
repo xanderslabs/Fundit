@@ -7,7 +7,7 @@ import { CampaignImage } from '../components/CampaignImage'
 import { DonatePanel } from '../components/DonatePanel'
 import { Name } from '../components/Name'
 import { Progress } from '../components/Progress'
-import { ShareButton } from '../components/ShareButton'
+import { SharePanel } from '../components/SharePanel'
 import { StatusBadge } from '../components/StatusBadge'
 import { useCampaign } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
@@ -21,10 +21,10 @@ const EXPLORER_URL = arc.blockExplorers.default.url
 function NotACampaign() {
   return (
     <section className="notice">
-      <h1>Not a Fundit fundraiser</h1>
-      <p>This address was not created by the Fundit factory, so we will not show it as a fundraiser.</p>
+      <h1>Not a Fundit</h1>
+      <p>This address was not created by the Fundit factory, so we will not show it as a Fundit.</p>
       <Link to="/explore" className="btn">
-        Explore fundraisers
+        Explore Fundits
       </Link>
     </section>
   )
@@ -109,15 +109,14 @@ function CampaignBody({ view }: { view: CampaignView }) {
           <StatusBadge summary={summary} />
           <span className="muted">Started {created}</span>
         </div>
-        <h1>{summary.meta.title || 'Untitled fundraiser'}</h1>
-        <div className="campaign-actions">
-          <ShareButton url={`${window.location.origin}/c/${view.address}`} title={summary.meta.title || 'A fundraiser on Fundit'} />
-          {isCreator && (
+        <h1>{summary.meta.title || 'Untitled Fundit'}</h1>
+        {isCreator && (
+          <div className="campaign-actions">
             <Link to={`/manage/${view.address}`} className="btn btn-outline">
-              Manage fundraiser
+              Manage this Fundit
             </Link>
-          )}
-        </div>
+          </div>
+        )}
       </header>
       <BackupBanner view={view} />
       <div className="campaign-grid">
@@ -127,6 +126,9 @@ function CampaignBody({ view }: { view: CampaignView }) {
             <CampaignStats view={view} />
           </div>
           <DonatePanel view={view} />
+          <section className="panel" aria-labelledby="share-heading">
+            <SharePanel address={view.address} title={summary.meta.title} isCreator={isCreator} headingId="share-heading" />
+          </section>
         </aside>
         <div className="campaign-body">
           <section>
@@ -151,7 +153,7 @@ export function CampaignPage() {
   if (query.isError) {
     return (
       <section className="notice">
-        <h1>Could not load this fundraiser</h1>
+        <h1>Could not load this Fundit</h1>
         <p>The Arc network did not answer. Check your connection and try again.</p>
         <button type="button" className="btn" onClick={() => query.refetch()}>
           Try again
@@ -162,7 +164,7 @@ export function CampaignPage() {
   if (query.isPending || !query.data) {
     return (
       <section className="notice" aria-busy="true">
-        <p className="muted">Loading fundraiser...</p>
+        <p className="muted">Loading Fundit...</p>
       </section>
     )
   }

@@ -67,13 +67,13 @@ export function Explore() {
   return (
     <>
       <section className="page-head">
-        <h1>Explore fundraisers</h1>
-        <p className="muted">Find a fundraiser you care about and help it reach its goal.</p>
+        <h1>Explore Fundits</h1>
+        <p className="muted">Find a Fundit you care about and help it reach its goal.</p>
       </section>
 
       <form className="filters" role="search" onSubmit={(e) => e.preventDefault()}>
         <label className="field field-grow">
-          <span className="sr-only">Search fundraisers</span>
+          <span className="sr-only">Search Fundits</span>
           <input
             type="search"
             placeholder="Search by title or description"
@@ -108,16 +108,16 @@ export function Explore() {
             loaded.length === 0 ? (
               signedIn ? (
                 <>
-                  <p>No fundraisers yet. Yours could be the first.</p>
+                  <p>No Fundits yet. Yours could be the first.</p>
                   <Link to="/create" className="btn">
-                    Start a fundraiser
+                    Start a Fundit
                   </Link>
                 </>
               ) : (
-                <p>No fundraisers yet. Sign in to start the first one.</p>
+                <p>No Fundits yet. Sign in to start the first one.</p>
               )
             ) : (
-              <p>No fundraisers match. Try another search or show closed ones.</p>
+              <p>No Fundits match. Try another search or show closed ones.</p>
             )
           }
         />
@@ -131,7 +131,7 @@ export function Explore() {
             disabled={loadingMore}
             onClick={() => setPages((p) => p + 1)}
           >
-            {loadingMore ? 'Loading...' : 'Load older fundraisers'}
+            {loadingMore ? 'Loading...' : 'Load older Fundits'}
           </button>
         </div>
       )}

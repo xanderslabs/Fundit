@@ -660,26 +660,6 @@
   gap: 12px;
 }
 
-.share {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 16px;
-}
-
-.share-link {
-  color: var(--text);
-  font-weight: var(--weight-bold);
-  text-decoration: underline;
-  text-decoration-color: var(--accent);
-  text-decoration-thickness: 2px;
-  text-underline-offset: 4px;
-}
-
-.share [role='status'] {
-  overflow-wrap: anywhere;
-}
-
 /* Home: how it works. The steps are a real sequence, so they are numbered. */
 .how {
   margin: 8px 0 48px;

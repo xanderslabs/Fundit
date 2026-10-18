@@ -193,7 +193,7 @@ export function CrossChainDonate({
             <dd>{quote !== undefined ? formatExact(quote.fee, 'USDC') : fee.isError ? 'Not available' : 'Checking...'}</dd>
           </div>
           <div className="donate-total">
-            <dt>Reaches the fundraiser</dt>
+            <dt>Reaches the Fundit</dt>
             {/* Bridge Kit's estimate is the most it will charge, so this is a floor. */}
             <dd>{reaches !== null && !tooSmall ? `At least ${formatExact(reaches, 'USDC')}` : '-'}</dd>
           </div>
@@ -215,7 +215,7 @@ export function CrossChainDonate({
         {phase.kind === 'sent' && (
           <div className="status-box status-success">
             <p>
-              <strong>Your USDC left {CHAIN_LABELS[phase.chain]}.</strong> Follow it on its way to the fundraiser below.
+              <strong>Your USDC left {CHAIN_LABELS[phase.chain]}.</strong> Follow it on its way to the Fundit below.
             </p>
           </div>
         )}
@@ -251,7 +251,7 @@ function forCampaign(campaign: Address, kind: TrackerKind): (PendingCrossChain |
 // showing until dismissed. destination names the address in the text.
 export function PendingBridgeTracker({
   campaign,
-  destination = 'the fundraiser',
+  destination = 'the Fundit',
   kind = 'donation',
 }: {
   campaign: Address
@@ -301,7 +301,7 @@ function rowText(entry: PendingBridge | PendingPayout, destination: string) {
     attested: 'Circle confirmed it. Arriving on Arc now.',
     waiting: `Waiting for ${CHAIN_LABELS[from.key]} to confirm it.`,
     explorer: from.viemChain.blockExplorers?.default.url,
-    thanks: destination === 'the fundraiser' ? ' Thank you.' : null,
+    thanks: destination === 'the Fundit' ? ' Thank you.' : null,
   }
 }
 

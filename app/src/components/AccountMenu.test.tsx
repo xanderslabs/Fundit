@@ -74,15 +74,15 @@ describe('AccountControl signed in', () => {
     expect(pill().getAttribute('aria-expanded')).toBe('false')
   })
 
-  // Start a fundraiser lives here because only signed-in people can start one. The order is the product spec.
-  it('opens a menu with Start a fundraiser, My page and Sign out, in that order, and focuses the first item', async () => {
+  // Start a Fundit lives here because only signed-in people can start one. The order is the product spec.
+  it('opens a menu with Start a Fundit, My page and Sign out, in that order, and focuses the first item', async () => {
     state.external = EXTERNAL
     render(ui())
     await userEvent.setup().click(pill())
     expect(pill().getAttribute('aria-expanded')).toBe('true')
     const items = screen.getAllByRole('menuitem').map((i) => i.textContent)
-    expect(items).toEqual(['Start a fundraiser', 'My page', 'Sign out'])
-    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Start a fundraiser' }))
+    expect(items).toEqual(['Start a Fundit', 'My page', 'Sign out'])
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Start a Fundit' }))
   })
 
   it('moves between items with the arrow keys, wrapping at the ends', async () => {
@@ -93,7 +93,7 @@ describe('AccountControl signed in', () => {
     await user.keyboard('{ArrowDown}')
     expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'My page' }))
     await user.keyboard('{ArrowDown}{ArrowDown}')
-    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Start a fundraiser' }))
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Start a Fundit' }))
     await user.keyboard('{ArrowUp}')
     expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Sign out' }))
   })
@@ -138,12 +138,12 @@ describe('AccountControl signed in', () => {
     expect(screen.queryByRole('menu')).toBeNull()
   })
 
-  it('Start a fundraiser goes to /create', async () => {
+  it('Start a Fundit goes to /create', async () => {
     state.external = EXTERNAL
     render(ui())
     const user = userEvent.setup()
     await user.click(pill())
-    await user.click(screen.getByRole('menuitem', { name: 'Start a fundraiser' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Start a Fundit' }))
     expect(screen.getByText('Create page')).toBeTruthy()
   })
 

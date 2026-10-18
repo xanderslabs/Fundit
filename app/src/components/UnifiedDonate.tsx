@@ -34,7 +34,7 @@ import {
 const EXPLORER_URL = arc.blockExplorers.default.url
 const GATEWAY_DOCS = 'https://developers.circle.com/gateway'
 const NO_REFERENCE_NOTE =
-  "We have no reference from Circle to check this transfer. Look at the fundraiser's raised amount and your unified balance before you give again."
+  "We have no reference from Circle to check this transfer. Look at the Fundit's raised amount and your unified balance before you give again."
 
 type Phase =
   | { kind: 'idle' }
@@ -314,7 +314,7 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
       </fieldset>
 
       <p className="hint">
-        The fundraiser gets the full amount. Circle's fees come out of your unified balance on top of it, so keep a little
+        The Fundit gets the full amount. Circle's fees come out of your unified balance on top of it, so keep a little
         extra. Fundit's platform fee ({bpsToPercent(summary.donationFeeBps)}) applies once the donation is counted.
       </p>
       <p className="hint">
@@ -324,13 +324,13 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
 
       <div className="donate-status" aria-live="polite">
         {phase.kind === 'sending' && (
-          <p>Sign once in your wallet. Circle then sends the USDC to the fundraiser on Arc. This can take a few minutes.</p>
+          <p>Sign once in your wallet. Circle then sends the USDC to the Fundit on Arc. This can take a few minutes.</p>
         )}
         {phase.kind === 'checking' && <p>Checking the transfer again...</p>}
         {phase.kind === 'success' && (
           <div className="status-box status-success">
             <p>
-              <strong>Thank you. Your donation reached the fundraiser.</strong>
+              <strong>Thank you. Your donation reached the Fundit.</strong>
             </p>
             <p>
               <ExplorerLink hash={phase.hash} url={phase.explorerUrl} />

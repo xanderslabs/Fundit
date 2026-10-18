@@ -5,6 +5,7 @@ import { arc } from 'viem/chains'
 import { SignInButton } from '../components/AccountMenu'
 import { CampaignGrid, LoadError } from '../components/CampaignGrid'
 import { Name } from '../components/Name'
+import { ShareDialog } from '../components/SharePanel'
 import { CROSSCHAIN_ENABLED } from '../config'
 import { blockTimes } from '../hooks/useActivity'
 import { useCampaign } from '../hooks/useCampaigns'
@@ -26,7 +27,7 @@ function DonationRow({ item, time }: { item: DonationItem; time: bigint | undefi
         {view ? (
           <>
             You gave <strong>{formatAmount(item.data.amount as bigint, view.symbol)}</strong> to{' '}
-            <Link to={`/c/${item.campaign}`}>{view.summary.meta.title || 'Untitled fundraiser'}</Link>
+            <Link to={`/c/${item.campaign}`}>{view.summary.meta.title || 'Untitled Fundit'}</Link>
           </>
         ) : (
           <Link to={`/c/${item.campaign}`}>A donation you made</Link>
@@ -49,7 +50,7 @@ function MyFundraisers({ address }: { address: Address }) {
   return (
     <section className="section">
       <div className="section-head">
-        <h2>My fundraisers</h2>
+        <h2>Your Fundits</h2>
       </div>
       {query.isError ? (
         <LoadError onRetry={() => query.refetch()} />
@@ -58,11 +59,12 @@ function MyFundraisers({ address }: { address: Address }) {
           views={query.data}
           loading={query.isPending}
           skeletons={3}
+          action={(v) => <ShareDialog address={v.address} title={v.summary.meta.title} isCreator />}
           empty={
             <>
-              <p>You have not started a fundraiser with this address.</p>
+              <p>You have not started a Fundit with this address.</p>
               <Link to="/create" className="btn">
-                Start a fundraiser
+                Start a Fundit
               </Link>
             </>
           }
@@ -107,7 +109,7 @@ function MyDonations({ address }: { address: Address }) {
           Older donations: view on explorer
         </a>
       </p>
-      {CROSSCHAIN_ENABLED && <p className="muted">Donations made from other chains appear on the fundraiser as cross-chain donations.</p>}
+      {CROSSCHAIN_ENABLED && <p className="muted">Donations made from other chains appear on the Fundit as cross-chain donations.</p>}
     </section>
   )
 }
@@ -119,7 +121,7 @@ export function Profile() {
     return (
       <section className="notice">
         <h1>My page</h1>
-        <p>Sign in to see your fundraisers and the donations you made.</p>
+        <p>Sign in to see your Fundits and the donations you made.</p>
         <SignInButton />
       </section>
     )
@@ -131,9 +133,9 @@ export function Profile() {
         <h1>
           <Name address={sender.address} />
         </h1>
-        <p className="muted">Your fundraisers and the donations you made from this address on Arc.</p>
+        <p className="muted">Your Fundits and the donations you made from this address on Arc.</p>
         <Link to="/create" className="btn btn-lg profile-start">
-          Start a fundraiser
+          Start a Fundit
         </Link>
       </section>
       <MyFundraisers address={sender.address} />

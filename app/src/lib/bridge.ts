@@ -106,7 +106,7 @@ export function notifyPending() {
 }
 
 // Shown when a submit finds that another donation to this campaign is still unconfirmed.
-export const ANOTHER_PENDING = 'Another donation to this fundraiser is not confirmed yet. Wait for it before you give again.'
+export const ANOTHER_PENDING = 'Another donation to this Fundit is not confirmed yet. Wait for it before you give again.'
 
 export function pendingBridges(): PendingBridge[] {
   return readAll().filter((e): e is PendingBridge => e.kind === 'bridge')

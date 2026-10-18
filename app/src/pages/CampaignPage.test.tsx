@@ -72,15 +72,15 @@ afterEach(() => {
 
 describe('CampaignPage', () => {
   // An address that the factory does not know may be a clone with a hostile creator, so it is never shown as a fundraiser.
-  it("shows 'Not a Fundit fundraiser' for an address the factory does not know", () => {
+  it("shows 'Not a Fundit' for an address the factory does not know", () => {
     hookState.current = { data: 'not-a-campaign', isPending: false, isError: false }
     renderPage()
-    expect(screen.getByText('Not a Fundit fundraiser')).toBeTruthy()
+    expect(screen.getByText('Not a Fundit')).toBeTruthy()
   })
 
-  it("shows 'Not a Fundit fundraiser' for a URL that is not an address", () => {
+  it("shows 'Not a Fundit' for a URL that is not an address", () => {
     renderPage('/c/hello')
-    expect(screen.getByText('Not a Fundit fundraiser')).toBeTruthy()
+    expect(screen.getByText('Not a Fundit')).toBeTruthy()
   })
 
   // Campaign text is written by anyone, so it must render as inert text.
@@ -105,7 +105,9 @@ describe('CampaignPage', () => {
     const hrefs = anchors.map((a) => a.getAttribute('href'))
     expect(hrefs).toContain('https://good.example/page')
     expect(hrefs.some((h) => h?.startsWith('javascript:') || h?.startsWith('http:'))).toBe(false)
-    expect(container.querySelector('img')).toBeNull()
+    // The share panel shows our own logo from /images/. No image may come from the Fundit's data.
+    const imgs = Array.from(container.querySelectorAll('img')).map((i) => i.getAttribute('src'))
+    expect(imgs.every((src) => src?.startsWith('/images/'))).toBe(true)
   })
 
   it('shows progress, raised, goal and the donate panel', () => {
@@ -122,7 +124,7 @@ describe('CampaignPage', () => {
   it('disables donating on a closed campaign', () => {
     hookState.current = { data: view({}, true), isPending: false, isError: false }
     renderPage()
-    expect(screen.getByText('This fundraiser is closed.')).toBeTruthy()
+    expect(screen.getByText('This Fundit is closed.')).toBeTruthy()
     expect((screen.getByRole('button', { name: 'Give' }) as HTMLButtonElement).disabled).toBe(true)
   })
 })
