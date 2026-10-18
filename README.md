@@ -159,8 +159,8 @@ passkey created on one domain does not work on another.
 1. In Circle Console, create a client key under **Keys** > **Client Key**. Set the passkey domain and the
    allowed domain to `fundit.fun`.
 2. Create a second client key for `localhost`. Use it only for development, with throwaway accounts.
-3. Set `VITE_CIRCLE_CLIENT_KEY` to the key. For development, put it in `app/.env` with the `localhost`
-   key. For production, put it in the Cloudflare Pages build variables with the `fundit.fun` key. See
+3. Set `VITE_CIRCLE_CLIENT_KEY` to the key. For development, put it in `app/.env.local` with the
+   `localhost` key. For production, put it in the Cloudflare Pages build variables with the `fundit.fun` key. See
    [`app/.env.example`](app/.env.example).
 
 ## Give anonymously
@@ -256,10 +256,12 @@ Requirements: Node.js `>=24.15.0 <25`.
    ```shell
    cd app
    npm ci
-   cp .env.example .env
+   cp .env.example .env.local
    ```
 
-2. Fill in `.env`. Every value is public and ships in the bundle. See the table below.
+2. Fill in `.env.local`. Every value is public and ships in the bundle. See the table below. The file is
+   gitignored and used only on your machine. Production builds take their values from the Cloudflare Pages
+   build variables.
 3. Start the dev server, then run the type check and unit tests:
 
    ```shell
@@ -292,21 +294,25 @@ Run every end-to-end test and every test that moves money on Arc testnet, never 
 tokens have no value. The unit tests use mocks, and the contract fork suite only reads Arc mainnet state. A testnet build shows a "Test network" banner, and it refuses to run on
 `fundit.fun`.
 
-1. Set the network in `app/.env`:
+1. Set the network in `app/.env.local`:
 
    ```shell
    VITE_ARC_NETWORK=testnet
-   VITE_ALLOW_TESTNET_BUILD=1
    VITE_CIRCLE_CLIENT_KEY=<localhost-client-key>
    VITE_FACTORY_ADDRESS=<testnet-factory-address>
    VITE_FACTORY_DEPLOY_BLOCK=<testnet-deploy-block>
    ```
 
-   `VITE_ALLOW_TESTNET_BUILD=1` is needed only for `npm run build`. The dev server accepts `testnet`
-   without it.
+   The dev server and the end-to-end suite accept `testnet` as is. Keep `VITE_ALLOW_TESTNET_BUILD` out of
+   this file. Set it only for a one-off build of a test site, never where the `fundit.fun` build runs:
+
+   ```shell
+   VITE_ALLOW_TESTNET_BUILD=1 npm run build
+   ```
 
 2. Fill in the factory values from [Arc testnet](#arc-testnet-chain-id-5042002):
    `VITE_FACTORY_ADDRESS=0x6890D40a9A472D0d05aDb5938D85B07059ad54ab` and `VITE_FACTORY_DEPLOY_BLOCK=67870064`.
+   The app refuses the other network's factory, and a deploy block that does not match a known factory.
 3. Get testnet USDC from the [Circle faucet](https://faucet.circle.com) and send it to your Fundit
    account address in **Add money**.
 
