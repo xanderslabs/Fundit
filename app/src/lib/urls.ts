@@ -12,3 +12,6 @@ export function safeHttpsUrl(u: string): string | null {
   }
   return parsed.protocol === 'https:' ? u : null
 }
+
+// Add money lives on My page as a panel. Every "Add money" link opens My page with that panel open.
+export const ADD_MONEY_PATH = '/me?add=1'

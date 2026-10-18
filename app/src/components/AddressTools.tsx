@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Address } from 'viem'
+import { shortAddress } from '../lib/names'
 import { qrMatrix, qrPath } from '../lib/qr'
 
 // A QR code for an address, drawn as SVG squares so no HTML string is injected.
@@ -21,7 +22,8 @@ export function AddressQr({ address, label }: { address: Address; label: string 
   )
 }
 
-export function CopyAddress({ address }: { address: Address }) {
+// short shows 0x1234...abcd with a Copy button (the balance card). The full address is always what is copied.
+export function CopyAddress({ address, short = false }: { address: Address; short?: boolean }) {
   const [copied, setCopied] = useState<boolean | null>(null)
   async function copy() {
     try {
@@ -32,10 +34,10 @@ export function CopyAddress({ address }: { address: Address }) {
     }
   }
   return (
-    <div className="fund-address">
-      <code>{address}</code>
+    <div className={short ? 'fund-address fund-address-short' : 'fund-address'}>
+      <code title={short ? address : undefined}>{short ? shortAddress(address) : address}</code>
       <button type="button" className="btn btn-outline" onClick={() => void copy()}>
-        {copied ? 'Copied' : 'Copy address'}
+        {copied ? 'Copied' : short ? 'Copy' : 'Copy address'}
       </button>
       {copied === false && <p className="field-error">Could not copy. Select the address and copy it yourself.</p>}
     </div>

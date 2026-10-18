@@ -4,6 +4,7 @@ import type { Hex } from 'viem'
 import { EXPLORER_URL, TX_TIMEOUT_MS } from '../config'
 import { explainError, needsAddMoney, PlainError } from '../lib/errors'
 import { arcReceipts, type Call, type Sender, type TxResult, waitForResult } from '../lib/sender'
+import { ADD_MONEY_PATH } from '../lib/urls'
 
 
 export type TxPhase =
@@ -31,7 +32,7 @@ export function recheckResult(sender: Sender | null, hash: Hex, userop: boolean)
 }
 
 export function AddMoneyLink() {
-  return <Link to="/add-money">Add money</Link>
+  return <Link to={ADD_MONEY_PATH}>Add money</Link>
 }
 
 export function ExplorerLink({ hash }: { hash: Hex }) {

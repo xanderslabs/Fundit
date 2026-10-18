@@ -243,6 +243,7 @@
 .card-action {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
 }
 
 /* Create: the page after a Fundit is created. */

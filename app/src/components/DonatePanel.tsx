@@ -22,6 +22,7 @@ import { explainError, needsAddMoney } from '../lib/errors'
 import { bpsToPercent, formatAmount, formatExact, parseAmount } from '../lib/format'
 import { addAtLeast } from '../lib/passkey'
 import type { TxResult } from '../lib/sender'
+import { ADD_MONEY_PATH } from '../lib/urls'
 import { byteLength } from '../lib/validate'
 import { SignInButton } from './AccountMenu'
 import { AddMoneyLink, PASSKEY_LOGIN_TO_CHECK, PASSKEY_PROCESSING, recheckResult } from './TxStatus'
@@ -311,12 +312,12 @@ export function DonatePanel({ view }: { view: CampaignView }) {
             )}
             {overBalance && balance !== undefined && (
               <p className="field-error" role="alert">
-                {notEnough(balance)} <Link to="/add-money">Add money</Link>
+                {notEnough(balance)} <Link to={ADD_MONEY_PATH}>Add money</Link>
               </p>
             )}
             {noGas && reserve !== undefined && (
               <p className="field-error" role="alert">
-                {addAtLeast(reserve)} <Link to="/add-money">Add money</Link>
+                {addAtLeast(reserve)} <Link to={ADD_MONEY_PATH}>Add money</Link>
               </p>
             )}
             {balanceNote && (

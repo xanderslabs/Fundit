@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
@@ -6,17 +6,22 @@ import { type Address, decodeFunctionData, type Hex, UserRejectedRequestError } 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { erc20Abi } from '../abi/erc20'
 import { ARC_CHAIN_ID, TOKENS } from '../config'
-import { AddMoney } from './AddMoney'
+import { balancesKey } from '../lib/deposit'
+import { formatAmount } from '../lib/format'
+import { AddMoneyPanel } from './AddMoneyPanel'
 
 const ACCOUNT = '0x00000000000000000000000000000000000000cc' as Address
 const EXTERNAL = '0x1111111111111111111111111111111111111111' as Address
 const HASH = `0x${'1'.repeat(64)}` as Hex
 
-const flags = vi.hoisted(() => ({ crosschain: false }))
+const flags = vi.hoisted(() => ({ crosschain: false, reown: 'test-project' }))
 vi.mock('../config', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../config')>()),
   get CROSSCHAIN_ENABLED() {
     return flags.crosschain
+  },
+  get REOWN_PROJECT_ID() {
+    return flags.reown
   },
 }))
 
@@ -40,10 +45,13 @@ vi.mock('@wagmi/core', () => core)
 const arc = vi.hoisted(() => ({ estimateGas: vi.fn(), waitForTransactionReceipt: vi.fn(), getTransaction: vi.fn(), call: vi.fn() }))
 vi.mock('../lib/clients', () => ({ arcClient: arc }))
 const openWallet = vi.hoisted(() => vi.fn())
+const disconnect = vi.hoisted(() => vi.fn())
 // The Fundit account is signed in. state.external is a regular wallet connected here to add money from.
 vi.mock('wagmi', () => ({
   useConfig: () => ({}),
-  useConnection: () => (state.external ? { isConnected: true, address: state.external } : { isConnected: false }),
+  useConnection: () =>
+    state.external ? { isConnected: true, address: state.external, connector: { name: 'MetaMask' } } : { isConnected: false },
+  useDisconnect: () => ({ mutate: disconnect }),
 }))
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: openWallet }) }))
 
@@ -59,35 +67,57 @@ afterEach(() => {
   vi.clearAllMocks()
   localStorage.clear()
   flags.crosschain = false
+  flags.reown = 'test-project'
   state.external = null
   state.balances.clear()
 })
+
+// My page shows the account balance from this same query, so it stands in for the dashboard's balance card.
+function Balance() {
+  const q = useQuery({ queryKey: balancesKey(ACCOUNT), queryFn: () => fetchAccountBalances({}, ACCOUNT) })
+  return <p>{q.data ? `${formatAmount(q.data.usdc, 'USDC')} and ${formatAmount(q.data.eurc, 'EURC')}` : 'Loading...'}</p>
+}
 
 function renderPage() {
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <MemoryRouter>
-        <AddMoney />
+        <Balance />
+        <AddMoneyPanel account={ACCOUNT} />
       </MemoryRouter>
     </QueryClientProvider>,
   )
 }
 
-async function fillDeposit(amount: string) {
+async function openWalletTab() {
   const user = userEvent.setup()
+  await user.click(screen.getByRole('tab', { name: 'From a wallet' }))
+  return user
+}
+
+async function fillDeposit(amount: string) {
+  const user = await openWalletTab()
   await screen.findByText(/^Your wallet holds 10\.00 USDC on Arc\./)
   await user.type(screen.getByLabelText('Amount'), amount)
   await user.click(screen.getByRole('button', { name: 'Add to my Fundit account' }))
 }
 
-describe('AddMoney', () => {
+describe('AddMoneyPanel', () => {
+  // The ways to add money are tabs. Another chain is offered only when the bridge is switched on.
+  it('offers Your address and From a wallet as tabs, starting on Your address', () => {
+    renderPage()
+    expect(screen.getByRole('tablist', { name: 'Ways to add money' })).toBeTruthy()
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Your address', 'From a wallet'])
+    expect(screen.getByRole('tab', { name: 'Your address' }).getAttribute('aria-selected')).toBe('true')
+  })
+
   it('shows the account address, a QR code and a working copy button', async () => {
     // userEvent.setup() puts in its own clipboard, so the spy goes in after it.
     const user = userEvent.setup()
     const writeText = vi.fn(async () => {})
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
     renderPage()
-    expect(screen.getByRole('heading', { name: 'Send to your Fundit account' })).toBeTruthy()
+    expect(screen.getByRole('tabpanel', { name: 'Your address' })).toBeTruthy()
     expect(screen.getByText(ACCOUNT)).toBeTruthy()
     expect(screen.getByText('Send USDC or EURC on Arc to this address from any wallet or exchange.')).toBeTruthy()
     expect(await screen.findByRole('img', { name: 'QR code of your Fundit account address' })).toBeTruthy()
@@ -99,8 +129,43 @@ describe('AddMoney', () => {
 
   it('asks to connect a wallet when none is connected, using the wallet modal', async () => {
     renderPage()
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Connect a wallet' }))
+    const user = await openWalletTab()
+    await user.click(screen.getByRole('button', { name: 'Connect a wallet' }))
     expect(openWallet).toHaveBeenCalledTimes(1)
+  })
+
+  // The person must see which wallet pays, and be able to drop it to use another one.
+  it('shows the connected wallet and a Disconnect button that disconnects it', async () => {
+    state.external = EXTERNAL
+    state.balances.set(EXTERNAL.toLowerCase(), { usdc: 10_000000n, eurc: 0n })
+    renderPage()
+    const user = await openWalletTab()
+    const panel = screen.getByRole('tabpanel', { name: 'From a wallet' })
+    expect(panel.textContent).toContain('Connected: MetaMask')
+    expect(panel.textContent).toContain('0x1111...1111')
+    await user.click(screen.getByRole('button', { name: 'Disconnect' }))
+    expect(disconnect).toHaveBeenCalledTimes(1)
+    expect(core.sendTransaction).not.toHaveBeenCalled()
+  })
+
+  // Without a Reown project id AppKit cannot connect. The person gets a plain sentence, never a raw error.
+  it('says connecting a wallet is not available when the Reown project id is missing', async () => {
+    flags.reown = ''
+    renderPage()
+    await openWalletTab()
+    expect(screen.getByText('Connecting a wallet is not available on this site right now.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Connect a wallet' })).toBeNull()
+    expect(openWallet).not.toHaveBeenCalled()
+  })
+
+  // AppKit can still fail to open (a blocked script, a bad id). The same plain sentence shows, not the error.
+  it('shows the plain sentence when the wallet modal fails to open', async () => {
+    openWallet.mockRejectedValueOnce(new Error('Project ID Not Configured: 403 from api.web3modal.org'))
+    renderPage()
+    const user = await openWalletTab()
+    await user.click(screen.getByRole('button', { name: 'Connect a wallet' }))
+    expect(await screen.findByText('Connecting a wallet is not available on this site right now.')).toBeTruthy()
+    expect(document.body.textContent).not.toMatch(/403|Project ID/)
   })
 
   // Review focus 4: a deposit must never go out on another chain.
@@ -170,35 +235,26 @@ describe('AddMoney', () => {
     expect(await screen.findByText('5.00 USDC and 0.00 EURC')).toBeTruthy()
   })
 
-  it('leaves out Add from another chain when cross-chain is off', () => {
+  it('leaves out From another chain when cross-chain is off', () => {
     renderPage()
-    expect(screen.queryByRole('heading', { name: 'Add from another chain' })).toBeNull()
+    expect(screen.queryByRole('tab', { name: 'From another chain' })).toBeNull()
   })
 
-  it('offers Add from another chain when cross-chain is on', () => {
+  it('offers From another chain when cross-chain is on', () => {
     flags.crosschain = true
     renderPage()
-    expect(screen.getByRole('heading', { name: 'Add from another chain' })).toBeTruthy()
-  })
-
-  // A transfer started before the flag went off may still arrive. Its row stays in view.
-  it('still tracks a transfer on its way to the account when cross-chain is off', () => {
-    localStorage.setItem(
-      'fundit.pendingBridges',
-      JSON.stringify([{ kind: 'submitted', id: 's-1', campaign: ACCOUNT, srcDomain: 6, amount: '25', createdAt: Date.now() }]),
-    )
-    renderPage()
-    expect(screen.getByText(/25 USDC from Base: Submitted/)).toBeTruthy()
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Your address', 'From a wallet', 'From another chain'])
   })
 
   // A second bridge while the first is still on its way could send the money twice, so the form waits.
-  it('blocks a new transfer from another chain while one to the account is on its way', () => {
+  it('blocks a new transfer from another chain while one to the account is on its way', async () => {
     flags.crosschain = true
     localStorage.setItem(
       'fundit.pendingBridges',
       JSON.stringify([{ kind: 'submitted', id: 's-1', campaign: ACCOUNT, srcDomain: 6, amount: '25', createdAt: Date.now() }]),
     )
     renderPage()
+    await userEvent.setup().click(screen.getByRole('tab', { name: 'From another chain' }))
     expect(screen.getByText('A transfer to your Fundit account is still on its way. Wait for it to arrive before you send another.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Bridge USDC' })).toBeNull()
   })

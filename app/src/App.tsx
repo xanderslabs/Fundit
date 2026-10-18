@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { Navigate, Route, Routes } from 'react-router'
+import { Route, Routes } from 'react-router'
 import { Layout } from './components/Layout'
 import { CampaignPage } from './pages/CampaignPage'
 import { Create } from './pages/Create'
@@ -11,8 +11,7 @@ import { Privacy } from './pages/Privacy'
 import { Profile } from './pages/Profile'
 import { Terms } from './pages/Terms'
 
-// Loaded on demand: most visits never open them.
-const AddMoney = lazy(() => import('./pages/AddMoney').then((m) => ({ default: m.AddMoney })))
+// Loaded on demand: most visits never open it.
 const Recover = lazy(() => import('./pages/Recover').then((m) => ({ default: m.Recover })))
 
 export function App() {
@@ -24,16 +23,6 @@ export function App() {
         <Route path="c/:address" element={<CampaignPage />} />
         <Route path="create" element={<Create />} />
         <Route path="manage/:address" element={<Manage />} />
-        <Route
-          path="add-money"
-          element={
-            <Suspense fallback={<p className="muted">Loading...</p>}>
-              <AddMoney />
-            </Suspense>
-          }
-        />
-        {/* The old address of the Add money page. */}
-        <Route path="fund" element={<Navigate to="/add-money" replace />} />
         <Route
           path="recover"
           element={

@@ -140,6 +140,17 @@ describe('AccountControl signed in', () => {
     expect(screen.queryByRole('menu')).toBeNull()
   })
 
+  // The Add money page is gone. The item opens My page with its Add money panel open.
+  it('Add money opens My page with the Add money panel', async () => {
+    state.session = ACCOUNT
+    render(ui())
+    const user = userEvent.setup()
+    await user.click(pill())
+    expect(screen.getByRole('menuitem', { name: 'Add money' }).getAttribute('href')).toBe('/me?add=1')
+    await user.click(screen.getByRole('menuitem', { name: 'Add money' }))
+    expect(screen.getByText('My page content')).toBeTruthy()
+  })
+
   it('Start a Fundit goes to /create', async () => {
     state.session = ACCOUNT
     render(ui())

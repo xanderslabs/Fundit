@@ -292,10 +292,31 @@ function start(next: Live) {
   savePasskeySession({ address: next.account.address, credentialId: next.credentialId })
 }
 
+// The username given to the passkey at sign-up or recovery, kept per account in this browser so My page can show
+// it. A login does not return it, so on another browser it is unknown (null).
+const USERNAME_KEY = storageKey('passkey.username.')
+
+export function readPasskeyUsername(address: Address): string | null {
+  try {
+    return localStorage.getItem(USERNAME_KEY + address.toLowerCase())
+  } catch {
+    return null
+  }
+}
+
+function rememberPasskeyUsername(address: Address, username: string) {
+  try {
+    localStorage.setItem(USERNAME_KEY + address.toLowerCase(), username)
+  } catch {
+    // Storage is unavailable. My page shows the address only.
+  }
+}
+
 // Creates a new passkey on this device and the smart account it owns on Arc. If this fails after the browser
 // saved the passkey, loginPasskey with that passkey opens the same account.
 export async function registerPasskey(username: string): Promise<PasskeySession> {
   start(await credentialFor('Register', { username }))
+  rememberPasskeyUsername(live!.account.address, username)
   newAccount = live!.account.address.toLowerCase()
   notify()
   return { address: live!.account.address, username }
@@ -900,6 +921,7 @@ export async function recoverWithPhrase(p: { phrase: string; username: string })
     mode: sdk.WebAuthnMode.Register,
     username,
   })
+  rememberPasskeyUsername(account, username)
   type AccountParams = Parameters<typeof sdk.toCircleSmartAccount>[0]
   const smart = await sdk.toCircleSmartAccount({
     client: client as unknown as AccountParams['client'],

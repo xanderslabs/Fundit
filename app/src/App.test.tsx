@@ -9,7 +9,6 @@ vi.mock('./components/Layout', async () => {
   const { Outlet } = await import('react-router')
   return { Layout: () => <Outlet /> }
 })
-vi.mock('./pages/AddMoney', () => ({ AddMoney: () => <h1>Add money</h1> }))
 vi.mock('./pages/Recover', () => ({ Recover: () => <h1>Recover your account</h1> }))
 
 afterEach(cleanup)
@@ -25,16 +24,11 @@ function renderAt(path: string) {
 }
 
 describe('App routes', () => {
-  // Old links and bookmarks to /fund must still reach the page.
-  it('redirects /fund to the Add money page', async () => {
-    renderAt('/fund')
-    expect(await screen.findByRole('heading', { name: 'Add money' })).toBeTruthy()
-  })
-
-  // Every account is a Fundit account, so these pages are always there, with no feature flag.
-  it('serves /add-money with no feature flag', async () => {
-    renderAt('/add-money')
-    expect(await screen.findByRole('heading', { name: 'Add money' })).toBeTruthy()
+  // Add money is a panel on My page now. The old page addresses are gone and must not redirect anywhere.
+  it.each(['/add-money', '/fund'])('shows Page not found for the removed %s address', async (path) => {
+    renderAt(path)
+    expect(await screen.findByRole('heading', { name: 'Page not found' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Add money' })).toBeNull()
   })
 
   it('serves /recover with no feature flag', async () => {

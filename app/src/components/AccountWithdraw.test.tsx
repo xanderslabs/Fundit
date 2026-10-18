@@ -119,7 +119,7 @@ describe('AccountWithdraw', () => {
     await userEvent.type(screen.getByLabelText('Recipient'), FRIEND)
     await userEvent.click(submitButton())
     expect(await screen.findByText(/Your Fundit account needs at least 0.35 USDC for the network fee\. Add money and try again\./)).toBeTruthy()
-    expect(screen.getAllByRole('link', { name: 'Add money' }).some((a) => a.getAttribute('href') === '/add-money')).toBe(true)
+    expect(screen.getAllByRole('link', { name: 'Add money' }).some((a) => a.getAttribute('href') === '/me?add=1')).toBe(true)
     const [calls, opts] = send.mock.calls[0]!
     expect(opts).toMatchObject({ usdcOut: 700_000n })
     expect(decodeFunctionData({ abi: erc20Abi, data: calls[0]!.data }).args).toEqual([FRIEND, 700_000n])
@@ -146,7 +146,7 @@ describe('AccountWithdraw', () => {
     await screen.findByText(/You have 5.00 EURC/)
     await fill('5', FRIEND)
     expect(screen.getByText(/Add at least 0.30 USDC to your Fundit account first/)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/add-money')
+    expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/me?add=1')
     expect((submitButton() as HTMLButtonElement).disabled).toBe(true)
   })
 

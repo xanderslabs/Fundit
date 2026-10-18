@@ -20,6 +20,7 @@ import {
   type PasskeyBundler,
   passkeySender,
   readPasskeySession,
+  readPasskeyUsername,
   readPendingBackup,
   readPendingRecovery,
   RecoveryNeedsFunds,
@@ -278,6 +279,25 @@ describe('passkey session store', () => {
     expect(result.current).toEqual({ address: '0x00000000000000000000000000000000000000cc', credentialId: 'cred-live' })
     act(() => clearPasskeySession())
     expect(result.current).toBeNull()
+  })
+})
+
+describe('passkey username', () => {
+  // My page greets the person by the name they gave their passkey. Only this browser knows it: Circle keeps it
+  // with the passkey and a later login does not return it.
+  it('remembers the username chosen at sign-up for that account only', async () => {
+    const session = await registerPasskey('ana.phone')
+    expect(readPasskeyUsername(session.address)).toBe('ana.phone')
+    expect(readPasskeyUsername(session.address.toUpperCase().replace('0X', '0x') as Address)).toBe('ana.phone')
+    expect(readPasskeyUsername('0x1111111111111111111111111111111111111111')).toBeNull()
+  })
+
+  it('reads no username when storage throws', () => {
+    const boom = () => {
+      throw new Error('SecurityError')
+    }
+    vi.stubGlobal('localStorage', { getItem: boom, setItem: boom, removeItem: boom })
+    expect(readPasskeyUsername(ACCOUNT.address)).toBeNull()
   })
 })
 

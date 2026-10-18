@@ -196,7 +196,7 @@ describe('Create', () => {
     const user = await fillValid()
     await user.click(submitButton())
     expect(await screen.findByText(/Your Fundit account needs at least 1.62 USDC for the network fee\. Add money and try again\./)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/add-money')
+    expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/me?add=1')
   })
 
   it('shows not confirmed yet with an explorer link on timeout', async () => {

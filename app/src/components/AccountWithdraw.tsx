@@ -14,6 +14,7 @@ import { fetchForwardFee } from '../lib/iris'
 import { addAtLeast } from '../lib/passkey'
 import { destDomain, type PayoutDest } from '../lib/payout'
 import type { Sender } from '../lib/sender'
+import { ADD_MONEY_PATH } from '../lib/urls'
 import { ADDRESS_TYPO, parseTypedAddress } from '../lib/validate'
 import { PendingBridgeTracker } from './PendingBridgeTracker'
 import { TxStatus, useTx } from './TxStatus'
@@ -241,7 +242,7 @@ function SendOutForm({ sender }: { sender: Sender }) {
             {noGas && reserve !== undefined && (
               <p className="field-error" role="alert">
                 {addAtLeast(reserve)}{' '}
-                <Link to="/add-money">Add money</Link>
+                <Link to={ADD_MONEY_PATH}>Add money</Link>
               </p>
             )}
           </div>

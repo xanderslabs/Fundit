@@ -61,7 +61,7 @@ by default ([`app/src/config.ts`](app/src/config.ts)).
 | CCTP V2 (`TokenMessengerV2`) | Creator payouts, and **Send money out** from a Fundit account, in USDC to the CCTP chains in `CCTP_CHAINS`. | [`Campaign.sol`](contracts/src/Campaign.sol#L217-L231), [`app/src/lib/payout.ts`](app/src/lib/payout.ts), [`app/src/lib/accountWithdraw.ts`](app/src/lib/accountWithdraw.ts) | On |
 | CCTP Forwarding Service | Hook data on every cross-chain payout and send, so Circle submits the destination mint. | [`app/src/config.ts`](app/src/config.ts) (`FORWARD_HOOK_DATA`) | On |
 | CCTP V2 fees API (Iris) | Fast and Standard fee quotes with forwarding. | [`app/src/lib/iris.ts`](app/src/lib/iris.ts) | On |
-| Bridge Kit | **Add money** from another chain: burns USDC on the person's chain with their Fundit account as the recipient. | [`app/src/lib/bridge.ts`](app/src/lib/bridge.ts), [`AddMoney.tsx`](app/src/pages/AddMoney.tsx) | Behind `VITE_CROSSCHAIN` |
+| Bridge Kit | **Add money** from another chain: burns USDC on the person's chain with their Fundit account as the recipient. | [`app/src/lib/bridge.ts`](app/src/lib/bridge.ts), [`AddMoneyPanel.tsx`](app/src/components/AddMoneyPanel.tsx) | Behind `VITE_CROSSCHAIN` |
 
 On Arc mainnet, `CCTP_CHAINS` is Ethereum, Avalanche, OP Mainnet, Arbitrum, Base and Polygon. On Arc
 testnet, it is Ethereum Sepolia and Base Sepolia.
@@ -136,14 +136,16 @@ network fee.
 - **Recover the account.** `/recover` takes the 12 words, creates a new passkey on this device and adds it
   as an owner with `executeRecovery`. The sign-in dialog links to it as **Lost your passkey? Recover your
   account**. See [`Recover.tsx`](app/src/pages/Recover.tsx).
-- **Add money.** `/add-money` shows the account address and its QR code, for USDC or EURC sent on Arc from
-  any wallet or exchange. It also has a form to send from a connected wallet. The app switches that wallet
-  to Arc first and never sends on another chain. With `VITE_CROSSCHAIN=1`, the page also takes USDC from
-  another chain through Bridge Kit. See [`AddMoney.tsx`](app/src/pages/AddMoney.tsx).
+- **Add money.** The **Add money** button on **My page** opens a panel. Every Add money link in the app
+  opens `/me?add=1`. The **Your address** tab shows the account address and its QR code, for USDC or EURC
+  sent on Arc from any wallet or exchange. The **From a wallet** tab sends from a connected wallet, shows
+  which wallet is connected and has a **Disconnect** button. The app switches that wallet to Arc first and
+  never sends on another chain. With `VITE_CROSSCHAIN=1`, a **From another chain** tab takes USDC from
+  another chain through Bridge Kit. See [`AddMoneyPanel.tsx`](app/src/components/AddMoneyPanel.tsx).
 - **Give.** The Fundit account approves the campaign and calls `donate` in one user operation. If the
   balance is too low, the **Give** panel links to **Add money**. See
   [`DonatePanel.tsx`](app/src/components/DonatePanel.tsx).
-- **Send money out.** **My page** has a **Send money out** form. It sends USDC or EURC to any address on
+- **Send money out.** The **Send** button on **My page** opens the **Send money out** form. It sends USDC or EURC to any address on
   Arc, or USDC to another CCTP chain with the Forwarding Service, in one passkey confirmation. It refuses
   the account's own address, and any USDC amount that leaves less than 0.05 USDC behind. See
   [`AccountWithdraw.tsx`](app/src/components/AccountWithdraw.tsx).

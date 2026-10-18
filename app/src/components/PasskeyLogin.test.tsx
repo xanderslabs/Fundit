@@ -1,6 +1,6 @@
 import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { type Address, RpcRequestError, UnknownRpcError } from 'viem'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { StoredPasskey } from '../lib/passkey'
@@ -44,6 +44,11 @@ afterEach(() => {
   prompt.value = false
   vi.restoreAllMocks()
 })
+
+function Where() {
+  const l = useLocation()
+  return <p data-testid="where">{`${l.pathname}${l.search}`}</p>
+}
 
 function renderControl() {
   render(
@@ -177,6 +182,21 @@ describe('Sign in', () => {
     await user.click(screen.getByRole('button', { name: 'Create account' }))
     expect(registerPasskey).toHaveBeenCalledWith('ana.phone')
     expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  // A new account holds nothing, so sign-up lands on My page with the Add money panel open.
+  it('lands on My page with Add money open after creating the account', async () => {
+    registerPasskey.mockResolvedValue({ address: PASSKEY })
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <AccountControl />
+        <Where />
+      </MemoryRouter>,
+    )
+    const user = await openCreate()
+    await user.type(screen.getByLabelText('Username'), 'ana.phone')
+    await user.click(screen.getByRole('button', { name: 'Create account' }))
+    expect(screen.getByTestId('where').textContent).toBe('/me?add=1')
   })
 
   it('refuses an empty username with a plain message', async () => {
@@ -316,6 +336,6 @@ describe('Account menu with a passkey session', () => {
       'Add money',
       'Sign out',
     ])
-    expect(screen.getByRole('menuitem', { name: 'Add money' }).getAttribute('href')).toBe('/add-money')
+    expect(screen.getByRole('menuitem', { name: 'Add money' }).getAttribute('href')).toBe('/me?add=1')
   })
 })

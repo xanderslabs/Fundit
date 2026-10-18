@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { explainError } from '../lib/errors'
+import { ADD_MONEY_PATH } from '../lib/urls'
 import {
   addBackupPasskey,
   canPayBackupGas,
@@ -247,7 +248,7 @@ export function AddBackupPasskey({ stored, onLater, onDone, headingId, onGuardCh
     body = (
       <p>
         Add a little money first. The backup costs a small network fee.{' '}
-        <Link to="/add-money" onClick={onLater}>
+        <Link to={ADD_MONEY_PATH} onClick={onLater}>
           Add money
         </Link>
       </p>

@@ -55,7 +55,7 @@ function ui(props: Partial<Parameters<typeof AddBackupPasskey>[0]> = {}) {
           }
         />
         <Route path="/elsewhere" element={<p>Another page</p>} />
-        <Route path="/add-money" element={<p>Fund page</p>} />
+        <Route path="/me" element={<p>Fund page</p>} />
       </Routes>
     </MemoryRouter>
   )
@@ -160,7 +160,7 @@ describe('AddBackupPasskey', () => {
     state.funded = false
     render(ui())
     expect(await screen.findByText('Add a little money first. The backup costs a small network fee.')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/add-money')
+    expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/me?add=1')
     expect(screen.queryByRole('button', { name: 'Show my recovery key' })).toBeNull()
   })
 

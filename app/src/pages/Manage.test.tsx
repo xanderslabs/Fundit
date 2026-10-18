@@ -157,7 +157,7 @@ describe('Manage', () => {
     await user.type(screen.getByLabelText('Amount'), '50')
     await user.click(button('Withdraw'))
     expect(await screen.findByText(/Your Fundit account needs at least 0.25 USDC for the network fee\. Add money and try again\./)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/add-money')
+    expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/me?add=1')
     expect((send.mock.calls[0] as unknown[])[1]).toMatchObject({ label: 'Withdraw' })
   })
 

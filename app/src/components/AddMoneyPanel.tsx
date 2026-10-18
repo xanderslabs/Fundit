@@ -2,25 +2,52 @@ import { useAppKit } from '@reown/appkit/react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { type Address, type EIP1193Provider, formatUnits } from 'viem'
-import { useConfig, useConnection } from 'wagmi'
-import { AddressQr, CopyAddress } from '../components/AddressTools'
-import { PasskeyLogin } from '../components/PasskeyLogin'
-import { PendingBridgeTracker } from '../components/PendingBridgeTracker'
-import { TxStatus, useTx } from '../components/TxStatus'
-import { ARC_DOMAIN, CCTP_CHAINS, CHAIN_LABELS, type CctpChainKey, CROSSCHAIN_ENABLED, PASSKEY_GAS_BUFFER, TOKENS, type TokenSymbol } from '../config'
+import { useConfig, useConnection, useDisconnect } from 'wagmi'
+import {
+  ARC_DOMAIN,
+  CCTP_CHAINS,
+  CHAIN_LABELS,
+  type CctpChainKey,
+  CROSSCHAIN_ENABLED,
+  PASSKEY_GAS_BUFFER,
+  REOWN_PROJECT_ID,
+  TOKENS,
+  type TokenSymbol,
+} from '../config'
 import { blockingEntry, chainByKey, donateCrossChain, estimateCrossChain, notifyPending, subscribePending } from '../lib/bridge'
 import { arcClient } from '../lib/clients'
 import { BALANCES_KEY, balancesKey, buildDepositCall, fetchAccountBalances } from '../lib/deposit'
 import { explainAfterApproval } from '../lib/errors'
 import { formatAmount, formatExact, parseAmount } from '../lib/format'
 import { fetchForwardFee } from '../lib/iris'
-import { usePasskeySession } from '../lib/passkey'
+import { shortAddress } from '../lib/names'
 import { wagmiSender } from '../lib/sender'
+import { AddressQr, CopyAddress } from './AddressTools'
+import { PendingBridgeTracker } from './PendingBridgeTracker'
+import { Tabs } from './Tabs'
+import { TxStatus, useTx } from './TxStatus'
 
 const BALANCE_POLL_MS = 15_000
 const QUOTE_DEBOUNCE_MS = 400
 
 const BRIDGE_PENDING = 'A transfer to your Fundit account is still on its way. Wait for it to arrive before you send another.'
+const NO_WALLETS = 'Connecting a wallet is not available on this site right now.'
+
+// Opens the AppKit wallet modal. Without a Reown project id, or when the modal fails to open, the person sees
+// NO_WALLETS instead of a raw error.
+function useWalletModal() {
+  const { open } = useAppKit()
+  const [failed, setFailed] = useState(false)
+  const available = REOWN_PROJECT_ID !== '' && !failed
+  async function connect() {
+    try {
+      await open()
+    } catch {
+      setFailed(true)
+    }
+  }
+  return { available, connect }
+}
 
 function useBalances(address: Address | null) {
   return useQuery({
@@ -33,7 +60,7 @@ function useBalances(address: Address | null) {
 
 // Bridge Kit from an external wallet on another chain. Circle's forwarder mints the USDC to the Fundit account on Arc.
 function BridgeToAccount({ recipient }: { recipient: Address }) {
-  const { open } = useAppKit()
+  const modal = useWalletModal()
   const { isConnected, address, connector } = useConnection()
   const wallet = isConnected && connector ? connector : null
   const [sourceKey, setSourceKey] = useState<CctpChainKey>('Base')
@@ -196,10 +223,12 @@ function BridgeToAccount({ recipient }: { recipient: Address }) {
         <button type="submit" className="btn" disabled={!canSubmit}>
           {busy ? 'Sending...' : 'Bridge USDC'}
         </button>
-      ) : (
-        <button type="button" className="btn" onClick={() => open()}>
+      ) : modal.available ? (
+        <button type="button" className="btn" onClick={() => void modal.connect()}>
           Connect the wallet that holds the USDC
         </button>
+      ) : (
+        <p>{NO_WALLETS}</p>
       )}
     </form>
   )
@@ -208,9 +237,10 @@ function BridgeToAccount({ recipient }: { recipient: Address }) {
 // A regular wallet on Arc sends USDC or EURC straight to the Fundit account. It uses the connected wallet's own
 // sender: the Fundit account is where the money goes. Add money is the only place a wallet connects.
 function WalletDeposit({ account }: { account: Address }) {
-  const { open } = useAppKit()
+  const modal = useWalletModal()
+  const { mutate: disconnect } = useDisconnect()
   const config = useConfig()
-  const { address, isConnected } = useConnection()
+  const { address, isConnected, connector } = useConnection()
   const external = isConnected && address ? address : null
   const queryClient = useQueryClient()
   const [symbol, setSymbol] = useState<TokenSymbol>('USDC')
@@ -237,8 +267,9 @@ function WalletDeposit({ account }: { account: Address }) {
   }
 
   if (external === null) {
+    if (!modal.available) return <p>{NO_WALLETS}</p>
     return (
-      <button type="button" className="btn" onClick={() => void open()}>
+      <button type="button" className="btn wallet-connect" onClick={() => void modal.connect()}>
         Connect a wallet
       </button>
     )
@@ -246,6 +277,18 @@ function WalletDeposit({ account }: { account: Address }) {
 
   return (
     <form className="donate-form" onSubmit={submit} noValidate>
+      <div className="wallet-connected">
+        <p>
+          Connected: <strong>{connector?.name ?? 'Wallet'}</strong>{' '}
+          <code className="wallet-address" title={external}>
+            {shortAddress(external)}
+          </code>
+        </p>
+        {/* To switch wallets, disconnect this one and connect another. */}
+        <button type="button" className="btn btn-outline" disabled={tx.locked} onClick={() => disconnect()}>
+          Disconnect
+        </button>
+      </div>
       <fieldset className="donate-fields" disabled={tx.locked}>
         <div className="form-field">
           <label htmlFor="deposit-token">Currency</label>
@@ -307,65 +350,54 @@ function WalletDeposit({ account }: { account: Address }) {
   )
 }
 
-export function AddMoney() {
-  const session = usePasskeySession()
-  const address = session?.address ?? null
-  const balances = useBalances(address)
-
-  if (!address) {
-    return (
-      <section className="notice">
-        <h1>Your Fundit account</h1>
-        <PasskeyLogin />
-      </section>
-    )
-  }
-
+// The Add money panel on My page: the account's own address, a connected wallet on Arc and, when switched on,
+// a bridge from another chain. Each way is a tab. Visited tabs stay mounted, so a send in flight keeps its state.
+export function AddMoneyPanel({ account }: { account: Address }) {
+  const tabs = [
+    {
+      id: 'address',
+      label: 'Your address',
+      content: (
+        <div className="deposit-tab">
+          <p>Send USDC or EURC on Arc to this address from any wallet or exchange.</p>
+          <div className="deposit-address">
+            <AddressQr address={account} label="QR code of your Fundit account address" />
+            <CopyAddress address={account} />
+          </div>
+          <p className="hint">This address is on Arc only. Money sent to it on another chain will not arrive.</p>
+        </div>
+      ),
+    },
+    {
+      id: 'wallet',
+      label: 'From a wallet',
+      content: (
+        <div className="deposit-tab">
+          <p className="hint">Send USDC or EURC from a regular wallet on Arc.</p>
+          <WalletDeposit account={account} />
+        </div>
+      ),
+    },
+    ...(CROSSCHAIN_ENABLED
+      ? [
+          {
+            id: 'chain',
+            label: 'From another chain',
+            content: (
+              <div className="deposit-tab">
+                <p className="hint">Move USDC from a wallet on another chain. Circle delivers it to your Fundit account on Arc.</p>
+                <BridgeToAccount recipient={account} />
+                <PendingBridgeTracker campaign={account} destination="your Fundit account" />
+              </div>
+            ),
+          },
+        ]
+      : []),
+  ]
   return (
-    <section className="manage">
-      <header className="page-head">
-        <h1>Add money</h1>
-        <p className="muted">Your Fundit account lives on Arc. Add USDC or EURC here, then give from it with your passkey.</p>
-        <p>
-          Balance:{' '}
-          <strong>
-            {balances.data !== undefined
-              ? `${formatAmount(balances.data.usdc, 'USDC')} and ${formatAmount(balances.data.eurc, 'EURC')}`
-              : balances.isError
-                ? 'Could not read it'
-                : 'Loading...'}
-          </strong>
-        </p>
-        <p className="hint">Network fees on Arc are paid in USDC from this balance, so keep a little extra.</p>
-      </header>
-
-      <section className="panel manage-section" aria-labelledby="fund-address-heading">
-        <h2 id="fund-address-heading">Send to your Fundit account</h2>
-        <p>Send USDC or EURC on Arc to this address from any wallet or exchange.</p>
-        <CopyAddress address={address} />
-        <AddressQr address={address} label="QR code of your Fundit account address" />
-        <p className="hint">This address is on Arc only. Money sent to it on another chain will not arrive.</p>
-      </section>
-
-      <section className="panel manage-section" aria-labelledby="fund-wallet-heading">
-        <h2 id="fund-wallet-heading">Add from a connected wallet</h2>
-        <p className="hint">Send USDC or EURC from a regular wallet on Arc.</p>
-        <WalletDeposit account={address} />
-      </section>
-
-      {CROSSCHAIN_ENABLED ? (
-        <section className="panel manage-section" aria-labelledby="fund-bridge-heading">
-          <h2 id="fund-bridge-heading">Add from another chain</h2>
-          <p className="hint">Move USDC from a wallet on another chain. Circle delivers it to your Fundit account on Arc.</p>
-          <BridgeToAccount recipient={address} />
-          <PendingBridgeTracker campaign={address} destination="your Fundit account" />
-        </section>
-      ) : (
-        // A bridge started while the option was on may still arrive, so it stays tracked.
-        <PendingBridgeTracker campaign={address} destination="your Fundit account" />
-      )}
-
+    <>
+      <Tabs label="Ways to add money" tabs={tabs} keepMounted className="deposit-tabs" />
       <p className="hint">Card and bank coming soon.</p>
-    </section>
+    </>
   )
 }

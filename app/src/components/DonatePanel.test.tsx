@@ -222,13 +222,13 @@ describe('DonatePanel', () => {
   })
 
   // Too little in the account is fixed by adding money, so the panel points there.
-  it('a low balance shows Add money, linking to /add-money', async () => {
+  it('a low balance shows Add money, linking to My page with Add money open', async () => {
     fakeSender()
     state.balance = 5_000000n
     renderPanel(view('USDC'))
     await userEvent.setup().type(screen.getByLabelText('Amount'), '10')
     expect(await screen.findByText(/Your balance is 5.00 USDC/)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/add-money')
+    expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/me?add=1')
     expect(donateButton().disabled).toBe(true)
   })
 
@@ -781,7 +781,7 @@ describe('DonatePanel', () => {
       renderPanel(view('USDC'))
       await fillAndDonate('9.7')
       expect(await screen.findByText(/Your Fundit account needs at least 0.40 USDC for the network fee\. Add money and try again\./)).toBeTruthy()
-      expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/add-money')
+      expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/me?add=1')
       const [calls, opts] = send.mock.calls[0]! as unknown as [Call[], { usdcOut?: bigint }]
       expect(calls).toHaveLength(2)
       expect(opts.usdcOut).toBe(9_700000n)
@@ -796,7 +796,7 @@ describe('DonatePanel', () => {
       const user = userEvent.setup()
       await user.type(screen.getByLabelText('Amount'), '10')
       expect(await screen.findByText(/Add at least 0.30 USDC to your Fundit account first. It pays the network fee./)).toBeTruthy()
-      expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/add-money')
+      expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/me?add=1')
       expect(donateButton().disabled).toBe(true)
       await user.click(donateButton())
       expect(send).not.toHaveBeenCalled()

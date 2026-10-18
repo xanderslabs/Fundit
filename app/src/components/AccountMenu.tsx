@@ -2,6 +2,7 @@ import { type KeyboardEvent, type ReactNode, type Ref, type RefObject, useCallba
 import { Link, useNavigate } from 'react-router'
 import type { Address } from 'viem'
 import { useDisconnect } from 'wagmi'
+import { ADD_MONEY_PATH } from '../lib/urls'
 import { dismissBackupPrompt, logoutPasskey, type StoredPasskey, useBackupPrompt, usePasskeySession } from '../lib/passkey'
 import { AddBackupPasskey, confirmLeave } from './AddBackupPasskey'
 import { Name } from './Name'
@@ -195,7 +196,7 @@ export function AccountControl() {
   }, [focusSignIn, session])
 
   if (!session) {
-    return <SignInButton buttonRef={signIn} onPasskeyDone={() => navigate('/add-money')} />
+    return <SignInButton buttonRef={signIn} onPasskeyDone={() => navigate(ADD_MONEY_PATH)} />
   }
   return (
     <>
@@ -205,8 +206,21 @@ export function AccountControl() {
   )
 }
 
-function AccountMenu({ address, onSignedOut }: { address: Address; onSignedOut: () => void }) {
+// Sign out for the account menu and My page. Recovery words on screen would be lost, so it asks first like any
+// other way out. A wallet connected to add money goes too; with none connected that does nothing. True when the
+// person signed out.
+export function useSignOut(): () => boolean {
   const { mutate: disconnect } = useDisconnect()
+  return useCallback(() => {
+    if (!confirmLeave()) return false
+    disconnect()
+    logoutPasskey()
+    return true
+  }, [disconnect])
+}
+
+function AccountMenu({ address, onSignedOut }: { address: Address; onSignedOut: () => void }) {
+  const signOutNow = useSignOut()
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   const button = useRef<HTMLButtonElement>(null)
@@ -255,12 +269,8 @@ function AccountMenu({ address, onSignedOut }: { address: Address; onSignedOut: 
   }
 
   function signOut() {
-    // Recovery words on My page would be lost, so Sign out asks first like any other way out.
-    if (!confirmLeave()) return
+    if (!signOutNow()) return
     setOpen(false)
-    // A wallet connected to add money goes too. With none connected this does nothing.
-    disconnect()
-    logoutPasskey()
     onSignedOut()
   }
 
@@ -293,7 +303,7 @@ function AccountMenu({ address, onSignedOut }: { address: Address; onSignedOut: 
               </Link>
             </li>
             <li role="none">
-              <Link role="menuitem" tabIndex={-1} to="/add-money" onClick={() => close(false)}>
+              <Link role="menuitem" tabIndex={-1} to={ADD_MONEY_PATH} onClick={() => close(false)}>
                 Add money
               </Link>
             </li>
