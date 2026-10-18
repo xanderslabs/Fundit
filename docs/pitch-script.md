@@ -15,35 +15,43 @@ creator can withdraw, and anyone can audit every dollar.
 
 ## 0:30 to 1:45. Demo
 
-[Only after the mainnet deploy. Before then, demo the fork build.]
+[Use a testnet build for any step that moves money. The banner reads "Test network".]
 
-[Open fundit.xyz on the home page.]
+[Open the home page.]
 
-Here's the home page. Every card is a campaign contract on Arc mainnet.
+Here's the home page. Every card is a campaign contract on Arc. The contracts are live on Arc mainnet.
 
-[Click Start a fundraiser.]
+[Select Sign in, then Continue with passkey, and create a Fundit account.]
 
-I'm creating a fundraiser. I pick USDC or EURC, set a goal and write the story. One transaction, and
+I sign in with a passkey: my fingerprint. There's no wallet app and no seed phrase to start. Fundit
+offers me a recovery key right away, 12 words I write down in case I lose this device.
+
+[Open Add money.]
+
+I add USDC to my Fundit account. I can send it to this address from any wallet or exchange, or connect
+a wallet here and send from it.
+
+[Click Start a Fundit.]
+
+I'm creating a fundraiser. I pick USDC or EURC, set a goal and write the story. One confirmation, and
 the factory deploys a new escrow contract just for this campaign. The fees are copied into it now,
 and nobody can change them later.
 
-[Open the campaign page and donate 1 USDC with a tip and a message.]
+[Open the campaign page and give 1 USDC with a tip and a message.]
 
-Now I donate as a supporter. I approve the campaign, then donate. The donate call goes through Arc Memo, so the
-donation is tagged as a Fundit donation and still recorded under my own address. Gas is paid in
-USDC, so I never need another token.
+Now I give as a supporter, straight from my Fundit account. Gas is paid in USDC, so I never need
+another token. If I tick Give anonymously, Fundit shows "Anonymous" instead of my name. The gift is
+still recorded on chain from my account address.
 
 [Show the activity list and the explorer link.]
 
 The donation is on chain, with the fee and the tip split out. Anyone can verify it on the Arc
 explorer.
 
-[Only after canary C4 passes.]
-
 [Open Manage and withdraw to Base.]
 
 As the creator, I withdraw. I can take the money on Arc, or send USDC to Base, Ethereum, Arbitrum
-and three other chains. For Base, the campaign burns through CCTP V2 with the Forwarding Service,
+and other CCTP chains. For Base, the campaign burns through CCTP V2 with the Forwarding Service,
 and Circle mints on Base. I don't need gas on Base.
 
 ## 1:45 to 2:30. The Circle stack
@@ -52,18 +60,13 @@ Fundit is built on Circle from the contract up:
 
 - **Arc** is the home chain for every campaign.
 - **USDC and EURC** are the only two campaign tokens.
-- **Arc Memo** tags each donation.
-- **CCTP V2 and the Forwarding Service** pay creators on six other chains.
+- **Modular Wallets** give every person a Fundit account with a passkey. It's the only way to sign in.
+- **CCTP V2 and the Forwarding Service** pay creators on other chains, and let people send money out of
+  their Fundit account.
+- **Bridge Kit** brings USDC in from another chain when you add money. It's behind a flag.
 
-Behind flags, we've also built three more paths. They're unit-tested, with the settle path tested on
-an Arc mainnet fork:
-
-- **Bridge Kit**, so a donor on Base or Arbitrum can give straight into a campaign on Arc.
-- **Gateway with the Unified Balance Kit**, so a donor can give from their unified USDC balance.
-- **Modular Wallets**, so a new donor can sign up with a passkey and no browser extension.
-
-We turn each one on only after a live mainnet canary proves it. We'd rather under-claim than ship a
-path that strands a donation.
+Every test that moves money runs on Arc testnet first. We'd rather under-claim than ship a path that
+strands a donation.
 
 ## 2:30 to 3:15. The trust model
 
@@ -83,12 +86,13 @@ The app is a static site, and no Fundit server ever holds a key that can move mo
 
 ## 3:15 to 3:45. Traction plan
 
-We're pre-launch. The contracts are tested with unit, fuzz, invariant and fork tests and are ready
-for mainnet. Our first users come from:
+We're pre-launch. The contracts are deployed on Arc mainnet and verified on Sourcify. They're tested
+with unit, fuzz, invariant and fork tests. The app goes live on fundit.fun once the testnet runs pass.
+Our first users come from:
 
 - Diaspora fundraisers, where cross-border payouts hurt most.
-- Crypto communities that already hold USDC on Base and Arbitrum, once cross-chain donations are on
-  (M2).
+- Crypto communities that already hold USDC on Base and Arbitrum, once adding money from other chains
+  is on (M2).
 
 Our target for the first 90 days is `[placeholder: number]` campaigns and `[placeholder: amount]`
 USDC raised. We'll report every number from on-chain data.
@@ -97,12 +101,9 @@ USDC raised. We'll report every number from on-chain data.
 
 We're applying for a Circle Developer Grant with milestone-based USDC payments:
 
-1. Mainnet launch with a verified factory and a completed canary.
-2. Cross-chain donations and passkeys switched on after live checks.
+1. The app live on fundit.fun, on the deployed mainnet factory.
+2. Adding money from other chains switched on after testnet checks.
 3. A third-party audit of the two contracts.
 4. Card donations through Onramp Kit in V2.
-
-We'd also value a technical review from the CCTP team on forwarded mints into contract recipients.
-That's the one open question for cross-chain donations.
 
 Thank you. I'm happy to take questions.

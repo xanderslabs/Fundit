@@ -7,8 +7,10 @@ Version 2.0 draft, October 2026. Prepared for the Circle Developer Grants progra
 Fundit is a crowdfunding app where each fundraiser is its own escrow contract on Arc, Circle's
 stablecoin-native blockchain. Donations arrive in USDC or EURC. The creator withdraws to Arc, or
 receives USDC on another chain through CCTP V2. The platform operator cannot move or freeze any
-creator's balance. Fundit runs as a static web app with no backend, no database and no server that
-holds spending keys. This paper explains the design, the trust model and the plan for launch.
+creator's balance. People sign in with a Fundit account only: a passkey smart account from Circle
+Modular Wallets. Fundit runs as a static web app with no backend, no database and no server that
+holds spending keys. The contracts are deployed on Arc mainnet. This paper explains the design, the
+trust model and the plan for launch.
 
 ## 1. Problem
 
@@ -35,14 +37,16 @@ removes all of it.
 3. **One home chain.** Every campaign lives on Arc. Donors and creators on other chains connect
    through Circle's cross-chain products, never through a third-party bridge.
 4. **No servers with keys, no paid infrastructure.** The app is static. All reads come from public
-   RPC endpoints and on-chain events, plus Circle's public Iris and Gateway APIs.
-5. **Honest claims.** A feature ships to users only after a live mainnet check confirms it.
+   RPC endpoints and on-chain events, plus Circle's public Iris API.
+5. **No wallet app needed.** A person signs in with a passkey (a fingerprint, face or device PIN).
+6. **Honest claims.** Every test that moves money runs on Arc testnet first.
 
 ## 3. Why Arc and Circle
 
 Arc is a Layer 1 blockchain from Circle where USDC is the gas token. Donors and creators hold one
 asset and never need a separate token for fees. Arc mainnet (chain ID `5042`) is a CCTP V2 domain
-(`26`), and Circle's Gateway, Arc Memo and EURC are live on it.
+(`26`), and EURC is live on it. Arc testnet (chain ID `5042002`) has the same CCTP domain and works the
+same way. Only the token value differs.
 
 Fundit uses these Circle and Arc products:
 
@@ -50,35 +54,31 @@ Fundit uses these Circle and Arc products:
 | --- | --- |
 | Arc | Home chain for every campaign escrow. |
 | USDC and EURC | The two campaign tokens, used through the ERC-20 interface with 6 decimals. |
-| Arc Memo | Tags each on-Arc donation from an EOA, while keeping the donor as `msg.sender`. |
-| CCTP V2 and the Forwarding Service | Creator payouts in USDC to six other chains, in one transaction. |
-| Bridge Kit | Donations from other chains, minted straight into the campaign. |
-| Gateway and Unified Balance Kit | Donations from a donor's unified USDC balance. |
-| Modular Wallets | Passkey smart accounts, so new users need no browser extension. |
-
-Cross-chain donations, unified balance donations and passkeys are built and unit-tested with
-mocks. On an Arc mainnet fork, the end-to-end suite simulates a forwarded mint (a plain USDC transfer
-and a stubbed Iris response). No Bridge Kit, Gateway or Modular Wallets call has run against Arc
-yet. They stay off until the live canary in section 9 confirms them.
+| Modular Wallets | The Fundit account: a passkey smart account. It is the only way to sign in. |
+| CCTP V2 and the Forwarding Service | USDC payouts and account sends to other chains, in one transaction. |
+| Bridge Kit | **Add money** from another chain, behind the `VITE_CROSSCHAIN` flag. |
 
 ## 4. System overview
 
 Fundit has two parts:
 
 - **Contracts.** `CampaignFactory` and `Campaign`, written in Solidity and tested with Foundry.
-- **App.** A React and TypeScript single-page app, which will be served as static files from
+- **App.** A React and TypeScript single-page app for `fundit.fun`, served as static files from
   Cloudflare Pages.
 
 ```
-Donor on Arc ---------- Memo.memo(campaign, donate(...)) ----------+
-Donor on another chain - Bridge Kit, CCTP V2 burn, forwarded mint -+
-Donor with Gateway ---- Unified Balance Kit spend ------------------+
-                                                                   v
-                    Campaign escrow on Arc (one EIP-1167 clone per fundraiser)
-                                                                   |
-                       withdraw(): Arc transfer, or CCTP V2 burn with forwarding
-                                                                   v
-                                                                Creator
+Connected wallet on Arc, or USDC on another chain (Add money)
+                                 |
+                                 v
+         Donor's Fundit account (passkey smart account on Arc)
+                                 |
+              approve + donate(), one user operation
+                                 v
+     Campaign escrow on Arc (one EIP-1167 clone per fundraiser)
+                                 |
+     withdraw(): Arc transfer, or CCTP V2 burn with forwarding
+                                 v
+                              Creator
 ```
 
 ### 4.1 Factory
@@ -106,8 +106,8 @@ The contract keeps this invariant at all times:
 token.balanceOf(campaign) == creatorBalance + feesAccrued + unaccounted
 ```
 
-`unaccounted` is any campaign token that arrived without a `donate` call: a CCTP mint, a Gateway
-mint or a plain transfer. `settle()` books it as a gross donation and charges the donation fee.
+`unaccounted` is any campaign token that arrived without a `donate` call: a CCTP mint or a plain
+transfer. `settle()` books it as a gross donation and charges the donation fee.
 `donate`, `withdraw` and `claimFees` settle first, so every inflow pays the same fee no matter how it
 arrived. The invariant is checked by Foundry invariant tests. Because `unaccounted()` saturates at
 zero, this is a solvency check: the balance is at least `creatorBalance + feesAccrued`.
@@ -115,35 +115,42 @@ zero, this is a solvency check: the balance is at least `creatorBalance + feesAc
 `raised()` returns `grossDonated` plus any unaccounted amount. Withdrawals never reduce it, so the
 progress bar always shows the total raised.
 
-### 4.3 Donations on Arc
+### 4.3 Fundit accounts
 
-The donor approves the campaign for `amount + tip`, then calls `donate(amount, tip, message)`. When
-the donor uses a regular wallet (an EOA), the app wraps the call in
-`Memo.memo(target, data, memoId, memoData)` with the memo ID `keccak256("fundit.donate.v1")`. A fork
-test and a live `eth_call` confirmed that Memo preserves `msg.sender`, so the campaign records the
-donor's own address. Smart accounts and EIP-7702 delegated addresses call the campaign directly,
-because Memo accepts only EOA callers.
+A Fundit account is a Circle Modular Wallets smart account on Arc. The owner signs with a passkey bound
+to `fundit.fun`. Each action is a user operation sent to Circle's bundler. There is no paymaster, so the
+account pays its own gas in USDC, and every action that spends USDC leaves 0.05 USDC in the account for
+the network fee.
 
-### 4.4 Donations from other chains
+The account offers these flows:
 
-A donor on Ethereum, Avalanche, OP Mainnet, Arbitrum, Base or Polygon uses Bridge Kit to burn USDC
-through CCTP V2. The mint recipient is the campaign contract on Arc, and the CCTP Forwarding Service
-submits the mint, so the donor needs no Arc gas. The minted USDC is unaccounted until the next
-`settle()`.
+- **Recovery key.** After sign-up, the person saves 12 words. The account registers the key's address as
+  a recovery address. The words never leave the browser.
+- **Recover.** On `/recover`, the 12 words add a new passkey on the current device as an owner.
+- **Add money.** The person sends USDC or EURC on Arc to the account address, or sends from a connected
+  wallet. The app switches that wallet to Arc before it sends. With `VITE_CROSSCHAIN` on, Bridge Kit
+  also burns USDC on another CCTP chain with the account as the recipient, and the Forwarding Service
+  mints it on Arc.
+- **Send money out.** The account sends USDC or EURC to any address on Arc, or USDC to another CCTP
+  chain with the Forwarding Service.
 
-A donor with a Gateway unified USDC balance spends from it with the Unified Balance Kit. The
-recipient is again the campaign address on Arc.
+Today, connecting a wallet in **Add money** is the only use of Reown (WalletConnect). Nobody signs in with a
+connected wallet.
 
-Whether a contract works as a forwarded `mintRecipient` is the main open question for these paths.
-The Forwarding Service docs describe the recipient as a wallet address. The end-to-end tests cover
-the app side on an Arc mainnet fork, with the mint simulated by a plain USDC transfer and a stubbed
-Iris status. The live canary settles the
-question before the flag turns on.
+### 4.4 Donations
+
+The donor's Fundit account approves the campaign for `amount + tip` and calls `donate(amount, tip,
+message)` in one user operation. The campaign records the account as `msg.sender`.
+
+**Give anonymously** puts the ASCII marker `[anon]` at the start of the message. Fundit pages then show
+"Anonymous" in place of the donor's name. This hides the name on Fundit only. The gift is not private:
+the `Donated` event still records the donor's account address on chain.
 
 ### 4.5 Withdrawals and payouts
 
 Only the creator can call `withdraw(amount, destDomain, recipient, maxFee, minFinalityThreshold,
-hookData)`. The contract settles, takes the withdrawal fee, then:
+hookData)`. The organiser can withdraw to Arc or to any chain in the app's CCTP list. The contract
+settles, takes the withdrawal fee, then:
 
 - On Arc (domain `26`), transfers the net amount to the recipient.
 - On another CCTP domain, approves exactly the net amount to `TokenMessengerV2` and calls
@@ -153,7 +160,7 @@ hookData)`. The contract settles, takes the withdrawal fee, then:
 The app quotes the Fast and Standard fees from Circle's CCTP fees API before it builds the call. A
 fork test confirmed a USDC withdrawal to Base (domain `6`) through the real `TokenMessengerV2` on
 Arc mainnet with plain `depositForBurn`. The hook path is covered by unit tests against a mock
-messenger, and live by canary step C4.
+messenger.
 
 ### 4.6 EURC campaigns
 
@@ -162,7 +169,7 @@ On a fork, `depositForBurn(EURC)` to domains 0, 1, 6 and 14 reverts with "Burn t
 and `TokenMinterV2.burnLimitsPerMessage(EURC)` is 0. Press reports said EURC CCTP was live on Arc.
 Fundit follows on-chain state instead.
 
-The factory takes a list of EURC payout domains in its constructor, with no setter. The launch list
+The factory takes a list of EURC payout domains in its constructor, with no setter. The deployed list
 is empty. A creator can still withdraw EURC on Arc and move it themselves. Adding an EURC route
 later needs a new factory.
 
@@ -178,8 +185,9 @@ Each transaction waits for its receipt before the app shows success. The app est
 and adds a 25% margin. Names come from ENS and Basenames. Campaign images are links, with no
 uploads.
 
-Hosting will be Cloudflare Pages. A content security policy limits scripts to the site itself and
-network calls to the Arc RPC, the CCTP chain RPCs, Reown and Circle's APIs.
+Hosting is Cloudflare Pages. A content security policy limits scripts to the site itself and network
+calls to the Arc RPC, the CCTP chain RPCs, Circle's APIs and the WalletConnect hosts that **Add money**
+needs.
 
 ## 5. Trust model
 
@@ -205,7 +213,7 @@ The factory has one owner, set at deploy, with `Ownable2Step` transfers. The own
 
 ### 5.3 Fees
 
-The launch configuration is a 1% donation fee and a 1% withdrawal fee. Each fee rounds down in the
+The deployed configuration is a 1% donation fee and a 1% withdrawal fee. Each fee rounds down in the
 creator's favor. Tips are optional and chosen by the donor. Fees stay in the campaign until anyone
 calls `claimFees()`. A treasury that reverts can block only fee claims, never donations or
 withdrawals.
@@ -229,13 +237,14 @@ second address that controls the same asset.
 - **Tests.** Foundry unit, fuzz and invariant tests. The invariants cover the balance equation, token
   conservation, raised never decreasing, fees within the creation snapshot, stray tokens and a
   blocked treasury. Unit tests cover owner powers.
-- **Fork tests.** An Arc mainnet fork suite runs under Arc Foundry `v0.8.0-2`. It covers the CCTP
-  payout path with plain `depositForBurn`, Memo sender preservation, EIP-3009 and EIP-2612 entry points, and EURC CCTP support.
-  A strict mode turns those findings into assertions right before the deploy.
+- **Fork tests.** An Arc mainnet fork suite runs under Arc Foundry `v0.8.0-2`. It only reads chain
+  state. It covers the CCTP payout path with plain `depositForBurn`, EIP-3009 support and EURC CCTP
+  support.
 - **Static analysis.** Slither, with every accepted finding listed in `contracts/SECURITY.md`.
-- **End-to-end tests.** Playwright drives the built app against a local Arc mainnet fork for create,
-  donate, withdraw and a stubbed cross-chain donation.
-- **Canary.** A small live run on mainnet before any flag turns on.
+- **Arc testnet.** Every end-to-end test and every test that moves money runs on Arc testnet. A build
+  with `VITE_ARC_NETWORK=testnet` reads every address and URL for testnet, and refuses to run on
+  `fundit.fun`. The testnet factory is not deployed yet. Until it is, the end-to-end specs are skipped.
+  They will sign up with a virtual passkey and run each money flow on testnet.
 
 The contracts have not had a third-party audit. A grant would fund one (section 10).
 
@@ -245,27 +254,34 @@ Fundit earns the donation fee, the withdrawal fee and optional tips. All three a
 and in the donate form before the donor signs. The fees for a campaign never change after it is
 created.
 
-Fundit has no infrastructure bill. The app is static, hosting will use a free tier, and all reads use
+Fundit has no infrastructure bill. The app is static, hosting uses a free tier, and all reads use
 public RPC endpoints.
 
 ## 8. Status
 
 As of October 2026:
 
-- Contracts: built and tested. Not deployed to Arc mainnet.
-- App: built and tested against an Arc mainnet fork. Not deployed.
-- Cross-chain donations, unified balance donations and passkeys: built, behind flags.
-- Traction: none yet. Fundit has not launched. Metrics in this paper are placeholders until launch.
+- Contracts: deployed on Arc mainnet and verified on Sourcify (exact match). They are not verified on
+  the Arc explorer, which blocks automated verification.
+
+  | Contract | Address |
+  | --- | --- |
+  | `CampaignFactory` | [`0xf1b2AEF82c37fC41D254D8e06BD7780ce34617d9`](https://explorer.arc.io/address/0xf1b2AEF82c37fC41D254D8e06BD7780ce34617d9) |
+  | `Campaign` implementation | [`0x083CE7a68Ae418f832E12c2aB976615237e03853`](https://explorer.arc.io/address/0x083CE7a68Ae418f832E12c2aB976615237e03853) |
+  | Owner and treasury | [`0x3552E9c14C7b6050839009A5B160A4446a1e916D`](https://explorer.arc.io/address/0x3552E9c14C7b6050839009A5B160A4446a1e916D) |
+
+  The deploy block is `26452579`.
+- Contracts on Arc testnet: not deployed yet. Addresses: `TBD`.
+- App: sign-in is passkey only. Add money from another chain is behind `VITE_CROSSCHAIN`.
+- Traction: none yet. Metrics in this paper are placeholders until launch.
 
 ## 9. Launch plan
 
-1. Run the strict fork gate and print the exact deploy configuration for review.
-2. Deploy the factory to Arc mainnet and verify it on the Arc explorer.
-3. Deploy the app to `fundit.xyz` on Cloudflare Pages with both flags off.
-4. Run a canary with about 5 USDC: a donation and a withdrawal on Arc, a donation from Base through
-   Bridge Kit, and a payout to Base through CCTP. A unified balance donation and a passkey donation
-   are optional steps.
-5. Turn on `VITE_CROSSCHAIN` and `VITE_PASSKEYS` only for the paths the canary confirms.
+1. Deploy the factory to Arc testnet and record its address.
+2. Run the end-to-end specs on Arc testnet with a virtual passkey: sign up, save a recovery key, add
+   money, create a fundraiser, give, withdraw and send money out.
+3. Run a manual passkey check on a testnet build.
+4. Deploy the app to `fundit.fun` on Arc mainnet with the `fundit.fun` client key.
 
 ## 10. Roadmap and grant milestones
 
@@ -274,31 +290,36 @@ brackets are placeholders to agree with the program.
 
 | Milestone | Deliverable | Evidence |
 | --- | --- | --- |
-| M1: Mainnet launch | Factory deployed and verified, app live, canary complete | Arc explorer links, canary transaction list |
-| M2: Cross-chain and passkeys on | `VITE_CROSSCHAIN` and `VITE_PASSKEYS` enabled after the canary | Live transactions for each path |
+| M1: Mainnet launch | Factory deployed (done) and app live on `fundit.fun` | Arc explorer links, live transactions |
+| M2: Add money from other chains | `VITE_CROSSCHAIN` enabled after testnet checks | Live transactions for each source chain |
 | M3: Audit | Third-party review of `Campaign` and `CampaignFactory`, fixes in a new factory if needed | Published report |
 | M4: Adoption | [placeholder: number of campaigns] campaigns and [placeholder: USDC volume] raised | On-chain factory data |
 | M5: V2 card donations | Onramp Kit card donations into campaigns | Live campaign with a card donation |
 
-Agent features (for example, an agent that drafts a campaign page from a short brief) are a later
-idea. No agent will hold a key that controls money.
+Later ideas, not milestones yet:
+
+- **Private giving.** Gifts through a zero-knowledge (ZK) pool, so the donor's address is not linked to
+  the gift on chain.
+- **Giving agent.** An agent for giving that connects wallets through Reown. No agent will hold a key
+  that controls money.
 
 ## 11. Risks
 
-- **Forwarded mint into a contract.** If the Forwarding Service does not mint to a contract
-  recipient, cross-chain donations stay off. Payouts are not affected, because they mint to the
-  creator's wallet.
-- **Fixed configuration.** A wrong fee or EURC payout list cannot be corrected for existing
-  campaigns after the deploy. The deploy gate prints the exact configuration for
-  review before the deploy.
-- **Smart account payouts.** A passkey account may not exist on other chains. The app defaults
-  passkey creators to Arc payouts and warns before another chain.
-- **No audit yet.** Mitigated by tests, fork tests, Slither and a small canary. An audit is milestone
+- **Fixed configuration.** The fees for existing campaigns and the EURC payout list cannot change after
+  the deploy. A new EURC route needs a new factory.
+- **Passkey domain.** Passkeys are bound to `fundit.fun`. Moving to another domain would give people
+  new passkeys and new account addresses, so the domain must stay.
+- **Lost passkey.** A person who loses every device with their passkey and has no recovery key cannot
+  get the account back. The app asks for a recovery key until one is saved.
+- **Smart account payouts.** A Fundit account may not exist on other chains. The app warns before a
+  payout to another chain and asks for an address the person controls there.
+- **No audit yet.** Mitigated by tests, fork tests, Slither and testnet runs. An audit is milestone
   M3.
 
 ## References
 
 - Contracts: `contracts/src/Campaign.sol`, `contracts/src/CampaignFactory.sol`
 - Trust model: `contracts/SECURITY.md`
-- Product list in the app: `app/src/pages/Home.tsx`
+- Deployment record: `contracts/deployments/arc-mainnet.json`
+- Network values: `app/src/config.ts`
 - Circle developer docs: <https://developers.circle.com>
