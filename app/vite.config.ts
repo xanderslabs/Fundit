@@ -5,22 +5,6 @@ import { configDefaults, defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { checkBuildEnv, loadConfig } from './src/deployConfig.ts'
 
-// `--mode e2e` only: swaps the AppKit wagmi config for src/wagmi.e2e.ts (mock connector, local fork RPC)
-// and the AppKit hooks for src/appkit.e2e.ts. Production and dev builds never load either file.
-function e2eSwap(): Plugin {
-  const src = (file: string) => fileURLToPath(new URL(`./src/${file}`, import.meta.url))
-  return {
-    name: 'fundit-e2e-swap',
-    enforce: 'pre',
-    resolveId(id, importer) {
-      if (!importer?.startsWith(src(''))) return null
-      if (id === '@reown/appkit/react') return src('appkit.e2e.ts')
-      if (id === './wagmi' && importer === src('main.tsx')) return src('wagmi.e2e.ts')
-      return null
-    },
-  }
-}
-
 // /embed/c/:address is served by embed.html, a separate page with no wallet code. Cloudflare does the same
 // rewrite with public/_redirects; this does it for the dev and preview servers.
 function embedRewrite(): Plugin {
@@ -49,7 +33,10 @@ export default defineConfig(({ command, mode }) => {
   }
 
   return {
-    plugins: mode === 'e2e' ? [react(), embedRewrite(), e2eSwap()] : [react(), embedRewrite()],
+    plugins: [react(), embedRewrite()],
+    // Unit tests run on the defaults (mainnet), never on a developer's .env.local, which the e2e suite sets to
+    // testnet.
+    ...(mode === 'test' && { envDir: false as const }),
     build: {
       // The AppKit vendor chunk (about 1,320 kB minified, 360 kB gzipped) all loads at start, so splitting
       // it further would not shrink the first load. Raise the limit just above it.
@@ -76,7 +63,7 @@ export default defineConfig(({ command, mode }) => {
     },
     test: {
       environment: 'jsdom',
-      // Playwright runs e2e/ against a local fork (npm run e2e).
+      // Playwright runs e2e/ against Arc testnet (npm run e2e).
       exclude: [...configDefaults.exclude, 'e2e/**'],
     },
   }

@@ -310,10 +310,9 @@ tokens have no value. The unit tests use mocks, and the contract fork suite only
 
 ### End-to-end tests
 
-The current Playwright specs drive the built app against a local Arc mainnet fork, and they are
-skipped. They sign in with a mock wallet, and sign-in is now passkey only. Specs for Arc testnet that use
-a virtual passkey replace them once the testnet factory exists. See
-[`app/e2e/README.md`](app/e2e/README.md).
+The Playwright suite runs on Arc testnet with a virtual passkey. It signs up, saves a recovery key, adds
+money from a funder account, creates a Fundit, gives anonymously, withdraws and sends money out. A run
+costs about 2.5 testnet USDC. See [`app/e2e/README.md`](app/e2e/README.md).
 
 ## Status and roadmap
 

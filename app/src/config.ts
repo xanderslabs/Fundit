@@ -50,7 +50,8 @@ export type NetworkConfig = {
   chainLabels: Record<'Arc' | CctpChainKey, string>
 }
 
-const env = import.meta.env
+// Vite fills import.meta.env. The e2e suite also reads NETWORKS in Node, where there is none.
+const env = import.meta.env ?? ({} as ImportMetaEnv)
 
 // Free public RPCs. Every host here must also be in public/_headers connect-src.
 export const MAINNET_RPC_URL: string = env.VITE_MAINNET_RPC_URL || 'https://ethereum-rpc.publicnode.com'
@@ -148,7 +149,7 @@ export const TOKENS: Record<TokenSymbol, { address: Address; decimals: 6; symbol
 
 export const TOKEN_MESSENGER_V2: Address = NETWORK.tokenMessengerV2
 
-// Used as the wagmi transport for Arc. VITE_ARC_RPC_URL overrides it (the e2e fork).
+// Used as the wagmi transport for Arc. VITE_ARC_RPC_URL overrides it (a local node, for example).
 export const ARC_RPC_URL: string = env.VITE_ARC_RPC_URL || NETWORK.rpcUrl
 // Arc's public RPCs as the network's viem chain lists them, the fallbacks for Arc reads. Hosts under *.arc.io.
 export const ARC_RPC_FALLBACKS: readonly string[] = NETWORK.chain.rpcUrls.default.http

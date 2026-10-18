@@ -2,8 +2,8 @@ import { createPublicClient, fallback, http } from 'viem'
 import { base, mainnet } from 'viem/chains'
 import { ARC_CHAIN, ARC_RPC_URL, ARC_RPC_FALLBACKS, BASE_RPC_URL, MAINNET_RPC_URL } from '../config'
 
-// The configured Arc RPC first, then Arc's other public RPCs that viem lists. A local fork (the e2e run) has
-// its own state, so it gets no mainnet fallback.
+// The configured Arc RPC first, then Arc's other public RPCs that viem lists. A local node (a fork, for example)
+// has its own state, so it gets no mainnet fallback.
 export function arcRpcUrls(primary: string): string[] {
   const { hostname } = new URL(primary)
   if (hostname === '127.0.0.1' || hostname === 'localhost') return [primary]

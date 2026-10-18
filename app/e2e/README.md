@@ -1,62 +1,82 @@
 # End-to-end tests
 
-The specs drive the built app in Chromium against a local fork of Arc mainnet. Each run starts the fork,
-deploys `CampaignFactory` with `contracts/script/Deploy.s.sol`, builds the app in `e2e` mode and serves it
-with `vite preview`.
+The suite drives the app in Chromium against Arc testnet with real Circle passkeys. A WebAuthn virtual
+authenticator, added through the Chrome DevTools Protocol, stands in for the device's passkey. Nothing is
+mocked: Circle registers the passkey, Circle's bundler sends the user operations, and the specs check the
+results on Arc testnet with viem.
 
-The current specs are skipped. They sign in with a mock wallet, and sign-in is now passkey only. Plan 5
-Task 4 replaces them with specs on Arc testnet that use a virtual passkey.
+## What a run does
+
+`journeys.spec.ts` runs these steps in order with one new Fundit account. Each step needs the one before it.
+
+1. Signs up with a passkey and reads the new account address from **Add money**.
+2. Adds money: the funder sends 3 USDC to that address with an ERC-20 `transfer`.
+3. Saves the recovery key: shows the 12 words, types back the three the page asks for, and checks on Arc that
+   the key's address is now an owner of the account.
+4. Creates a Fundit with a goal of 10 USDC.
+5. Gives 0.2 USDC anonymously with a message. The activity must show "Anonymous" and the message, with no
+   `[anon]` text. The `Donated` event must name the account and carry `[anon]` at the start of the message.
+6. Withdraws everything on Arc from **Manage** to the account.
+7. Sends the money out on Arc from **My page** back to the funder, keeping 0.35 USDC in the account.
+
+Each step prints the explorer link of its transaction, for example:
+
+```text
+[tx] Create a Fundit: https://explorer.testnet.arc.io/tx/0x...
+```
+
+The links are also kept as `tx` annotations on each test.
 
 ## Prerequisites
 
-- Arc Foundry `v0.8.0-2`. Install it as described in `contracts/README.md` under **Install Arc Foundry**.
-  Upstream anvil does not work here: on Arc the USDC balance is the native balance, and only Arc Foundry
-  executes that precompile.
 - Chromium for Playwright: `npx playwright install chromium`.
-- Network access to `https://rpc.mainnet.arc.io`. The fork reads mainnet state from it. Nothing is sent to it.
-- Ports `8545` and `4173` on `127.0.0.1` must be free. The run stops if something already answers on `8545`.
+- `app/.env.local` with these values:
 
-## Environment
+  | Variable | Value |
+  | --- | --- |
+  | `VITE_ARC_NETWORK` | `testnet`. The suite refuses to run with any other value. |
+  | `VITE_CIRCLE_CLIENT_KEY` | A Circle client key whose allowed domain is `localhost`. |
+  | `VITE_FACTORY_ADDRESS` | The testnet factory. |
+  | `VITE_FACTORY_DEPLOY_BLOCK` | The block the testnet factory was deployed in. |
 
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `ARC_ANVIL_BIN` | `arc-anvil` on `PATH` | Path to Arc Foundry's `anvil`. |
-| `ARC_FORGE_BIN` | `arc-forge` or `forge` next to `ARC_ANVIL_BIN`, else `arc-forge` on `PATH` | Path to Arc Foundry's `forge`, used for the deploy. |
-| `ARC_FORK_URL` | `https://rpc.mainnet.arc.io` | RPC the fork reads from. |
+  `VITE_REOWN_PROJECT_ID` is not needed. Without it AppKit logs `No project ID is configured` and gets `403`
+  from Reown, and the app still works. The suite never opens the wallet modal.
+- `app/.env.testnet.funder` with one line, `FUNDER_PRIVATE_KEY=0x...`. This is the key of a testnet-only
+  account that holds testnet USDC. Get USDC for it from the [Circle faucet](https://faucet.circle.com) on Arc
+  Testnet. The file is gitignored (`.env.*`). The key is read only in the Node process, never sent to the
+  page and never printed. Never use a key that holds mainnet funds, and never use the factory deployer.
+- Free port `5174` on `localhost`.
 
 ## Run
 
 ```shell
-ARC_ANVIL_BIN=~/.local/bin/arc-anvil npm --prefix app run e2e
+npm --prefix app run e2e
 ```
 
-## What a run does
+Playwright starts the Vite dev server on `http://localhost:5174`, which reads `app/.env.local`. Use
+`localhost`, never `127.0.0.1`: Circle checks the page hostname and accepts only `localhost` for this key.
 
-1. Reads the current Arc block number once and starts `anvil --fork-block-number <block>` on
-   `127.0.0.1:8545`, so every spec in the run sees the same mainnet state.
-2. Clears the code on the anvil default accounts it uses (on mainnet they carry EIP-7702 delegations set by
-   others) and gives each 1,000 USDC with `anvil_setBalance`. On Arc, 1 USDC is `1e18` native wei.
-3. Deploys the factory from anvil account 0 with its public default key, broadcasting to `127.0.0.1:8545`
-   only. Broadcast files go to a temp directory, not `contracts/broadcast/`.
-4. Writes `app/.env.e2e` (factory address, deploy block, `VITE_ARC_RPC_URL=http://127.0.0.1:8545` and a
-   dummy Reown project id) and runs `vite build --mode e2e` into `app/dist-e2e/`.
+## Cost
 
-In `e2e` mode, `vite.config.ts` swaps `src/wagmi.ts` for `src/wagmi.e2e.ts` (the wagmi `mock` connector, no
-AppKit) and `@reown/appkit/react` for `src/appkit.e2e.ts`. Each page picks its wallet account from the
-`fundit.e2e.account` localStorage key. Production builds never include either file.
+A full run costs the funder about 2.3 to 2.5 USDC of testnet USDC. Two runs on 2026-10-18 cost 2.29 and
+2.47 USDC. The money goes to:
 
-## Network guard
+- Gas for five user operations, about 2.2 USDC. The first one also deploys the account, so it costs about
+  1.07 USDC. Circle's bundler prices user operations at its `medium` gas price, about 700 to 870 gwei on
+  Arc testnet, against a base fee of about 20 gwei.
+- What stays in the throwaway account: about 0.2 USDC, plus any prefund left in its EntryPoint deposit.
+  Nobody can spend it after the run, because the passkey goes away with the browser context.
+- The 1% donation and withdrawal fees on the 0.2 USDC gift, and the funder's own transfer gas.
 
-Every browser request goes through a Playwright route. Requests to `127.0.0.1` pass. ENS and Basename RPCs
-get empty answers, and Iris and Gateway get `404` unless a spec routes them itself. A request to any other
-host is aborted and fails the test.
+A run that fails part way leaves the rest of the 3 USDC in that account, and nobody can recover it. The funder
+needs more than 3.1 USDC before a run starts. The suite checks this and prints the funder's balance before
+and after.
 
-## Gas margin regression
+## Limits
 
-`create-donate-withdraw.spec.ts` sends a withdrawal while the campaign's last activity is in the latest
-block, and the main flow closes the campaign straight after the withdrawal. `Campaign._activity()` skips its
-storage writes when the block number has not changed, so an estimate made against the latest block is
-about 3,200 gas short. Anvil estimates that way for an `eth_sendTransaction` without `gas`, and some wallets
-and nodes do too. The app estimates each call on its Arc client and sends `gas` with 25% on top
-(`withGasMargin` in `src/lib/sender.ts`, also used for the passkey call gas). Without the app-supplied gas
-these writes revert out of gas.
+- **Send money out** uses a typed amount, not **Max**. Max keeps only the 0.05 USDC gas reserve, and the
+  EntryPoint takes the user operation's prefund (about 0.22 USDC) before the transfer runs, so a Max send
+  reverts with `ERC20: transfer amount exceeds balance`.
+- The passkey name is `e2e-<milliseconds>`. Circle accepts 5 to 50 characters from `A-Z`, `a-z`, `0-9` and
+  `_@.:+-` only.
+- The suite does not cover Add money from a connected wallet (AppKit) or from another chain.
