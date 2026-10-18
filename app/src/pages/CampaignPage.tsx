@@ -44,7 +44,7 @@ function CampaignLinks({ links }: { links: readonly string[] }) {
   const safe = links.map(safeHttpsUrl).filter((u): u is string => u !== null)
   if (safe.length === 0) return null
   return (
-    <section className="campaign-section campaign-links">
+    <section className="campaign-links">
       <h2>Links</h2>
       <ul>
         {safe.map((url, i) => (
@@ -118,7 +118,7 @@ function CampaignBody({ view }: { view: CampaignView }) {
           <DonatePanel view={view} />
         </aside>
         <div className="campaign-body">
-          <section className="campaign-section">
+          <section>
             <h2>About</h2>
             <p className="campaign-description">{summary.meta.description || 'The organiser has not added a description.'}</p>
           </section>

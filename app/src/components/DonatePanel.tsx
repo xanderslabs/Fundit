@@ -294,7 +294,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
                 value={amountText}
                 onChange={(e) => setAmountText(e.target.value)}
                 aria-invalid={parsed && !parsed.ok ? true : undefined}
-                aria-describedby="donate-amount-error donate-balance"
+                aria-describedby="donate-amount-error donate-funds-error donate-gas-error donate-balance"
               />
             </Field>
             <div className="give-quick" role="group" aria-label="Quick amounts">
@@ -310,12 +310,12 @@ export function DonatePanel({ view }: { view: CampaignView }) {
               </p>
             )}
             {overBalance && balance !== undefined && (
-              <p className="give-error" role="alert">
+              <p id="donate-funds-error" className="give-error" role="alert">
                 {notEnough(balance)} <Link to={ADD_MONEY_PATH}>Add money</Link>
               </p>
             )}
             {noGas && reserve !== undefined && (
-              <p className="give-error" role="alert">
+              <p id="donate-gas-error" className="give-error" role="alert">
                 {addAtLeast(reserve)} <Link to={ADD_MONEY_PATH}>Add money</Link>
               </p>
             )}

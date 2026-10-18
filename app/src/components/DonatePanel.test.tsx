@@ -232,6 +232,37 @@ describe('DonatePanel', () => {
     expect(donateButton().disabled).toBe(true)
   })
 
+  // A screen reader user who moves back to Amount must hear why Give is off, not only when the alert first fires.
+  // The accessible description is the text of every element the input's aria-describedby names.
+  describe('the Amount description carries the funds errors', () => {
+    const description = (el: HTMLElement) =>
+      (el.getAttribute('aria-describedby') ?? '')
+        .split(/\s+/)
+        .map((id) => document.getElementById(id)?.textContent ?? '')
+        .join(' ')
+
+    it('includes the low-balance error', async () => {
+      fakeSender()
+      state.balance = 5_000000n
+      renderPanel(view('USDC'))
+      const amount = screen.getByLabelText('Amount')
+      await userEvent.setup().type(amount, '10')
+      expect(await screen.findByText(/Your balance is 5.00 USDC/)).toBeTruthy()
+      expect(description(amount)).toMatch(/Your balance is 5.00 USDC/)
+    })
+
+    it('includes the network fee error for an EURC gift with no USDC', async () => {
+      fakeSender()
+      state.balance = 1000_000000n
+      state.usdc = 0n
+      renderPanel(view('EURC'))
+      const amount = screen.getByLabelText('Amount')
+      await userEvent.setup().type(amount, '10')
+      expect(await screen.findByText(/Add at least/)).toBeTruthy()
+      expect(description(amount)).toMatch(/Add at least/)
+    })
+  })
+
   // The low-balance error states the balance already. Saying it twice in a row reads as a glitch, so the plain
   // balance line shows only while no amount error does.
   it('shows the balance line only when the amount has no error', async () => {
