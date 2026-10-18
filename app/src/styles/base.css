@@ -380,24 +380,140 @@ input[type='checkbox'] {
   gap: 12px;
 }
 
+/* Recover: the 12 words as a numbered grid, 3 across on wide screens and 2 on phones. */
+.recover {
+  max-width: 640px;
+}
+
+.recover .page-head {
+  margin-bottom: 0;
+}
+
+.recover .page-head p {
+  margin: 0;
+}
+
 .recover-words {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 12px;
+  min-width: 0;
   margin: 0;
   padding: 0;
   border: 0;
 }
 
 .recover-words legend {
-  margin-bottom: 8px;
-  font-weight: var(--weight-medium);
+  margin-bottom: 10px;
+  padding: 0;
+  font-weight: var(--weight-bold);
+}
+
+.recover-word {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.recover-word:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.recover-word label {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  flex: none;
+  width: 34px;
+  padding-top: 2px;
+  line-height: 1;
+  padding-left: 12px;
+  color: var(--muted);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.recover-word input,
+.recover-word input:focus,
+.recover-word input:focus-visible {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  padding: 11px 12px 11px 4px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text);
+  font: inherit;
+  /* 16px stops iOS from zooming into the field. */
+  font-size: 16px;
+}
+
+.recover .backup-confirm > .form-field input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+}
+
+.recover .backup-confirm {
+  gap: 20px;
+}
+
+.recover .backup-confirm > .btn {
+  align-self: flex-start;
 }
 
 .recover-fund {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.recover-fund-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.recover-fund-body .fund-qr {
+  width: 140px;
+  height: 140px;
+  flex: none;
+}
+
+.recover-fund-body .fund-address {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.recover-back {
+  margin: 0;
+  text-align: center;
+}
+
+@media (max-width: 480px) {
+  .recover-words {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .recover .backup-confirm > .btn {
+    align-self: stretch;
+  }
+
+  .recover-fund-body {
+    justify-content: center;
+  }
 }
 
 .passkey-login h2 {

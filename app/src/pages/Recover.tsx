@@ -1,10 +1,20 @@
 import { type ClipboardEvent, type FormEvent, useRef, useState } from 'react'
+import { useNavigate } from 'react-router'
 import type { Address } from 'viem'
+import { SignInButton } from '../components/AccountMenu'
 import { AddressQr, CopyAddress } from '../components/AddressTools'
 import { AddBackupPasskey } from '../components/AddBackupPasskey'
 import { usernameError } from '../components/PasskeyLogin'
 import { explainError } from '../lib/errors'
-import { checkPendingRecovery, discardPendingRecovery, normalizePhrase, RecoveryNeedsFunds, recoverWithPhrase, type StoredPasskey } from '../lib/passkey'
+import {
+  checkPendingRecovery,
+  discardPendingRecovery,
+  normalizePhrase,
+  RecoveryNeedsFunds,
+  recoverWithPhrase,
+  type StoredPasskey,
+  usePasskeySession,
+} from '../lib/passkey'
 
 const WORDS = 12
 const INVALID = "Those words don't form a valid recovery key. Check the order and spelling."
@@ -59,15 +69,19 @@ export function Recover() {
     }
   }
 
-  // A pasted phrase fills this field and the ones after it.
+  // A pasted full phrase fills all 12 fields from the first, whichever field it lands in. A shorter paste fills
+  // this field and the ones after it.
   function onPaste(i: number, e: ClipboardEvent<HTMLInputElement>) {
     const pasted = normalizePhrase(e.clipboardData.getData('text'))
     if (!pasted.includes(' ')) return
     e.preventDefault()
     const parts = pasted.split(' ')
-    setWords((w) => w.map((old, j) => (j >= i && j - i < parts.length ? parts[j - i]! : old)))
+    const from = parts.length >= WORDS ? 0 : i
+    setWords((w) => w.map((old, j) => (j >= from && j - from < parts.length ? parts[j - from]! : old)))
   }
 
+  const navigate = useNavigate()
+  const session = usePasskeySession()
   const name = username.trim()
   const [submitted, setSubmitted] = useState(false)
   const nameError = usernameError(name, submitted)
@@ -113,7 +127,7 @@ export function Recover() {
 
   if (recovered) {
     return (
-      <section className="manage">
+      <section className="manage recover">
         <header className="page-head">
           <h1>Your account is back.</h1>
           <p className="muted">
@@ -129,7 +143,7 @@ export function Recover() {
   }
 
   return (
-    <section className="manage">
+    <section className="manage recover">
       <header className="page-head">
         <h1>Recover your Fundit account</h1>
         <p className="muted">Enter the 12 words of your recovery key. We'll make a new passkey on this device and move your account to it.</p>
@@ -156,8 +170,11 @@ export function Recover() {
             <fieldset className="recover-words" disabled={busy}>
               <legend>Your recovery key</legend>
               {words.map((w, i) => (
-                <div className="form-field" key={i}>
-                  <label htmlFor={`recover-word-${i + 1}`}>Word {i + 1}</label>
+                <div className="recover-word" key={i}>
+                  <label htmlFor={`recover-word-${i + 1}`}>
+                    <span className="sr-only">Word </span>
+                    <span aria-hidden="true">{i + 1}</span>
+                  </label>
                   <input
                     id={`recover-word-${i + 1}`}
                     autoComplete="off"
@@ -184,10 +201,12 @@ export function Recover() {
               {nameError && <p className="field-error">{nameError}</p>}
             </div>
             {needsFunds && (
-              <div className="recover-fund">
+              <div className="recover-fund status-box">
                 <p>{needsFunds.message}</p>
-                <CopyAddress address={needsFunds.account} />
-                <AddressQr address={needsFunds.account} label="QR code of your account address" />
+                <div className="recover-fund-body">
+                  <AddressQr address={needsFunds.account} label="QR code of your account address" />
+                  <CopyAddress address={needsFunds.account} />
+                </div>
               </div>
             )}
             <button type="submit" className="btn" disabled={busy}>
@@ -202,6 +221,11 @@ export function Recover() {
           </p>
         )}
       </div>
+      {!session && (
+        <p className="recover-back muted">
+          Still have your passkey? <SignInButton className="link-button" label="Back to sign in" onPasskeyDone={() => navigate('/me')} />
+        </p>
+      )}
     </section>
   )
 }

@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent, { type UserEvent } from '@testing-library/user-event'
 import { MemoryRouter, useLocation } from 'react-router'
 import type { Address } from 'viem'
@@ -74,6 +74,47 @@ describe('Recover', () => {
     await user.click(screen.getByLabelText('Word 1'))
     await user.paste(`  ${PHRASE.replace(/ /g, '\n')} `)
     PHRASE.split(' ').forEach((w, i) => expect((screen.getByLabelText(`Word ${i + 1}`) as HTMLInputElement).value).toBe(w))
+  })
+
+  // People paste where the cursor happens to be. A whole key goes in from the first box, whichever box it lands in.
+  it('fills all 12 fields in order when the full phrase is pasted into a later box', async () => {
+    const user = renderPage()
+    await user.click(screen.getByLabelText('Word 5'))
+    await user.paste(PHRASE)
+    PHRASE.split(' ').forEach((w, i) => expect((screen.getByLabelText(`Word ${i + 1}`) as HTMLInputElement).value).toBe(w))
+  })
+
+  // A part of the key pasted mid-way still fills from that box on, so a person can fix the second half.
+  it('fills from the box onward when only part of the phrase is pasted', async () => {
+    const user = renderPage()
+    await user.click(screen.getByLabelText('Word 11'))
+    await user.paste('thank yellow')
+    expect((screen.getByLabelText('Word 11') as HTMLInputElement).value).toBe('thank')
+    expect((screen.getByLabelText('Word 12') as HTMLInputElement).value).toBe('yellow')
+    expect((screen.getByLabelText('Word 1') as HTMLInputElement).value).toBe('')
+  })
+
+  // The words control the account: the browser must not save, correct or capitalise them.
+  it('numbers each word box and turns off autocomplete, spellcheck and autocapitalise', () => {
+    renderPage()
+    const grid = screen.getByRole('group', { name: 'Your recovery key' })
+    const inputs = within(grid).getAllByRole('textbox')
+    expect(inputs).toHaveLength(12)
+    inputs.forEach((input, i) => {
+      expect(input.getAttribute('autocomplete')).toBe('off')
+      expect(input.getAttribute('spellcheck')).toBe('false')
+      expect(input.getAttribute('autocapitalize')).toBe('none')
+      // The visible label is the word's number.
+      expect(grid.querySelector(`label[for="${input.id}"]`)!.textContent).toBe(`Word ${i + 1}`)
+      expect(grid.querySelector(`label[for="${input.id}"] [aria-hidden="true"]`)?.textContent).toBe(`${i + 1}`)
+    })
+  })
+
+  // Someone who still has their passkey can go back to signing in from here.
+  it('has a Back to sign in control that opens the passkey sign-in dialog', async () => {
+    const user = renderPage()
+    await user.click(screen.getByRole('button', { name: 'Back to sign in' }))
+    expect(screen.getByRole('dialog', { name: 'Sign in' })).toBeTruthy()
   })
 
   it('refuses an incomplete key without starting a recovery', async () => {
