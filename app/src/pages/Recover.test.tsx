@@ -13,10 +13,12 @@ const SESSION = { address: ACCOUNT, credentialId: 'cred-new' }
 
 const recoverWithPhrase = vi.fn()
 const checkPendingRecovery = vi.fn()
+const discardPendingRecovery = vi.fn()
 vi.mock('../lib/passkey', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/passkey')>()),
   recoverWithPhrase: (...a: unknown[]) => recoverWithPhrase(...a),
   checkPendingRecovery: (...a: unknown[]) => checkPendingRecovery(...a),
+  discardPendingRecovery: (...a: unknown[]) => discardPendingRecovery(...a),
 }))
 // The backup prompt has its own tests. Here it only has to appear for the recovered account.
 vi.mock('../components/AddBackupPasskey', () => ({
@@ -27,6 +29,8 @@ afterEach(() => {
   cleanup()
   recoverWithPhrase.mockReset()
   checkPendingRecovery.mockReset()
+  discardPendingRecovery.mockReset()
+  vi.unstubAllGlobals()
   localStorage.clear()
   sessionStorage.clear()
 })
@@ -156,5 +160,29 @@ describe('Recover', () => {
     expect(screen.queryByText(/still confirming/)).toBeNull()
     expect(screen.queryByRole('button', { name: 'Check again' })).toBeNull()
     for (let i = 1; i <= 12; i++) expect((screen.getByLabelText(`Word ${i}`) as HTMLInputElement).value).toBe('')
+  })
+
+  // A dropped recovery must not lock the page forever. Start over shows only once Check again calls it stuck,
+  // asks first, and forgets only the pending record. A recovery that did land is found on the next try.
+  it('offers Start over for a stuck recovery, asks first, then brings the form back', async () => {
+    recoverWithPhrase.mockResolvedValue({ status: 'pending', account: ACCOUNT })
+    checkPendingRecovery.mockResolvedValue({ status: 'stuck', account: ACCOUNT })
+    const confirm = vi.fn(() => false)
+    vi.stubGlobal('confirm', confirm)
+    const user = renderPage()
+    await fill(user)
+    await screen.findByText(/still confirming/)
+    expect(screen.queryByRole('button', { name: 'Start over' })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Check again' }))
+    await user.click(await screen.findByRole('button', { name: 'Start over' }))
+    expect(confirm).toHaveBeenCalledWith('If your recovery already went through, starting over is safe: we will find it.')
+    expect(discardPendingRecovery).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Check again' })).toBeTruthy()
+
+    confirm.mockReturnValue(true)
+    await user.click(screen.getByRole('button', { name: 'Start over' }))
+    expect(discardPendingRecovery).toHaveBeenCalledWith(ACCOUNT)
+    expect(screen.queryByText(/still confirming/)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Recover my account' })).toBeTruthy()
   })
 })

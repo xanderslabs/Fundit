@@ -4,11 +4,12 @@ import { AddressQr, CopyAddress } from '../components/AddressTools'
 import { AddBackupPasskey } from '../components/AddBackupPasskey'
 import { MAX_USERNAME } from '../components/PasskeyLogin'
 import { explainError } from '../lib/errors'
-import { checkPendingRecovery, normalizePhrase, RecoveryNeedsFunds, recoverWithPhrase, type StoredPasskey } from '../lib/passkey'
+import { checkPendingRecovery, discardPendingRecovery, normalizePhrase, RecoveryNeedsFunds, recoverWithPhrase, type StoredPasskey } from '../lib/passkey'
 
 const WORDS = 12
 const INVALID = "Those words don't form a valid recovery key. Check the order and spelling."
 const empty = () => Array<string>(WORDS).fill('')
+const START_OVER = 'If your recovery already went through, starting over is safe: we will find it.'
 
 // Recover a passkey account with its 12-word recovery key. The words live only in this component's state:
 // they are never stored, logged or put in the URL, and lib/passkey sends only derived addresses and signatures.
@@ -19,6 +20,8 @@ export function Recover() {
   const [error, setError] = useState<string | null>(null)
   const [needsFunds, setNeedsFunds] = useState<RecoveryNeedsFunds | null>(null)
   const [pending, setPending] = useState<Address | null>(null)
+  // Check again found no receipt after the cutoff: the recovery was probably dropped.
+  const [stuck, setStuck] = useState(false)
   const [recovered, setRecovered] = useState<StoredPasskey | null>(null)
   // A second click while the first recovery runs must not start another one.
   const inFlight = useRef(false)
@@ -40,12 +43,13 @@ export function Recover() {
   }
 
   function settle(res: Awaited<ReturnType<typeof checkPendingRecovery>>) {
+    setStuck(res.status === 'stuck')
     if (res.status === 'recovered') {
       setWords(empty())
       setPending(null)
       setNeedsFunds(null)
       setRecovered(res.session)
-    } else if (res.status === 'pending') {
+    } else if (res.status === 'pending' || res.status === 'stuck') {
       // Check again needs only the account, so the words go now. A later revert means typing them again.
       setWords(empty())
       setPending(res.account)
@@ -96,6 +100,15 @@ export function Recover() {
       }
     })
 
+  // Forgets only the pending record. If that recovery went through, the next one finds its passkey on chain.
+  function startOver() {
+    if (!pending || !window.confirm(START_OVER)) return
+    discardPendingRecovery(pending)
+    setPending(null)
+    setStuck(false)
+    setError(null)
+  }
+
   if (recovered) {
     return (
       <section className="manage">
@@ -124,10 +137,16 @@ export function Recover() {
         {pending ? (
           <>
             <p>Your recovery is still confirming. Check again in a minute.</p>
+            {stuck && <p>This is taking longer than usual. You can start over with your recovery key.</p>}
             <div className="backup-actions">
               <button type="button" className="btn" disabled={busy} onClick={check}>
                 Check again
               </button>
+              {stuck && (
+                <button type="button" className="btn btn-outline" disabled={busy} onClick={startOver}>
+                  Start over
+                </button>
+              )}
             </div>
           </>
         ) : (

@@ -10,6 +10,7 @@ import {
   discardPendingBackup,
   dismissBackupPrompt,
   checkPendingRecovery,
+  discardPendingRecovery,
   isValidRecoveryPhrase,
   loginPasskey,
   markBackupSaved,
@@ -81,14 +82,14 @@ const balance = vi.hoisted(() => ({ value: 1_000_000n }))
 // Deployed code per address (lower case), for picking the live account when a key maps to several.
 const code = vi.hoisted(() => new Map<string, string>())
 // The account's owners in Circle's multisig plugin: owner ids only, the rest of ownershipInfoOf is not read.
-const owners = vi.hoisted(() => ({ ids: [] as string[], fail: false, reads: [] as unknown[] }))
+const owners = vi.hoisted(() => ({ ids: [] as string[], data: [] as unknown[], fail: false, reads: [] as unknown[] }))
 vi.mock('./clients', () => ({
   arcClient: {
     readContract: async (args: { functionName: string }) => {
       if (args.functionName !== 'ownershipInfoOf') return balance.value
       owners.reads.push(args)
       if (owners.fail) throw new Error('rpc down')
-      return [owners.ids, [], 1n]
+      return [owners.ids, owners.data, 1n]
     },
     getCode: async ({ address }: { address: string }) => code.get(address.toLowerCase()),
   },
@@ -691,6 +692,82 @@ describe('recoverWithPhrase', () => {
     expect(kit.sdk.toWebAuthnCredential).toHaveBeenCalledTimes(1)
     expect(readPendingRecovery(RECOVERED)).toBeNull()
     expect(readPasskeySession()).toEqual({ address: RECOVERED, credentialId: 'cred-new' })
+  })
+
+  // Same rule as the backup: a recovery with no receipt after 30 minutes was probably dropped. Start over forgets
+  // only that pending record. The session, the backup flag and the words are not touched.
+  it('calls a pending recovery stuck only after 30 minutes without a receipt, and Start over clears only that record', async () => {
+    const record = (ageMs: number) =>
+      JSON.stringify({ account: RECOVERED, hash: OP_HASH, hashKind: 'userop', createdAt: Date.now() - ageMs, credentialId: 'cred-new' })
+    kit.bundler.waitForUserOperationReceipt.mockRejectedValue(new Error('not found'))
+    localStorage.setItem(pendingKey, record(29 * 60_000))
+    expect(await checkPendingRecovery(RECOVERED)).toEqual({ status: 'pending', account: RECOVERED })
+    localStorage.setItem(pendingKey, record(31 * 60_000))
+    expect(await checkPendingRecovery(RECOVERED)).toEqual({ status: 'stuck', account: RECOVERED })
+    expect(readPendingRecovery(RECOVERED)).not.toBeNull()
+
+    savePasskeySession({ address: ACCOUNT.address, credentialId: 'cred-other' })
+    markBackupSaved(RECOVERED)
+    discardPendingRecovery(RECOVERED)
+    expect(readPendingRecovery(RECOVERED)).toBeNull()
+    expect(readPasskeySession()).toEqual({ address: ACCOUNT.address, credentialId: 'cred-other' })
+    expect(localStorage.getItem('fundit.backup.0x00000000000000000000000000000000000000ab')).toBe('1')
+  })
+
+  // "If your recovery already went through, starting over is safe: we will find it." The earlier passkey is an
+  // owner on chain when it did, so the account is opened with it: no second passkey, no second recovery.
+  describe('after Start over', () => {
+    // x = 1, y = 2, as a 64-byte public key (Circle serializes it without the 0x04 prefix).
+    const EARLIER = { id: 'cred-earlier', publicKey: `0x${'0'.repeat(63)}1${'0'.repeat(63)}2`, raw: {} }
+    const passkeyOwner = (x: bigint, y: bigint) => ({ weight: 1n, credType: 0, addr: '0x0000000000000000000000000000000000000000', publicKeyX: x, publicKeyY: y })
+
+    async function stuckThenStartOver() {
+      kit.sdk.toWebAuthnCredential.mockResolvedValueOnce(EARLIER)
+      kit.bundler.waitForUserOperationReceipt.mockRejectedValueOnce(new Error('slow'))
+      expect(await recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).toEqual({ status: 'pending', account: RECOVERED })
+      discardPendingRecovery(RECOVERED)
+      code.set(RECOVERED.toLowerCase(), '0x6001')
+    }
+    afterEach(() => {
+      code.clear()
+      owners.ids = []
+      owners.data = []
+      owners.fail = false
+      owners.reads = []
+    })
+
+    it('finds an earlier recovery that went through, before making a new passkey', async () => {
+      await stuckThenStartOver()
+      owners.ids = [`0x${'95'.repeat(30)}`, `0x${'00'.repeat(10)}${'ee'.repeat(20)}`, `0x${'77'.repeat(30)}`]
+      owners.data = [passkeyOwner(9n, 9n), { ...passkeyOwner(0n, 0n), credType: 1 }, passkeyOwner(1n, 2n)]
+      expect(await recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).toEqual({
+        status: 'recovered',
+        session: { address: RECOVERED, credentialId: 'cred-earlier' },
+      })
+      expect(kit.sdk.toWebAuthnCredential).toHaveBeenCalledTimes(1)
+      expect(kit.executeRecovery).toHaveBeenCalledTimes(1)
+      expect(readPasskeySession()).toEqual({ address: RECOVERED, credentialId: 'cred-earlier' })
+    })
+
+    it('starts a new recovery when the earlier one did not land', async () => {
+      await stuckThenStartOver()
+      owners.ids = [`0x${'95'.repeat(30)}`]
+      owners.data = [passkeyOwner(9n, 9n)]
+      expect(await recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).toEqual({
+        status: 'recovered',
+        session: { address: RECOVERED, credentialId: 'cred-new' },
+      })
+      expect(kit.sdk.toWebAuthnCredential).toHaveBeenCalledTimes(2)
+      expect(kit.executeRecovery).toHaveBeenCalledTimes(2)
+    })
+
+    // The check only saves a second recovery. If it cannot read the chain, recovering again is still safe.
+    it('starts a new recovery when the owners cannot be read', async () => {
+      await stuckThenStartOver()
+      owners.fail = true
+      expect(await recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).toMatchObject({ status: 'recovered' })
+      expect(kit.executeRecovery).toHaveBeenCalledTimes(2)
+    })
   })
 
   it('clears a recovery that reverted, so the person can try again', async () => {

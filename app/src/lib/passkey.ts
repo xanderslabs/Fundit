@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { type Address, decodeErrorResult, getAddress, type Hex, isAddress, numberToHex, parseAbi, type TransactionReceipt, type Transport } from 'viem'
+import { type Address, decodeErrorResult, getAddress, type Hex, isAddress, isHex, numberToHex, parseAbi, type TransactionReceipt, type Transport } from 'viem'
 import { erc20Abi } from '../abi/erc20'
 import { ARC_CHAIN, CIRCLE_CLIENT_KEY, CIRCLE_MULTISIG_PLUGIN, MODULAR_WALLETS_URL, NETWORK, PASSKEY_GAS_BUFFER, TOKENS, TX_TIMEOUT_MS } from '../config'
 import { arcClient } from './clients'
@@ -520,9 +520,12 @@ export async function checkPendingBackup(stored: StoredPasskey): Promise<BackupS
 // Recovery with the recovery key. The words stay in memory: they are never stored, logged or sent. Only the
 // key's address, the account address, the new passkey and signatures go out.
 const RECOVERY_PENDING_KEY = 'fundit.recovery.pending.'
+// The passkey of a recovery the person started over from. Never the words. recoverWithPhrase looks for it on chain.
+const RECOVERY_TRIED_KEY = 'fundit.recovery.tried.'
 const INVALID_PHRASE = "Those words don't form a valid recovery key. Check the order and spelling."
 
-export type PendingRecovery = { account: Address; hash: Hex; hashKind: 'userop'; createdAt: number; credentialId: string }
+// publicKey is the new passkey's (x and y, as Circle serializes it), to find it among the owners after Start over.
+export type PendingRecovery = { account: Address; hash: Hex; hashKind: 'userop'; createdAt: number; credentialId: string; publicKey?: Hex }
 export type RecoveryResult = { status: 'recovered'; session: StoredPasskey } | { status: 'pending'; account: Address }
 
 // The account cannot pay the recovery's network fee yet. The page shows its address so it can be funded.
@@ -556,7 +559,8 @@ export function readPendingRecovery(account: Address): PendingRecovery | null {
       localStorage.removeItem(key)
       return null
     }
-    return { account: x.account, hash: x.hash, hashKind: 'userop', createdAt: x.createdAt, credentialId: x.credentialId }
+    const publicKey = typeof x.publicKey === 'string' && isHex(x.publicKey) ? x.publicKey : undefined
+    return { account: x.account, hash: x.hash, hashKind: 'userop', createdAt: x.createdAt, credentialId: x.credentialId, ...(publicKey && { publicKey }) }
   } catch {
     return null
   }
@@ -578,12 +582,59 @@ function clearPendingRecovery(account: Address) {
   }
 }
 
+// Start over: forget a recovery that never confirmed, so a new one can begin. Only the pending record goes. Its
+// passkey is kept aside, so the next recovery can find it if this one went through after all.
+export function discardPendingRecovery(account: Address) {
+  const pending = readPendingRecovery(account)
+  try {
+    if (pending?.publicKey) {
+      localStorage.setItem(
+        RECOVERY_TRIED_KEY + account.toLowerCase(),
+        JSON.stringify({ credentialId: pending.credentialId, publicKey: pending.publicKey, createdAt: pending.createdAt }),
+      )
+    }
+  } catch {
+    // Without storage the next recovery simply makes a new passkey.
+  }
+  clearPendingRecovery(account)
+}
+
+// A 64-byte public key, or 65 bytes with the 0x04 prefix, as x and y (same rule as webauthn-p256 parsePublicKey).
+function publicKeyXY(publicKey: Hex): { x: bigint; y: bigint } | null {
+  const hex = publicKey.slice(2)
+  const body = hex.length === 130 ? hex.slice(2) : hex
+  if (body.length !== 128) return null
+  return { x: BigInt(`0x${body.slice(0, 64)}`), y: BigInt(`0x${body.slice(64)}`) }
+}
+
+// The credential id of a recovery the person started over from, when its passkey is an owner on chain now: that
+// recovery went through. null when there is none, it did not land, or the chain cannot be read (a new recovery
+// is safe then, it only adds another passkey).
+async function earlierRecovery(account: Address): Promise<string | null> {
+  try {
+    const x = JSON.parse(localStorage.getItem(RECOVERY_TRIED_KEY + account.toLowerCase()) ?? 'null') as {
+      credentialId?: unknown
+      publicKey?: unknown
+      createdAt?: unknown
+    } | null
+    if (!x || typeof x.credentialId !== 'string' || x.credentialId === '' || typeof x.publicKey !== 'string' || !isHex(x.publicKey)) return null
+    if (typeof x.createdAt !== 'number' || x.createdAt <= Date.now() - BACKUP_MAX_AGE_MS) return null
+    const key = publicKeyXY(x.publicKey)
+    const owners = key && (await readOwners(account))
+    if (!key || !owners) return null
+    return owners.ownersData.some((o) => o.publicKeyX === key.x && o.publicKeyY === key.y) ? x.credentialId : null
+  } catch {
+    return null
+  }
+}
+
 // The new passkey owns the account now. The old recovery key may be exposed, so the backup flag is cleared and
 // My page asks for a new key. The signing account loads on the next send, with the new passkey.
 function finishRecovery(account: Address, credentialId: string): RecoveryResult {
   clearPendingRecovery(account)
   savedThisLoad.delete(account.toLowerCase())
   try {
+    localStorage.removeItem(RECOVERY_TRIED_KEY + account.toLowerCase())
     localStorage.removeItem(BACKUP_KEY + account.toLowerCase())
   } catch {
     // Nothing stored to clear.
@@ -636,6 +687,9 @@ export async function recoverWithPhrase(p: { phrase: string; username: string })
 
   const pending = readPendingRecovery(account)
   if (pending) return { status: 'pending', account }
+  // After Start over: the earlier recovery may have gone through. Then its passkey opens the account.
+  const earlier = await earlierRecovery(account)
+  if (earlier) return finishRecovery(account, earlier)
   if (!(await canPayBackupGas(account))) throw new RecoveryNeedsFunds(account)
 
   const credential = await sdk.toWebAuthnCredential({
@@ -662,16 +716,18 @@ export async function recoverWithPhrase(p: { phrase: string; username: string })
     preVerificationGas: gas.preVerificationGas,
     verificationGasLimit: gas.verificationGasLimit,
   } as Params)
-  const record: PendingRecovery = { account, hash, hashKind: 'userop', createdAt: Date.now(), credentialId: credential.id }
+  const record: PendingRecovery = { account, hash, hashKind: 'userop', createdAt: Date.now(), credentialId: credential.id, publicKey: credential.publicKey }
   savePendingRecovery(record)
   return settleRecovery(record, await userOperationResult(bundler as unknown as ReceiptBundler, hash))
 }
 
-// Checks a pending recovery with a receipt read. It never sends anything again and needs no passkey.
-export async function checkPendingRecovery(account: Address): Promise<RecoveryResult | { status: 'none' }> {
+// Checks a pending recovery with a receipt read. It never sends anything again and needs no passkey. 'stuck' is
+// a pending recovery still without a receipt after BACKUP_STUCK_MS: the person may start over.
+export async function checkPendingRecovery(account: Address): Promise<RecoveryResult | { status: 'stuck'; account: Address } | { status: 'none' }> {
   const pending = readPendingRecovery(account)
   if (!pending) return { status: 'none' }
-  return settleRecovery(pending, await userOperationResult(await readBundler(), pending.hash))
+  const res = settleRecovery(pending, await userOperationResult(await readBundler(), pending.hash))
+  return res.status === 'pending' && Date.now() - pending.createdAt > BACKUP_STUCK_MS ? { status: 'stuck', account } : res
 }
 
 // True when Circle's Arc endpoint for this network answers with that network's chain id. Run by hand once a client key exists.
