@@ -33,6 +33,15 @@ vi.mock('../lib/iris', async (importOriginal) => ({
   fetchTransferStatus: async () => 'pending',
 }))
 vi.mock('../lib/clients', () => ({ arcClient: {} }))
+// What the account keeps for the network fee: the form's estimate, and the exact prefund checked at send time.
+const reserve = vi.hoisted(() => ({ form: 300_000n, send: 300_000n }))
+const passkeyReserve = vi.hoisted(() =>
+  vi.fn(async (_address: unknown, _calls?: unknown, opts?: { feeMargin?: boolean }) => (opts?.feeMargin === false ? reserve.send : reserve.form)),
+)
+vi.mock('../lib/passkey', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/passkey')>()),
+  passkeyReserve,
+}))
 
 let send: ReturnType<typeof vi.fn<(...args: Parameters<Sender['send']>) => Promise<TxResult>>>
 
@@ -46,6 +55,8 @@ afterEach(() => {
   vi.clearAllMocks()
   balances.usdc = 0n
   balances.eurc = 0n
+  reserve.form = 300_000n
+  reserve.send = 300_000n
   localStorage.clear()
 })
 
@@ -86,16 +97,16 @@ describe('AccountWithdraw', () => {
     await userEvent.clear(screen.getByLabelText('Recipient'))
     await userEvent.type(screen.getByLabelText('Recipient'), FRIEND)
     await userEvent.clear(screen.getByLabelText('Amount'))
-    // 1.00 USDC held, 0.05 kept for gas: 0.96 is too much.
-    await userEvent.type(screen.getByLabelText('Amount'), '0.96')
-    expect(screen.getByText('Leave at least 0.05 USDC in your Fundit account for the network fee.')).toBeTruthy()
+    // 1.00 USDC held and an estimated 0.30 kept for the prefund: 0.71 is too much.
+    await userEvent.type(screen.getByLabelText('Amount'), '0.71')
+    expect(screen.getByText('Leave at least 0.30 USDC in your Fundit account for the network fee.')).toBeTruthy()
     expect((submitButton() as HTMLButtonElement).disabled).toBe(true)
     await userEvent.click(submitButton())
     expect(send).not.toHaveBeenCalled()
 
-    // Max fills in exactly what can go out.
+    // Max fills in exactly what can go out: the balance less the estimated reserve, not less a fixed 0.05.
     await userEvent.click(screen.getByRole('button', { name: 'Max' }))
-    expect((screen.getByLabelText('Amount') as HTMLInputElement).value).toBe('0.95')
+    expect((screen.getByLabelText('Amount') as HTMLInputElement).value).toBe('0.7')
     expect((submitButton() as HTMLButtonElement).disabled).toBe(false)
   })
 
@@ -104,12 +115,33 @@ describe('AccountWithdraw', () => {
     balances.usdc = 1_000000n
     renderForm()
     await screen.findByText(/You have 1.00 USDC/)
-    await fill('0.9', FRIEND)
+    await fill('0.6', FRIEND)
     expect((submitButton() as HTMLButtonElement).disabled).toBe(false)
-    balances.usdc = 900000n
+    balances.usdc = 800000n
     await userEvent.click(submitButton())
-    expect((await screen.findAllByText('Leave at least 0.05 USDC in your Fundit account for the network fee.')).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText('Leave at least 0.30 USDC in your Fundit account for the network fee.')).length).toBeGreaterThan(0)
     expect(send).not.toHaveBeenCalled()
+  })
+
+  // The prefund for the real calls at the fee now decides, and the message gives that number.
+  it('checks the exact prefund for the calls it will send, right before sending', async () => {
+    balances.usdc = 1_000000n
+    renderForm()
+    await screen.findByText(/You have 1.00 USDC/)
+    await userEvent.click(screen.getByRole('button', { name: 'Max' }))
+    await userEvent.type(screen.getByLabelText('Recipient'), FRIEND)
+    reserve.send = 350_000n
+    await userEvent.click(submitButton())
+    expect((await screen.findAllByText('Leave at least 0.35 USDC in your Fundit account for the network fee.')).length).toBeGreaterThan(0)
+    expect(send).not.toHaveBeenCalled()
+    const [, calls, opts] = passkeyReserve.mock.calls.at(-1)!
+    expect(opts).toEqual({ feeMargin: false })
+    expect(decodeFunctionData({ abi: erc20Abi, data: (calls as { data: Hex }[])[0]!.data }).args).toEqual([FRIEND, 700_000n])
+
+    // At the estimate it goes.
+    reserve.send = 300_000n
+    await userEvent.click(submitButton())
+    await screen.findByText('Your money was sent.')
   })
 
   // EURC has no gas reserve of its own, but the network fee is still paid in USDC.
@@ -120,13 +152,13 @@ describe('AccountWithdraw', () => {
     await userEvent.selectOptions(screen.getByLabelText('Currency'), 'EURC')
     await screen.findByText(/You have 5.00 EURC/)
     await fill('5', FRIEND)
-    expect(screen.getByText(/Add at least 0.05 USDC to your Fundit account first/)).toBeTruthy()
+    expect(screen.getByText(/Add at least 0.30 USDC to your Fundit account first/)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/add-money')
     expect((submitButton() as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('lets the full EURC balance go when there is USDC for gas, on Arc only', async () => {
-    balances.usdc = 50_000n
+    balances.usdc = 300_000n
     balances.eurc = 5_000000n
     renderForm()
     await userEvent.selectOptions(screen.getByLabelText('Currency'), 'EURC')

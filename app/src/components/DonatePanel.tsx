@@ -2,7 +2,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import type { Hex } from 'viem'
-import { EXPLORER_URL, PASSKEY_GAS_BUFFER } from '../config'
+import { EXPLORER_URL } from '../config'
+import { usePasskeyReserve } from '../hooks/usePasskeyReserve'
 import { useSender } from '../hooks/useSender'
 import {
   clearPendingArc,
@@ -19,6 +20,7 @@ import { BALANCES_KEY, balancesKey, fetchAccountBalances } from '../lib/deposit'
 import { buildDonateCalls, donationBreakdown, fetchDonorFunds } from '../lib/donate'
 import { explainError } from '../lib/errors'
 import { bpsToPercent, formatAmount, formatExact, parseAmount } from '../lib/format'
+import { addAtLeast, passkeyReserve } from '../lib/passkey'
 import type { TxResult } from '../lib/sender'
 import { byteLength } from '../lib/validate'
 import { SignInButton } from './AccountMenu'
@@ -27,7 +29,6 @@ import { PASSKEY_LOGIN_TO_CHECK, PASSKEY_PROCESSING, recheckResult } from './TxS
 const QUICK_AMOUNTS = ['10', '25', '50', '100'] as const
 const TIP_PERCENTS = [0, 5, 10, 15] as const
 const DAY_MS = 24 * 60 * 60 * 1000
-const NO_GAS = `Add at least ${formatAmount(PASSKEY_GAS_BUFFER, 'USDC')} to your Fundit account first. It pays the network fee.`
 const START_OVER_WARNING =
   'The earlier transaction may still go through. If it does and you give again, you will give twice. Start a new donation anyway?'
 
@@ -112,8 +113,9 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   const limit = messageLimit(anonymous)
   const messageTooLong = messageBytes > limit
   const balance = funds.data?.balance
-  // Only a USDC balance pays the Fundit account's gas. An EURC balance is not touched by it.
-  const gasBuffer = sender?.kind === 'passkey' && symbol === 'USDC' ? PASSKEY_GAS_BUFFER : 0n
+  // What the Fundit account keeps for the network fee (passkeyReserve). Only a USDC balance pays it.
+  const reserve = usePasskeyReserve(sender)
+  const gasBuffer = sender?.kind === 'passkey' && symbol === 'USDC' ? (reserve ?? 0n) : 0n
   // An EURC gift from a Fundit account still pays the network fee in USDC, so it needs the buffer in USDC.
   const needsGasUsdc = sender?.kind === 'passkey' && symbol !== 'USDC'
   const gasFunds = useQuery({
@@ -122,11 +124,11 @@ export function DonatePanel({ view }: { view: CampaignView }) {
     enabled: needsGasUsdc && !closed,
     staleTime: 15_000,
   })
-  const noGas = needsGasUsdc && gasFunds.data !== undefined && gasFunds.data.usdc < PASSKEY_GAS_BUFFER
+  const noGas = needsGasUsdc && gasFunds.data !== undefined && reserve !== undefined && gasFunds.data.usdc < reserve
   const overBalance = breakdown !== null && balance !== undefined && breakdown.total + gasBuffer > balance
-  const notEnough = (have: bigint) =>
-    gasBuffer > 0n
-      ? `Your balance is ${formatAmount(have, symbol)}. Keep about ${formatExact(gasBuffer, symbol)} more for the network fee, which your Fundit account pays in USDC.`
+  const notEnough = (have: bigint, keep = gasBuffer) =>
+    keep > 0n
+      ? `Your balance is ${formatAmount(have, symbol)}. Keep about ${formatExact(keep, symbol)} more for the network fee, which your Fundit account pays in USDC.`
       : `Your balance is ${formatAmount(have, symbol)}, which is not enough ${symbol} for this amount and tip.`
 
   const busy = phase.kind === 'sending' || phase.kind === 'checking'
@@ -139,6 +141,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
     amount !== null &&
     !messageTooLong &&
     balance !== undefined &&
+    (sender.kind !== 'passkey' || reserve !== undefined) &&
     !overBalance &&
     (!needsGasUsdc || (gasFunds.data !== undefined && !noGas)) &&
     !locked
@@ -189,19 +192,22 @@ export function DonatePanel({ view }: { view: CampaignView }) {
       // Read the balance and allowance again right before building, so a finished approval is not repeated.
       const fresh = await fetchDonorFunds(arcClient, token, sender.address, campaign)
       queryClient.setQueryData(fundsKey, fresh)
-      if (fresh.balance < amount + tip + gasBuffer) {
-        setPhase({ kind: 'error', message: notEnough(fresh.balance) })
+      const calls = buildDonateCalls({ campaign, token, amount, tip, message: anonymous ? markAnonymous(message) : message, allowance: fresh.allowance })
+      // The prefund for these exact calls at the fee now, so a gift that would revert in its own calls is never sent.
+      const needed = sender.kind === 'passkey' ? await passkeyReserve(sender.address, calls, { feeMargin: false }) : 0n
+      const keep = symbol === 'USDC' ? needed : 0n
+      if (fresh.balance < amount + tip + keep) {
+        setPhase({ kind: 'error', message: notEnough(fresh.balance, keep) })
         return
       }
       if (needsGasUsdc) {
         const gas = await fetchAccountBalances(arcClient, sender.address)
         queryClient.setQueryData(balancesKey(sender.address), gas)
-        if (gas.usdc < PASSKEY_GAS_BUFFER) {
-          setPhase({ kind: 'error', message: NO_GAS })
+        if (gas.usdc < needed) {
+          setPhase({ kind: 'error', message: addAtLeast(needed) })
           return
         }
       }
-      const calls = buildDonateCalls({ campaign, token, amount, tip, message: anonymous ? markAnonymous(message) : message, allowance: fresh.allowance })
       const donateIndex = calls.length - 1
       const res = await sender.send(calls, {
         label: 'Donate',
@@ -312,9 +318,9 @@ export function DonatePanel({ view }: { view: CampaignView }) {
                 {notEnough(balance)} <Link to="/add-money">Add money</Link>
               </p>
             )}
-            {noGas && (
+            {noGas && reserve !== undefined && (
               <p className="field-error" role="alert">
-                {NO_GAS} <Link to="/add-money">Add money</Link>
+                {addAtLeast(reserve)} <Link to="/add-money">Add money</Link>
               </p>
             )}
             {balanceNote && (

@@ -182,9 +182,19 @@ export const CIRCLE_CLIENT_KEY: string = env.VITE_CIRCLE_CLIENT_KEY ?? ''
 // (CIRCLE_WEIGHTED_WEB_AUTHN_MULTISIG_PLUGIN in @circle-fin/modular-wallets-core dist/index.js). Same address on
 // Arc mainnet and Arc testnet, checked on-chain.
 export const CIRCLE_MULTISIG_PLUGIN: Address = '0x0000000C984AFf541D6cE86Bb697e68ec57873C8'
-// Arc network fees are paid in USDC from the sender's own balance. This much stays free for them (a Fundit
-// account, and a regular wallet adding USDC to one).
+// Arc network fees are paid in USDC from the sender's own balance. A regular wallet adding USDC to a Fundit
+// account keeps this much free. It is also the least a Fundit account ever keeps back (see passkeyReserve).
 export const PASSKEY_GAS_BUFFER = 50_000n
+// A Fundit account pays for a user operation by moving its prefund (all its gas limits times the max fee) into
+// the EntryPoint before the calls run, so it keeps back more than the fee itself. passkeyReserve estimates it.
+// When it cannot, it keeps these. Measured on Arc testnet on 2026-10-18 at Circle's fee (about 800 gwei):
+// prefunds of 0.22 to 0.37 USDC for a send or gift from a deployed account, 0.65 USDC to create a Fundit, and
+// 1.27 USDC for the first operation, which also deploys the account.
+export const RESERVE_FALLBACK = 500_000n
+export const RESERVE_FALLBACK_NEW_ACCOUNT = 1_500_000n
+// ERC-4337 EntryPoint v0.7, used by Circle Modular Wallets. Same address on every chain. It holds each
+// account's deposit: prefund left over from earlier operations, which pays for the next one first.
+export const ENTRY_POINT: Address = '0x0000000071727De22E5E9d8BAf0edAc6f37da032'
 // Add money from another chain (bridging USDC into the Fundit account). Off by default. A transfer already saved
 // in the browser is still tracked either way.
 export const CROSSCHAIN_ENABLED: boolean = env.VITE_CROSSCHAIN === '1'

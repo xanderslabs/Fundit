@@ -2,7 +2,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { type Address, formatUnits, getAddress, isAddressEqual, zeroAddress } from 'viem'
-import { ARC_DOMAIN, CCTP_CHAINS, CHAIN_LABELS, PASSKEY_GAS_BUFFER, TOKENS, type TokenSymbol } from '../config'
+import { ARC_DOMAIN, CCTP_CHAINS, CHAIN_LABELS, TOKENS, type TokenSymbol } from '../config'
+import { usePasskeyReserve } from '../hooks/usePasskeyReserve'
 import { buildAccountSendCalls, maxAccountSend, OWN_ADDRESS, TOO_SMALL } from '../lib/accountWithdraw'
 import { chainByKey, pendingPayoutFrom, savePendingPayout, subscribePending } from '../lib/bridge'
 import { arcClient } from '../lib/clients'
@@ -10,6 +11,7 @@ import { BALANCES_KEY, balancesKey, fetchAccountBalances } from '../lib/deposit'
 import { PlainError } from '../lib/errors'
 import { formatAmount, parseAmount } from '../lib/format'
 import { fetchForwardFee } from '../lib/iris'
+import { addAtLeast, passkeyReserve } from '../lib/passkey'
 import { destDomain, type PayoutDest } from '../lib/payout'
 import type { Sender } from '../lib/sender'
 import { ADDRESS_TYPO, parseTypedAddress } from '../lib/validate'
@@ -18,10 +20,10 @@ import { TxStatus, useTx } from './TxStatus'
 
 const FEE_CHANGED = 'The transfer fee changed. Check the new amount and confirm again.'
 const OVER_HELD = 'That is more than your Fundit account holds.'
-const KEEP_GAS = `Leave at least ${formatAmount(PASSKEY_GAS_BUFFER, 'USDC')} in your Fundit account for the network fee.`
+// The reserve is what the account must keep for the network fee (passkeyReserve), shown as the real number.
+const keepGas = (reserve: bigint) => `Leave at least ${formatAmount(reserve, 'USDC')} in your Fundit account for the network fee.`
 const ONE_AT_A_TIME =
   'Your last transfer to another chain is still on its way. You can send another once it arrives. If it takes much longer than expected, a Dismiss button appears below.'
-const NO_GAS = `Add at least ${formatAmount(PASSKEY_GAS_BUFFER, 'USDC')} to your Fundit account first. It pays the network fee.`
 const QUOTE_DEBOUNCE_MS = 400
 
 // Sends USDC or EURC out of a Fundit account, on Arc or as USDC to another chain. The organiser's payout form
@@ -65,11 +67,12 @@ function SendOutForm({ sender }: { sender: Sender }) {
     queryFn: () => fetchAccountBalances(arcClient, account),
     staleTime: 15_000,
   })
+  const reserve = usePasskeyReserve(sender)
   const usdc = balances.data?.usdc
   const held = balances.data ? (symbol === 'USDC' ? balances.data.usdc : balances.data.eurc) : undefined
-  // Arc gas is paid in USDC, so only USDC keeps the buffer back. EURC can all go, but needs USDC for the fee.
-  const max = held === undefined ? undefined : symbol === 'USDC' ? maxAccountSend(held, PASSKEY_GAS_BUFFER) : held
-  const noGas = usdc !== undefined && usdc < PASSKEY_GAS_BUFFER
+  // Arc gas is paid in USDC, so only USDC keeps the reserve back. EURC can all go, but needs USDC for the fee.
+  const max = held === undefined || reserve === undefined ? undefined : symbol === 'USDC' ? maxAccountSend(held, reserve) : held
+  const noGas = usdc !== undefined && reserve !== undefined && usdc < reserve
 
   // CCTP only moves USDC, so EURC stays on Arc.
   const destinations: PayoutDest[] = symbol === 'USDC' ? ['Arc', ...CCTP_CHAINS.map((c) => c.key)] : ['Arc']
@@ -142,8 +145,6 @@ function SendOutForm({ sender }: { sender: Sender }) {
         queryClient.setQueryData(balancesKey(account), now)
         const nowHeld = symbol === 'USDC' ? now.usdc : now.eurc
         if (amount > nowHeld) throw new PlainError(OVER_HELD)
-        if (now.usdc < PASSKEY_GAS_BUFFER) throw new PlainError(NO_GAS)
-        if (symbol === 'USDC' && amount > maxAccountSend(now.usdc, PASSKEY_GAS_BUFFER)) throw new PlainError(KEEP_GAS)
         // Read again here: another tab may have sent one since the form last looked.
         if (crossChain && pendingPayoutFrom(account)) throw new PlainError(ONE_AT_A_TIME)
         // A fresh quote at send time, so the fee cap matches what Circle charges now.
@@ -152,8 +153,13 @@ function SendOutForm({ sender }: { sender: Sender }) {
           queryClient.setQueryData(['account-send-fee', dest, fast, amount.toString()], fresh)
           throw new PlainError(fresh.maxFee >= amount ? TOO_SMALL : FEE_CHANGED)
         }
+        const calls = buildAccountSendCalls({ token: TOKENS[symbol].address, amount, dest, recipient, maxFee: fresh?.maxFee, fast, account })
+        // The prefund for these exact calls at the fee now, so a send that would revert in its own calls is never sent.
+        const needed = await passkeyReserve(account, calls, { feeMargin: false })
+        if (now.usdc < needed) throw new PlainError(addAtLeast(needed))
+        if (symbol === 'USDC' && amount > maxAccountSend(now.usdc, needed)) throw new PlainError(keepGas(needed))
         if (fresh) sending.current = { dest, fast, net: amount - fresh.maxFee }
-        return buildAccountSendCalls({ token: TOKENS[symbol].address, amount, dest, recipient, maxFee: fresh?.maxFee, fast, account })
+        return calls
       },
       'Send money out',
     )
@@ -211,14 +217,14 @@ function SendOutForm({ sender }: { sender: Sender }) {
                 {OVER_HELD}
               </p>
             )}
-            {overMax && !noGas && (
+            {overMax && !noGas && reserve !== undefined && (
               <p className="field-error" role="alert">
-                {KEEP_GAS}
+                {keepGas(reserve)}
               </p>
             )}
-            {noGas && (
+            {noGas && reserve !== undefined && (
               <p className="field-error" role="alert">
-                {NO_GAS}{' '}
+                {addAtLeast(reserve)}{' '}
                 <Link to="/add-money">Add money</Link>
               </p>
             )}

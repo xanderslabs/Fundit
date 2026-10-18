@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { type Address, getAddress, type Hex, type TransactionReceipt } from 'viem'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { CIRCLE_MULTISIG_PLUGIN, TX_TIMEOUT_MS } from '../config'
+import { CIRCLE_MULTISIG_PLUGIN, ENTRY_POINT, RESERVE_FALLBACK, RESERVE_FALLBACK_NEW_ACCOUNT, TX_TIMEOUT_MS } from '../config'
 import { useSender } from '../hooks/useSender'
 import {
   addBackupPasskey,
@@ -15,6 +15,7 @@ import {
   loginPasskey,
   markBackupSaved,
   newRecoveryPhrase,
+  passkeyReserve,
   type PasskeyBundler,
   passkeySender,
   readPasskeySession,
@@ -23,6 +24,7 @@ import {
   RecoveryNeedsFunds,
   recoverWithPhrase,
   registerPasskey,
+  reserveFor,
   savePasskeySession,
   storedPasskeySender,
   syncBackupFromChain,
@@ -60,7 +62,11 @@ const kit = vi.hoisted(() => {
       toPasskeyTransport: vi.fn(() => ({})),
       toModularTransport: vi.fn(() => ({})),
       toCircleSmartAccount: vi.fn(async () => ({ address: '0x00000000000000000000000000000000000000cc' })),
-      getUserOperationGasPrice: vi.fn(),
+      // 1,000 gwei, about Circle's fee on Arc testnet.
+      getUserOperationGasPrice: vi.fn(async () => {
+        const tier = { maxFeePerGas: '1000000000000', maxPriorityFeePerGas: '960000000000' }
+        return { low: tier, medium: tier, high: tier }
+      }),
       WebAuthnMode: { Register: 'Register', Login: 'Login' },
       OwnerIdentifierType: { EOA: 'EOAOWNER', WebAuthn: 'WEBAUTHOWNER' },
     },
@@ -79,13 +85,16 @@ vi.mock('./passkeyKit', async () =>
 )
 // The account's USDC balance, read before a backup is added.
 const balance = vi.hoisted(() => ({ value: 1_000_000n }))
+// The account's EntryPoint deposit, in native wei.
+const deposit = vi.hoisted(() => ({ value: 0n }))
 // Deployed code per address (lower case), for picking the live account when a key maps to several.
 const code = vi.hoisted(() => new Map<string, string>())
 // The account's owners in Circle's multisig plugin: owner ids only, the rest of ownershipInfoOf is not read.
 const owners = vi.hoisted(() => ({ ids: [] as string[], data: [] as unknown[], fail: false, hang: false, reads: [] as unknown[] }))
 vi.mock('./clients', () => ({
   arcClient: {
-    readContract: async (args: { functionName: string }) => {
+    readContract: async (args: { functionName: string; address: string }) => {
+      if (args.address === ENTRY_POINT) return deposit.value
       if (args.functionName !== 'ownershipInfoOf') return balance.value
       owners.reads.push(args)
       if (owners.fail) throw new Error('rpc down')
@@ -437,10 +446,11 @@ describe('addBackupPasskey', () => {
     expect(readPendingBackup(stored.address)).toBeNull()
   })
 
-  // The gas comes out of the account's USDC. Below the buffer the bundler would refuse with a code nobody can read.
-  it('refuses with a plain message when the account cannot pay the gas', async () => {
-    balance.value = 49_999n
-    await expect(addBackupPasskey(stored, PHRASE)).rejects.toThrow('Add at least 0.05 USDC')
+  // The gas comes out of the account's USDC, and the EntryPoint takes the whole prefund first. Short of it the
+  // bundler would refuse with a code nobody can read. GAS at 1,000 gwei with the margins is 0.31 USDC.
+  it('refuses with a plain message when the account cannot pay the prefund', async () => {
+    balance.value = 300_000n
+    await expect(addBackupPasskey(stored, PHRASE)).rejects.toThrow('Add at least 0.31 USDC')
     expect(kit.registerRecoveryAddress).not.toHaveBeenCalled()
   })
 
@@ -561,6 +571,8 @@ describe('recoverWithPhrase', () => {
 
   beforeEach(() => {
     balance.value = 1_000_000n
+    // An account with a recovery key is deployed.
+    code.set(RECOVERED.toLowerCase(), '0x6001')
     kit.mnemonicToAccount.mockClear()
     kit.sdk.toWebAuthnCredential.mockReset()
     kit.sdk.toWebAuthnCredential.mockResolvedValue(NEW_CRED)
@@ -579,6 +591,7 @@ describe('recoverWithPhrase', () => {
   afterEach(() => {
     localStorage.clear()
     sessionStorage.clear()
+    code.clear()
   })
 
   const sdkCalls = () => [
@@ -693,6 +706,9 @@ describe('recoverWithPhrase', () => {
     const err = await recoverWithPhrase({ phrase: PHRASE, username: 'ana' }).catch((e: unknown) => e)
     expect(err).toBeInstanceOf(RecoveryNeedsFunds)
     expect((err as RecoveryNeedsFunds).account).toBe(RECOVERED)
+    // No passkey for this account on this page, so the deployed-account fallback, shown as the real number.
+    expect((err as RecoveryNeedsFunds).reserve).toBe(RESERVE_FALLBACK)
+    expect((err as Error).message).toBe('Recovery needs a small network fee. Send at least 0.50 USDC on Arc to your account address first.')
     expect(kit.sdk.toWebAuthnCredential).not.toHaveBeenCalled()
     expect(kit.executeRecovery).not.toHaveBeenCalled()
   })
@@ -828,5 +844,68 @@ describe('recoverWithPhrase', () => {
     await expect(recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).rejects.toThrow('The recovery did not go through.')
     expect(readPendingRecovery(RECOVERED)).toBeNull()
     expect(readPasskeySession()).toBeNull()
+  })
+})
+
+// What a Fundit account keeps back before it spends: the EntryPoint prefund, not a fixed 0.05 USDC. On Arc
+// testnet a Max send that kept 0.05 reverted ("transfer amount exceeds balance") because the prefund was
+// about 0.22 USDC, and the person still paid the fee.
+describe('passkeyReserve', () => {
+  const ADDRESS = getAddress('0x00000000000000000000000000000000000000cc') as Address
+  const SEND: Call = { to: '0x3600000000000000000000000000000000000000', data: '0xa9059cbb' }
+
+  beforeEach(() => {
+    deposit.value = 0n
+    kit.bundler.estimateUserOperationGas.mockReset()
+    kit.bundler.estimateUserOperationGas.mockResolvedValue(GAS)
+  })
+  afterEach(() => {
+    code.clear()
+    localStorage.clear()
+  })
+
+  it('is all gas limits as sent times the max fee, plus the margin, rounded up to the cent', () => {
+    // (125,003 + 70,000 + 50,000) gas x 1,000 gwei = 0.245003 USDC, x 1.25 = 0.30625, up to 0.31.
+    expect(reserveFor(GAS, 1_000_000_000_000n, 0n)).toBe(310_000n)
+  })
+
+  it('counts the EntryPoint deposit, which pays first', () => {
+    expect(reserveFor(GAS, 1_000_000_000_000n, 200_000n * 10n ** 12n)).toBe(110_000n)
+  })
+
+  it('checks the prefund at the fee now, with no fee margin, right before a send', () => {
+    // 0.245003 USDC, up to 0.25.
+    expect(reserveFor(GAS, 1_000_000_000_000n, 0n, false)).toBe(250_000n)
+  })
+
+  it('never keeps less than the 0.05 USDC floor', () => {
+    expect(reserveFor(GAS, 1_000_000_000_000n, 10n ** 18n)).toBe(50_000n)
+    expect(reserveFor(GAS, 1n, 0n)).toBe(50_000n)
+  })
+
+  it("estimates the caller's calls with this page's signer and Circle's fee, with no passkey prompt", async () => {
+    await loginPasskey()
+    kit.sdk.toWebAuthnCredential.mockClear()
+    expect(await passkeyReserve(ADDRESS, [SEND])).toBe(310_000n)
+    expect(kit.bundler.estimateUserOperationGas).toHaveBeenCalledWith({ account: { address: ADDRESS }, calls: [SEND] })
+    expect(kit.sdk.toWebAuthnCredential).not.toHaveBeenCalled()
+  })
+
+  it('keeps the deployed-account fallback with no signer on this page', async () => {
+    code.set(ADDRESS.toLowerCase(), '0x6001')
+    expect(await passkeyReserve(ADDRESS, [SEND])).toBe(RESERVE_FALLBACK)
+    expect(kit.bundler.estimateUserOperationGas).not.toHaveBeenCalled()
+  })
+
+  it('keeps more before the account is deployed, since its first operation deploys it', async () => {
+    expect(await passkeyReserve(ADDRESS)).toBe(RESERVE_FALLBACK_NEW_ACCOUNT)
+  })
+
+  it('falls back when the estimate fails, less the deposit', async () => {
+    await loginPasskey()
+    code.set(ADDRESS.toLowerCase(), '0x6001')
+    kit.bundler.estimateUserOperationGas.mockRejectedValue(new Error("AA21 didn't pay prefund"))
+    deposit.value = 100_000n * 10n ** 12n
+    expect(await passkeyReserve(ADDRESS, [SEND])).toBe(RESERVE_FALLBACK - 100_000n)
   })
 })

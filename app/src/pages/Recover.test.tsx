@@ -116,11 +116,11 @@ describe('Recover', () => {
 
   // The account pays the fee in USDC. The person sees where to send it, with copy and a QR code.
   it('asks to fund the account first, with its address, a copy button and a QR code', async () => {
-    recoverWithPhrase.mockRejectedValueOnce(new RecoveryNeedsFunds(ACCOUNT))
+    recoverWithPhrase.mockRejectedValueOnce(new RecoveryNeedsFunds(ACCOUNT, 500_000n))
     const user = renderPage()
     await fill(user)
     expect(
-      await screen.findByText('Recovery needs a small network fee. Send at least 0.05 USDC on Arc to your account address first.'),
+      await screen.findByText('Recovery needs a small network fee. Send at least 0.50 USDC on Arc to your account address first.'),
     ).toBeTruthy()
     expect(screen.getByText(ACCOUNT)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Copy address' })).toBeTruthy()

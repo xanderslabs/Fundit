@@ -35,6 +35,15 @@ vi.mock('../lib/sender', async (importOriginal) => ({
   waitForResult: () => recheck.next(),
 }))
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open }) }))
+// What the Fundit account keeps for the network fee: the form's estimate, and the exact prefund at send time.
+const reserve = vi.hoisted(() => ({ form: 300_000n, send: 300_000n }))
+const passkeyReserve = vi.hoisted(() =>
+  vi.fn(async (_address: unknown, _calls?: unknown, opts?: { feeMargin?: boolean }) => (opts?.feeMargin === false ? reserve.send : reserve.form)),
+)
+vi.mock('../lib/passkey', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/passkey')>()),
+  passkeyReserve,
+}))
 vi.mock('../lib/clients', () => ({
   arcClient: {
     readContract: async (p: { address: Address; functionName: string; args: readonly unknown[] }) => {
@@ -99,6 +108,8 @@ const donateButton = () => screen.getByRole('button', { name: 'Give' }) as HTMLB
 
 afterEach(() => {
   cleanup()
+  reserve.form = 300_000n
+  reserve.send = 300_000n
   state.sender = null
   state.balance = 0n
   state.usdc = undefined
@@ -141,7 +152,7 @@ describe('DonatePanel', () => {
     const user = userEvent.setup()
     await user.type(screen.getByLabelText('Amount'), '100')
     await user.click(screen.getByLabelText('5%'))
-    expect(await screen.findByText(/Your balance is 104.00 USDC\. Keep about 0.05 USDC more/)).toBeTruthy()
+    expect(await screen.findByText(/Your balance is 104.00 USDC\. Keep about 0.30 USDC more/)).toBeTruthy()
     expect(donateButton().disabled).toBe(true)
 
     await user.click(screen.getByLabelText('No tip'))
@@ -657,20 +668,34 @@ describe('DonatePanel', () => {
       expect(screen.getByRole('link', { name: /explorer/i }).getAttribute('href')).toBe(`https://explorer.arc.io/tx/${TX}`)
     })
 
-    // A passkey wallet pays its gas in USDC from the same balance. Amount plus tip equal to the balance would
-    // leave nothing for gas, and the user operation would fail after the donor confirmed it.
-    it('keeps a gas buffer: amount plus tip must leave about 0.05 USDC', async () => {
+    // A passkey wallet pays its gas in USDC from the same balance, and the EntryPoint takes the whole prefund
+    // before the gift runs. Leaving less than that, the gift would revert after the donor confirmed it.
+    it('keeps the estimated reserve: amount plus tip must leave the prefund', async () => {
       passkeySender()
       state.balance = 10_000000n
       renderPanel(view('USDC'))
       const user = userEvent.setup()
-      await user.type(screen.getByLabelText('Amount'), '10')
-      expect(await screen.findByText(/Keep about 0.05 USDC more for the network fee/)).toBeTruthy()
+      await user.type(screen.getByLabelText('Amount'), '9.8')
+      expect(await screen.findByText(/Keep about 0.30 USDC more for the network fee/)).toBeTruthy()
       expect(donateButton().disabled).toBe(true)
 
       await user.clear(screen.getByLabelText('Amount'))
-      await user.type(screen.getByLabelText('Amount'), '9.95')
+      await user.type(screen.getByLabelText('Amount'), '9.7')
       await waitFor(() => expect(donateButton().disabled).toBe(false))
+    })
+
+    // The prefund for the real calls (approve and donate) at the fee now decides, before anything is sent.
+    it('checks the exact prefund for the gift right before sending', async () => {
+      const { send } = passkeySender()
+      state.balance = 10_000000n
+      reserve.send = 400_000n
+      renderPanel(view('USDC'))
+      await fillAndDonate('9.7')
+      expect(await screen.findByText(/Keep about 0.40 USDC more for the network fee/)).toBeTruthy()
+      expect(send).not.toHaveBeenCalled()
+      const [, calls, opts] = passkeyReserve.mock.calls.at(-1)!
+      expect(opts).toEqual({ feeMargin: false })
+      expect(calls).toHaveLength(2)
     })
 
     // Arc gas is paid in USDC. A Fundit account with EURC and no USDC would fail at gas estimation after the tap.
@@ -681,7 +706,7 @@ describe('DonatePanel', () => {
       renderPanel(view('EURC'))
       const user = userEvent.setup()
       await user.type(screen.getByLabelText('Amount'), '10')
-      expect(await screen.findByText(/Add at least 0.05 USDC to your Fundit account first. It pays the network fee./)).toBeTruthy()
+      expect(await screen.findByText(/Add at least 0.30 USDC to your Fundit account first. It pays the network fee./)).toBeTruthy()
       expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/add-money')
       expect(donateButton().disabled).toBe(true)
       await user.click(donateButton())
@@ -691,7 +716,7 @@ describe('DonatePanel', () => {
     it('lets an EURC gift go when the account has USDC for gas', async () => {
       const { send } = passkeySender()
       state.balance = 100_000000n
-      state.usdc = 50_000n
+      state.usdc = 300_000n
       renderPanel(view('EURC'))
       await fillAndDonate()
       await waitFor(() => expect(send).toHaveBeenCalledTimes(1))

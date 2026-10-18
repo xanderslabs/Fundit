@@ -18,8 +18,6 @@ test.describe.configure({ mode: 'serial' })
 // above Arc's base fee, and the first one also deploys the account, so the top-up must cover that prefund.
 const TOP_UP = parseUnits('3', 6)
 const GIFT = '0.2'
-// What Send money out leaves in the account to cover the user operation's prefund. See the last test.
-const SEND_OUT_KEEP = parseUnits('0.35', 6)
 const MESSAGE = 'Good luck from the e2e run'
 
 const ownershipAbi = parseAbi([
@@ -276,19 +274,22 @@ test('sends money out on Arc back to the funder', async () => {
   const before = await usdcBalance(funder)
   // The form shows the balance after the withdrawal.
   await expect(send.getByText(`You have ${formatAmount(held, 'USDC')} in your Fundit account.`)).toBeVisible({ timeout: 30_000 })
-  // Not Max: Max keeps only the 0.05 USDC gas reserve (PASSKEY_GAS_BUFFER), but the EntryPoint takes the user
-  // operation's prefund (about 0.22 USDC at Circle's bundler gas price) before the transfer runs, so a Max send
-  // reverts with "ERC20: transfer amount exceeds balance". Seen on Arc testnet in
-  // 0x30f4517f77571103f1358275b1435172c31f746266f07f75df80496bdbceb21c. Keep enough for the prefund instead.
-  const amount = held - SEND_OUT_KEEP
-  await send.getByRole('textbox', { name: 'Amount' }).fill(formatUnits(amount, 6))
+  // Max keeps back the estimated prefund for this send. With a fixed 0.05 USDC it reverted with "ERC20: transfer
+  // amount exceeds balance", because the EntryPoint takes the prefund (about 0.22 USDC at Circle's fee) before
+  // the transfer runs: 0x30f4517f77571103f1358275b1435172c31f746266f07f75df80496bdbceb21c on Arc testnet.
+  await send.getByRole('button', { name: 'Max' }).click()
+  const field = send.getByRole('textbox', { name: 'Amount' })
+  await expect(field).not.toHaveValue('')
+  const amount = parseUnits(await field.inputValue(), 6)
+  const reserve = held - amount
+  console.log(`Max keeps ${formatUnits(reserve, 6)} USDC for the network fee`)
+  expect(reserve).toBeGreaterThanOrEqual(50_000n)
   await send.getByLabel('Recipient').fill(funder)
   await send.getByRole('button', { name: 'Send', exact: true }).click()
   await settled(send, 'Your money was sent.')
   logUserOps('Send money out on Arc')
 
-  // The funder got exactly the amount. The account paid this send's gas from what it kept.
+  // The funder got exactly the Max amount. The account paid this send's gas from what it kept.
   expect(await usdcBalance(funder)).toBe(before + amount)
-  const left = await usdcBalance(account)
-  expect(left).toBeLessThan(SEND_OUT_KEEP)
+  expect(await usdcBalance(account)).toBeLessThanOrEqual(reserve)
 })
