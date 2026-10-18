@@ -32,7 +32,7 @@ export function Privacy() {
         </li>
       </ul>
       <p>
-        If you tick "Give anonymously", Fundit does not show your name next to the gift on its own pages. The gift is
+        If you switch on "Hide my name", Fundit does not show your name next to the gift on its own pages. The gift is
         still public on the blockchain, with your account address, the amount and any message.
       </p>
       <p>

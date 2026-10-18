@@ -102,7 +102,7 @@ export function Terms() {
         <li>You pay the network fees for your own transactions.</li>
         <li>Your Fundit account address, the amount and any message you add are public on the blockchain.</li>
         <li>
-          "Give anonymously" hides your name on Fundit only. The gift, your account address, the amount and any message
+          "Hide my name" hides your name on Fundit only. The gift, your account address, the amount and any message
           stay public on the blockchain.
         </li>
       </ul>
