@@ -2,6 +2,8 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { explainError } from '../lib/errors'
 import { ADD_MONEY_PATH } from '../lib/urls'
+import { Button, Field } from './ui'
+import './AddBackupPasskey.css'
 import {
   addBackupPasskey,
   canPayBackupGas,
@@ -177,13 +179,13 @@ export function AddBackupPasskey({ stored, onLater, onDone, headingId, onGuardCh
 
   const pendingActions = (
     <div className="backup-actions">
-      <button type="button" className="btn" disabled={busy} onClick={() => void check()}>
+      <Button disabled={busy} onClick={() => void check()}>
         Check again
-      </button>
+      </Button>
       {stuck && (
-        <button type="button" className="btn btn-outline" disabled={busy} onClick={startOver}>
+        <Button variant="secondary" disabled={busy} onClick={startOver}>
           Start over
-        </button>
+        </Button>
       )}
     </div>
   )
@@ -217,10 +219,8 @@ export function AddBackupPasskey({ stored, onLater, onDone, headingId, onGuardCh
           >
             <p>To check you wrote them down, type these words.</p>
             {asked.map((n) => (
-              <div className="form-field" key={n}>
-                <label htmlFor={`${id}-word-${n}`}>Word #{n}</label>
+              <Field key={n} id={`${id}-word-${n}`} label={`Word #${n}`}>
                 <input
-                  id={`${id}-word-${n}`}
                   autoComplete="off"
                   autoCapitalize="none"
                   spellCheck={false}
@@ -228,11 +228,11 @@ export function AddBackupPasskey({ stored, onLater, onDone, headingId, onGuardCh
                   onChange={(e) => setTyped((t) => ({ ...t, [n]: e.target.value }))}
                   disabled={busy}
                 />
-              </div>
+              </Field>
             ))}
-            <button type="submit" className="btn" disabled={busy}>
+            <Button type="submit" disabled={busy}>
               Add the recovery key
-            </button>
+            </Button>
           </form>
         )}
       </>
@@ -256,13 +256,13 @@ export function AddBackupPasskey({ stored, onLater, onDone, headingId, onGuardCh
   } else {
     body = (
       <div className="backup-actions">
-        <button type="button" className="btn" disabled={busy || funded === null} onClick={() => void show()}>
+        <Button disabled={busy || funded === null} onClick={() => void show()}>
           Show my recovery key
-        </button>
+        </Button>
         {onLater && (
-          <button type="button" className="btn btn-outline" disabled={busy} onClick={onLater}>
+          <Button variant="secondary" disabled={busy} onClick={onLater}>
             Later
-          </button>
+          </Button>
         )}
       </div>
     )
@@ -276,9 +276,9 @@ export function AddBackupPasskey({ stored, onLater, onDone, headingId, onGuardCh
         safe. Anyone with these words can control your account.
       </p>
       {body}
-      {sending && <p className="hint">Follow the steps your browser shows.</p>}
+      {sending && <p className="backup-hint">Follow the steps your browser shows.</p>}
       {error && (
-        <p className="field-error" role="alert">
+        <p className="field-error backup-error" role="alert">
           {error}
         </p>
       )}

@@ -10,7 +10,7 @@ import { CopyAddress } from '../components/AddressTools'
 import { CampaignGrid, LoadError } from '../components/CampaignGrid'
 import { PendingBridgeTracker } from '../components/PendingBridgeTracker'
 import { ShareDialog } from '../components/SharePanel'
-import { Tabs } from '../components/Tabs'
+import { AddressChip, Banner, Button, ButtonLink, Card, EmptyState, Stat, TabPanel, Tabs } from '../components/ui'
 import { EXPLORER_URL } from '../config'
 import { blockTimes } from '../hooks/useActivity'
 import { useCampaign } from '../hooks/useCampaigns'
@@ -24,11 +24,19 @@ import { balancesKey, fetchAccountBalances } from '../lib/deposit'
 import { formatAmount } from '../lib/format'
 import { readPasskeyUsername, type StoredPasskey, syncBackupFromChain, useBackupNeeded, usePasskeySession } from '../lib/passkey'
 import type { Sender } from '../lib/sender'
+import './Profile.css'
 
 // Money can arrive at the address from anywhere, so the balance is read again on a timer.
 const BALANCE_POLL_MS = 15_000
 
 type Panel = 'add' | 'send'
+
+const DASH_TABS: { id: DashTab; label: string }[] = [
+  { id: 'dash-fundits', label: 'Your Fundits' },
+  { id: 'dash-gifts', label: 'Your gifts' },
+  { id: 'dash-account', label: 'Account' },
+]
+type DashTab = 'dash-fundits' | 'dash-gifts' | 'dash-account'
 
 const CloseIcon = () => (
   <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
@@ -54,10 +62,10 @@ function DonationRow({ item, time }: { item: DonationItem; time: bigint | undefi
             <Link to={`/c/${item.campaign}`}>A donation you made</Link>
           )}
         </p>
-        {anonymous && <p className="muted">Given with name hidden</p>}
-        {text !== '' && <p className="activity-message">{text}</p>}
+        {anonymous && <p className="dash-muted">Given with name hidden</p>}
+        {text !== '' && <p className="gift-message">{text}</p>}
       </div>
-      <a className="muted activity-time" href={`${EXPLORER_URL}/tx/${item.txHash}`} target="_blank" rel="noopener noreferrer">
+      <a className="gift-time" href={`${EXPLORER_URL}/tx/${item.txHash}`} target="_blank" rel="noopener noreferrer">
         {time === undefined ? `Block ${item.blockNumber}` : new Date(Number(time) * 1000).toLocaleString()}
       </a>
     </li>
@@ -73,13 +81,13 @@ function YourFundits({ address }: { address: Address }) {
   return (
     <div className="dash-tab">
       <div className="dash-tab-head">
-        <p className="muted">The Fundits you started.</p>
-        <Link to="/create" className="btn">
-          Start a Fundit
-        </Link>
+        <p className="dash-muted">The Fundits you started.</p>
+        <ButtonLink to="/create">Start a Fundit</ButtonLink>
       </div>
       {query.isError ? (
         <LoadError onRetry={() => query.refetch()} />
+      ) : query.isSuccess && query.data.length === 0 ? (
+        <EmptyState>You have not started a Fundit yet.</EmptyState>
       ) : (
         <CampaignGrid
           views={query.data}
@@ -87,13 +95,13 @@ function YourFundits({ address }: { address: Address }) {
           skeletons={3}
           action={(v) => (
             <>
-              <Link to={`/manage/${v.address}`} className="btn btn-outline" aria-label={`Manage ${v.summary.meta.title || 'Untitled Fundit'}`}>
+              <ButtonLink to={`/manage/${v.address}`} variant="secondary" aria-label={`Manage ${v.summary.meta.title || 'Untitled Fundit'}`}>
                 Manage
-              </Link>
+              </ButtonLink>
               <ShareDialog address={v.address} title={v.summary.meta.title} isCreator />
             </>
           )}
-          empty={<p>You have not started a Fundit yet.</p>}
+          empty={<EmptyState>You have not started a Fundit yet.</EmptyState>}
         />
       )}
     </div>
@@ -111,24 +119,27 @@ function YourGifts({ address }: { address: Address }) {
   })
   return (
     <div className="dash-tab">
-      {query.isPending && <p className="muted">Loading your gifts...</p>}
+      {query.isPending && <p className="dash-muted">Loading your gifts...</p>}
       {query.isError && (
-        <p className="muted">
-          Could not load your gifts.{' '}
-          <button type="button" className="btn btn-outline" onClick={() => query.refetch()}>
-            Try again
-          </button>
-        </p>
+        <EmptyState
+          action={
+            <Button variant="secondary" onClick={() => query.refetch()}>
+              Try again
+            </Button>
+          }
+        >
+          Could not load your gifts.
+        </EmptyState>
       )}
-      {query.isSuccess && query.data.items.length === 0 && <p className="empty">No gifts from this account recently.</p>}
+      {query.isSuccess && query.data.items.length === 0 && <EmptyState>No gifts from this account recently.</EmptyState>}
       {query.isSuccess && query.data.items.length > 0 && (
-        <ol className="activity-list gift-list">
+        <ol className="gift-list">
           {query.data.items.map((item) => (
             <DonationRow key={`${item.txHash}-${item.logIndex}`} item={item} time={query.data.times.get(item.blockNumber)} />
           ))}
         </ol>
       )}
-      <p className="hint">
+      <p className="dash-note">
         This list covers about the last day on Arc.{' '}
         <a href={`${EXPLORER_URL}/address/${address}`} target="_blank" rel="noopener noreferrer">
           Older gifts: view on explorer
@@ -172,13 +183,11 @@ function AccountTab({
       <section className="dash-account-row" aria-labelledby="dash-recovery-heading">
         <h3 id="dash-recovery-heading">Recovery key</h3>
         {backup === 'saved' && <p>Recovery key saved</p>}
-        {backup === 'checking' && <p className="muted">Checking...</p>}
+        {backup === 'checking' && <p className="dash-muted">Checking...</p>}
         {backup === 'missing' && (
           <div className="dash-inline">
             <p>Not saved yet</p>
-            <button type="button" className="btn" onClick={onSaveNow}>
-              Save now
-            </button>
+            <Button onClick={onSaveNow}>Save now</Button>
           </div>
         )}
       </section>
@@ -189,23 +198,24 @@ function AccountTab({
             Username: <strong>{username}</strong>
           </p>
         )}
-        <p className="muted">Your Fundit account address on Arc:</p>
+        <p className="dash-muted">Your Fundit account address on Arc:</p>
+        {/* The full address here, so it can be checked character by character. CopyAddress moves with Add money (Task 6). */}
         <CopyAddress address={address} />
-        <a className="section-link" href={`${EXPLORER_URL}/address/${address}`} target="_blank" rel="noopener noreferrer">
+        <a className="dash-link" href={`${EXPLORER_URL}/address/${address}`} target="_blank" rel="noopener noreferrer">
           View on the Arc explorer
         </a>
       </section>
       <section className="dash-account-row" aria-labelledby="dash-pending-heading">
         <h3 id="dash-pending-heading">Transfers on their way</h3>
-        {!pending && <p className="muted">No transfers on their way.</p>}
+        {!pending && <p className="dash-muted">No transfers on their way.</p>}
         {/* A transfer started while cross-chain was on may still arrive, so it is tracked either way. */}
         <PendingBridgeTracker campaign={address} destination="your Fundit account" />
         <PendingBridgeTracker campaign={address} kind="payout" />
       </section>
-      <div>
-        <button type="button" className="btn btn-outline" onClick={() => signOut()}>
+      <div className="dash-signout">
+        <Button variant="secondary" onClick={() => signOut()}>
           Sign out
-        </button>
+        </Button>
       </div>
     </div>
   )
@@ -233,47 +243,34 @@ function BalanceCard({
     refetchInterval: BALANCE_POLL_MS,
   })
   const amount = (v: bigint | undefined, symbol: 'USDC' | 'EURC') =>
-    v !== undefined ? formatAmount(v, symbol).split(' ')[0] : balances.isError ? '-' : '...'
+    v !== undefined ? formatAmount(v, symbol).split(' ')[0]! : balances.isError ? '-' : '...'
   return (
-    <section className="dash-card" aria-label="Your Fundit account">
-      <div className="dash-id">
-        <p className="dash-name">{username ?? 'Fundit account'}</p>
-        <CopyAddress address={address} short />
+    <Card className="account-card" label="Your Fundit account">
+      <div className="account-card-top">
+        <p className="account-card-name">{username ?? 'Fundit account'}</p>
+        <AddressChip address={address} />
       </div>
-      <dl className="dash-balances" aria-live="polite">
-        <div>
-          <dt>USDC</dt>
-          <dd>{amount(balances.data?.usdc, 'USDC')}</dd>
-        </div>
-        <div>
-          <dt>EURC</dt>
-          <dd>{amount(balances.data?.eurc, 'EURC')}</dd>
-        </div>
+      <dl className="dash-balances account-card-balances" aria-live="polite">
+        <Stat term size="lg" label="USDC" value={amount(balances.data?.usdc, 'USDC')} />
+        <Stat term size="lg" label="EURC" value={amount(balances.data?.eurc, 'EURC')} />
       </dl>
-      {balances.isError && <p className="hint">Could not read your balance. It will try again.</p>}
-      <div className="dash-actions">
-        <button
-          ref={addRef}
-          type="button"
-          className="btn btn-lg"
-          aria-expanded={open === 'add'}
-          aria-controls="dash-panel-add"
-          onClick={() => onToggle('add')}
-        >
+      {balances.isError && <p className="dash-note">Could not read your balance. It will try again.</p>}
+      <div className="account-card-actions">
+        <Button ref={addRef} size="lg" aria-expanded={open === 'add'} aria-controls="dash-panel-add" onClick={() => onToggle('add')}>
           Add money
-        </button>
-        <button
+        </Button>
+        <Button
           ref={sendRef}
-          type="button"
-          className="btn btn-lg btn-outline"
+          variant="secondary"
+          size="lg"
           aria-expanded={open === 'send'}
           aria-controls="dash-panel-send"
           onClick={() => onToggle('send')}
         >
           Send
-        </button>
+        </Button>
       </div>
-    </section>
+    </Card>
   )
 }
 
@@ -347,6 +344,7 @@ function Dashboard({ sender, stored }: { sender: Sender; stored: StoredPasskey }
   const showBackup = backupNeeded && (backupOnChain.isError || backupOnChain.data === false)
   const backupState = !backupNeeded ? 'saved' : showBackup ? 'missing' : 'checking'
   const [backupOpen, setBackupOpen] = useState(false)
+  const [tab, setTab] = useState<DashTab>('dash-fundits')
   const banner = useRef<HTMLElement>(null)
 
   function saveNow() {
@@ -381,35 +379,30 @@ function Dashboard({ sender, stored }: { sender: Sender; stored: StoredPasskey }
       </DashPanel>
 
       {showBackup && (
-        <section ref={banner} tabIndex={-1} className="dash-banner" aria-label="Recovery key">
+        <section ref={banner} tabIndex={-1} className="dash-recovery" aria-label="Recovery key">
           {backupOpen ? (
-            <AddBackupPasskey stored={stored} />
+            <Banner tone="attention">
+              <AddBackupPasskey stored={stored} />
+            </Banner>
           ) : (
-            <>
+            <Banner tone="attention" action={<Button onClick={() => setBackupOpen(true)}>Save now</Button>}>
               <p>
                 <strong>Save a recovery key so you never lose this account</strong>
               </p>
-              <button type="button" className="btn" onClick={() => setBackupOpen(true)}>
-                Save now
-              </button>
-            </>
+            </Banner>
           )}
         </section>
       )}
 
-      <Tabs
-        label="My page"
-        className="dash-tabs"
-        tabs={[
-          { id: 'fundits', label: 'Your Fundits', content: <YourFundits address={address} /> },
-          { id: 'gifts', label: 'Your gifts', content: <YourGifts address={address} /> },
-          {
-            id: 'account',
-            label: 'Account',
-            content: <AccountTab address={address} username={username} backup={backupState} onSaveNow={saveNow} />,
-          },
-        ]}
-      />
+      <div>
+        <Tabs label="My page" tabs={DASH_TABS} value={tab} onChange={(id) => setTab(id as DashTab)} />
+        {/* Only the open tab is in the page, so a list loads when its tab is first opened. */}
+        <TabPanel id={tab} active>
+          {tab === 'dash-fundits' && <YourFundits address={address} />}
+          {tab === 'dash-gifts' && <YourGifts address={address} />}
+          {tab === 'dash-account' && <AccountTab address={address} username={username} backup={backupState} onSaveNow={saveNow} />}
+        </TabPanel>
+      </div>
     </div>
   )
 }

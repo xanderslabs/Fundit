@@ -1,0 +1,190 @@
+/* My page: the account dashboard. */
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  max-width: var(--page);
+  margin: 0 auto;
+}
+
+.dash-muted {
+  color: var(--text-muted);
+}
+
+.dash-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-line);
+}
+
+.dash-note a {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* The account card: name and address, the two balances, then Add money and Send. */
+.account-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.account-card-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+
+.account-card-name {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  line-height: var(--text-lg-line);
+  letter-spacing: var(--tracking-heading);
+  overflow-wrap: anywhere;
+}
+
+/* A wide gap keeps the two figures apart. A long amount moves to its own row. */
+.account-card-balances {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-7);
+  margin: 0;
+}
+
+.account-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.account-card-actions .ui-btn {
+  min-width: 160px;
+}
+
+/* The button of the open panel keeps a dark edge, so it reads as pressed. */
+.account-card-actions .ui-btn[aria-expanded='true'] {
+  border-color: var(--text);
+}
+
+/* The Add money and Send panels sit under the card. Their Close button is drawn at the top right. */
+.dash-panel {
+  position: relative;
+}
+
+.dash-panel > .panel h2,
+.dash-panel #send-out-heading {
+  padding-right: calc(var(--hit-target) + var(--space-2));
+}
+
+.dash-recovery:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-lg);
+}
+
+/* Tab contents */
+.dash-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.dash-tab p {
+  margin: 0;
+}
+
+.dash-tab-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.gift-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gift-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.gift-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.gift-message {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.gift-time {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--text-xs-line);
+}
+
+.dash-account {
+  gap: 0;
+}
+
+.dash-account-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.dash-account-row h3 {
+  margin: 0;
+  font-size: var(--text-lg);
+  line-height: var(--text-lg-line);
+  letter-spacing: var(--tracking-heading);
+}
+
+.dash-account-row .bridge-tracker {
+  width: 100%;
+}
+
+.dash-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.dash-signout {
+  padding-top: var(--space-5);
+}
+
+@media (max-width: 480px) {
+  .account-card-actions .ui-btn {
+    flex: 1 1 100%;
+  }
+}
+
+.dash-link {
+  color: var(--text);
+  font-weight: var(--weight-medium);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

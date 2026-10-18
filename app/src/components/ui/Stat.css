@@ -13,6 +13,7 @@
   line-height: var(--text-xl-line);
   letter-spacing: var(--tracking-body);
   overflow-wrap: anywhere;
+  margin: 0;
 }
 
 .ui-stat-lg .ui-stat-value {
@@ -21,6 +22,8 @@
 }
 
 .ui-stat-label {
+  /* Below the figure, also when it comes first in the markup (dt before dd). */
+  order: 1;
   color: var(--text-muted);
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);

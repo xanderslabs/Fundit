@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -165,10 +166,28 @@ describe('My page balance card', () => {
     expect(await within(card).findByText('12.50')).toBeTruthy()
     expect(within(card).getByText('3.00')).toBeTruthy()
     expect(within(card).getAllByRole('term').map((t) => t.textContent)).toEqual(['USDC', 'EURC'])
-    await user.click(within(card).getByRole('button', { name: 'Copy' }))
+    // AddressChip names its button "Copy address"; only the word Copy shows.
+    await user.click(within(card).getByRole('button', { name: 'Copy address' }))
     expect(writeText).toHaveBeenCalledWith(ME)
     expect(within(card).getByRole('button', { name: 'Add money' }).getAttribute('aria-expanded')).toBe('false')
     expect(within(card).getByRole('button', { name: 'Send' }).getAttribute('aria-expanded')).toBe('false')
+  })
+
+  // The old card was a dark gradient with heavy figures that ran together. The card is now a plain raised Card, and
+  // each balance is a large Stat figure in tabular digits, so the numbers line up and stay apart.
+  it('account card shows balances as Stat figures with no gradient class', async () => {
+    signIn()
+    renderProfile()
+    const card = screen.getByRole('region', { name: 'Your Fundit account' })
+    expect(card.classList.contains('ui-card-raised')).toBe(true)
+    expect(card.className).not.toMatch(/gradient|dash-card/)
+    for (const path of ['src/pages/Profile.css', 'src/components/ui/Card.css']) expect(readFileSync(path, 'utf8')).not.toMatch(/gradient/)
+    expect(await within(card).findByText('12.50')).toBeTruthy()
+    const stats = [...card.querySelectorAll('.ui-stat')]
+    expect(stats).toHaveLength(2)
+    for (const stat of stats) expect(stat.classList.contains('ui-stat-lg')).toBe(true)
+    expect(stats.map((s) => s.querySelector('.ui-stat-value')?.textContent)).toEqual(['12.50', '3.00'])
+    expect(stats.map((s) => s.querySelector('.ui-stat-label')?.textContent)).toEqual(['USDC', 'EURC'])
   })
 
   it('names the card Your Fundit account when the username is not known on this browser', () => {
