@@ -34,6 +34,13 @@ describe('CSS lint guardrail', () => {
     'background-color: black',
     'background: linear-gradient(red, blue)',
     'background: linear-gradient(90deg, #fff 0%, var(--surface) 100%)',
+    // A raw size hidden inside a function is still a raw size.
+    'margin: calc(8px * -1)',
+    'padding: calc(4px + 2px)',
+    'padding: calc(var(--space-2) + 2px) 0',
+    'gap: max(8px, 1rem)',
+    'font-size: clamp(12px, 2vw, 20px)',
+    'border-radius: min(var(--radius-lg), 10px)',
   ])('rejects %s', async (decl) => {
     const { errors } = await lint(`.probe { ${decl}; }`)
     expect(errors).toHaveLength(1)
@@ -47,6 +54,9 @@ describe('CSS lint guardrail', () => {
     'column-gap: var(--space-2)',
     'border-radius: 50%',
     'font-size: var(--text-md)',
+    'margin: calc(var(--space-2) * -1) 0',
+    'padding: calc(var(--space-4) + var(--space-1))',
+    'gap: max(var(--space-2), 2%)',
     'border: 1px solid var(--border)',
     'outline: 2px solid var(--focus)',
     'color: var(--text)',

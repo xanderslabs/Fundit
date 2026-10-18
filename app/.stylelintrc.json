@@ -27,16 +27,23 @@
       {
         "ignoreFunctions": {
           "color": false,
-          "/^background/": false
+          "/^background/": false,
+          "font-size": false,
+          "/^margin/": false,
+          "/^padding/": false,
+          "gap": false,
+          "row-gap": false,
+          "column-gap": false,
+          "/radius$/": false
         },
         "ignoreValues": {
-          "font-size": "/^(inherit|-?[\\d.]+%)$/",
-          "/^margin/": "/^((0|auto|inherit|-?[\\d.]+%|var\\(--[\\w-]+\\))(\\s+|$))+$/",
-          "/^padding/": "/^((0|inherit|[\\d.]+%|var\\(--[\\w-]+\\))(\\s+|$))+$/",
-          "gap": "/^((0|inherit|[\\d.]+%|var\\(--[\\w-]+\\))(\\s+|$))+$/",
-          "row-gap": "/^((0|inherit|[\\d.]+%|var\\(--[\\w-]+\\))(\\s+|$))+$/",
-          "column-gap": "/^((0|inherit|[\\d.]+%|var\\(--[\\w-]+\\))(\\s+|$))+$/",
-          "/radius$/": "/^((0|inherit|[\\d.]+%|var\\(--[\\w-]+\\))(\\s+|$))+$/",
+          "font-size": "/^(inherit|-?[\\d.]+%|(calc|min|max|clamp)\\((\\s*(var\\(--[\\w-]+\\)|-?[\\d.]+%?|[-+*/,]))*\\s*\\))$/",
+          "/^margin/": "/^((0|auto|inherit|-?[\\d.]+%|var\\(--[\\w-]+\\)|(calc|min|max|clamp)\\((\\s*(var\\(--[\\w-]+\\)|-?[\\d.]+%?|[-+*/,]))*\\s*\\))(\\s+|$))+$/",
+          "/^padding/": "/^((0|inherit|[\\d.]+%|var\\(--[\\w-]+\\)|(calc|min|max|clamp)\\((\\s*(var\\(--[\\w-]+\\)|-?[\\d.]+%?|[-+*/,]))*\\s*\\))(\\s+|$))+$/",
+          "gap": "/^((0|inherit|[\\d.]+%|var\\(--[\\w-]+\\)|(calc|min|max|clamp)\\((\\s*(var\\(--[\\w-]+\\)|-?[\\d.]+%?|[-+*/,]))*\\s*\\))(\\s+|$))+$/",
+          "row-gap": "/^((0|inherit|[\\d.]+%|var\\(--[\\w-]+\\)|(calc|min|max|clamp)\\((\\s*(var\\(--[\\w-]+\\)|-?[\\d.]+%?|[-+*/,]))*\\s*\\))(\\s+|$))+$/",
+          "column-gap": "/^((0|inherit|[\\d.]+%|var\\(--[\\w-]+\\)|(calc|min|max|clamp)\\((\\s*(var\\(--[\\w-]+\\)|-?[\\d.]+%?|[-+*/,]))*\\s*\\))(\\s+|$))+$/",
+          "/radius$/": "/^((0|inherit|[\\d.]+%|var\\(--[\\w-]+\\)|(calc|min|max|clamp)\\((\\s*(var\\(--[\\w-]+\\)|-?[\\d.]+%?|[-+*/,]))*\\s*\\))(\\s+|$))+$/",
           "color": "/^(transparent|currentColor|inherit)$/i",
           "/^background/": "/^(transparent|currentColor|inherit|none|0|-?[\\d.]+%|auto|cover|contain|center|top|bottom|left|right|no-repeat|repeat|repeat-x|repeat-y|space|round|fixed|scroll|local|border-box|padding-box|content-box|\\/|url\\([^)]*\\)|(repeating-)?(linear|radial|conic)-gradient\\(((var\\(--[\\w-]+\\)|-?[\\d.]+(%|deg|turn)|to|at|top|bottom|left|right|center|circle|ellipse|,)\\s*)*\\))$/i"
         },

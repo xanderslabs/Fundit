@@ -83,6 +83,8 @@
   --page: 960px;
   --page-wide: 1200px;
   --gutter: 16px;
+  /* The smallest size of an icon-only button, such as Close. */
+  --hit-target: 40px;
 
   /* Old names, kept as aliases until every page moves to the tokens above (plan 6, task 7). */
   --primary: var(--text-muted);

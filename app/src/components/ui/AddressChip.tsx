@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Address } from 'viem'
 import { EXPLORER_URL } from '../../config'
 import { shortAddress } from '../../lib/names'
@@ -8,6 +8,12 @@ import './AddressChip.css'
 // what is copied, and it shows on hover.
 export function AddressChip({ address, explorer = false }: { address: Address; explorer?: boolean }) {
   const [copied, setCopied] = useState<boolean | null>(null)
+  // "Copied" shows for a moment, then the button takes its name back for the next copy.
+  useEffect(() => {
+    if (!copied) return
+    const t = setTimeout(() => setCopied(null), 2000)
+    return () => clearTimeout(t)
+  }, [copied])
   async function copy() {
     try {
       await navigator.clipboard.writeText(address)

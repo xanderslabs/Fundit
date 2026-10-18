@@ -45,6 +45,14 @@
   transition: border-color var(--duration) var(--ease);
 }
 
+/* A control that cannot be changed looks it, not only refuses input. */
+.ui-field > :is(input, textarea):disabled,
+.ui-input:disabled {
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
 .ui-field > [aria-invalid='true'],
 .ui-field .ui-input[aria-invalid='true'] {
   border-color: var(--danger-ink);

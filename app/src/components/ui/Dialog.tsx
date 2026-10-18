@@ -5,20 +5,22 @@ import './Dialog.css'
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
 
 // A modal dialog, ported from the sign-in dialog in AccountMenu. Focus moves to its first control and stays
-// inside: Tab wraps at the ends. Escape, a click on the backdrop and the Close button all call onClose. When it
-// closes, focus goes back to the element that had it when the dialog opened.
-export function Dialog({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
+// inside: Tab wraps at the ends. Escape, a click on the backdrop and the Close button all go through one close(),
+// which asks canClose first (the backup dialog asks before recovery words on screen are dropped). When it closes,
+// focus goes back to the element that had it when the dialog opened.
+// Name it with title (the dialog renders an h2) or with labelledBy, the id of a heading its children render.
+type Name = { title: string; labelledBy?: never } | { labelledBy: string; title?: never }
+type DialogProps = Name & { open: boolean; onClose: () => void; canClose?: () => boolean; children: ReactNode }
+
+export function Dialog({ open, ...rest }: DialogProps) {
   if (!open) return null
-  return (
-    <OpenDialog onClose={onClose} title={title}>
-      {children}
-    </OpenDialog>
-  )
+  return <OpenDialog {...rest} />
 }
 
-function OpenDialog({ onClose, title, children }: { onClose: () => void; title: string; children: ReactNode }) {
+function OpenDialog({ onClose, canClose, title, labelledBy, children }: Omit<DialogProps, 'open'>) {
   const dialog = useRef<HTMLDialogElement>(null)
-  const headingId = useId()
+  const ownHeadingId = useId()
+  const headingId = labelledBy ?? ownHeadingId
 
   useEffect(() => {
     const d = dialog.current
@@ -34,10 +36,15 @@ function OpenDialog({ onClose, title, children }: { onClose: () => void; title: 
     }
   }, [])
 
+  function close() {
+    if (canClose && !canClose()) return
+    onClose()
+  }
+
   function onKeyDown(e: KeyboardEvent<HTMLDialogElement>) {
     if (e.key === 'Escape') {
       e.preventDefault()
-      onClose()
+      close()
       return
     }
     if (e.key !== 'Tab' || !dialog.current) return
@@ -64,19 +71,21 @@ function OpenDialog({ onClose, title, children }: { onClose: () => void; title: 
       onKeyDown={onKeyDown}
       onCancel={(e) => {
         e.preventDefault()
-        onClose()
+        close()
       }}
       // A click on the backdrop lands on the dialog element itself.
       onClick={(e) => {
-        if (e.target === dialog.current) onClose()
+        if (e.target === dialog.current) close()
       }}
     >
       <div className="ui-dialog-body">
-        <h2 id={headingId} className="ui-dialog-title">
-          {title}
-        </h2>
+        {title !== undefined && (
+          <h2 id={headingId} className="ui-dialog-title">
+            {title}
+          </h2>
+        )}
         {children}
-        <button type="button" className="ui-dialog-close" aria-label="Close" onClick={onClose}>
+        <button type="button" className="ui-dialog-close" aria-label="Close" onClick={close}>
           <CloseIcon />
         </button>
       </div>

@@ -201,6 +201,59 @@ describe('ui components', () => {
     expect(document.activeElement).toBe(opener)
   })
 
+  // The backup dialog asks before it closes while recovery words are on screen. If any way out skipped that
+  // question, a person could lose the words with no warning.
+  it('Dialog asks canClose before every way of closing', async () => {
+    let allow = false
+    const canClose = vi.fn(() => allow)
+    function Harness() {
+      const [open, setOpen] = useState(true)
+      return (
+        <Dialog open={open} onClose={() => setOpen(false)} title="Save your recovery key" canClose={canClose}>
+          <button type="button">Copy words</button>
+        </Dialog>
+      )
+    }
+    render(<Harness />)
+    const user = userEvent.setup()
+    const dialog = screen.getByRole('dialog', { name: 'Save your recovery key' })
+
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    // A click on the backdrop lands on the dialog element itself.
+    await user.click(dialog)
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    dialog.dispatchEvent(new Event('cancel', { cancelable: true }))
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    expect(canClose).toHaveBeenCalledTimes(4)
+
+    allow = true
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  // Sign-in and the backup prompt bring their own heading. The dialog must take its name from it, with no
+  // second heading of its own.
+  it('Dialog takes its name from a child heading with labelledBy', () => {
+    render(
+      <Dialog open onClose={() => {}} labelledBy="child-heading">
+        <h2 id="child-heading">Sign in to Fundit</h2>
+      </Dialog>,
+    )
+    expect(screen.getByRole('dialog', { name: 'Sign in to Fundit' })).toBeTruthy()
+    expect(screen.getAllByRole('heading')).toHaveLength(1)
+  })
+
+  // A field that cannot be changed must look different, not only refuse input.
+  it('Field shows a disabled control as disabled', () => {
+    const rule = parse(css('Field.css')).rules.find((r) => r.selector.includes(':disabled'))
+    expect(rule?.selector).toMatch(/\.ui-input:disabled/)
+    expect(rule?.body).toMatch(/background\s*:\s*var\(--surface\)/)
+    expect(rule?.body).toMatch(/color\s*:\s*var\(--text-muted\)/)
+  })
+
   // Digits in a balance must line up and not jump as the number changes.
   it('Stat uses tabular figures', () => {
     render(<Stat value="1,234,567.89 USDC" label="Raised" size="lg" />)
@@ -209,8 +262,9 @@ describe('ui components', () => {
     expect(screen.getByText('Raised')).toBeTruthy()
     const rule = parse(css('Stat.css')).rules.find((r) => r.selector.split(',').map((s) => s.trim()).includes('.ui-stat-value'))
     expect(rule?.body).toMatch(/font-variant-numeric\s*:\s*tabular-nums/)
-    // Figures are never set in the display weights.
-    expect(rule?.body).not.toMatch(/font-weight\s*:\s*var\(--weight-display/)
+    // Figures are weight 700 with no letter spacing, never the display weights.
+    expect(rule?.body).toMatch(/font-weight\s*:\s*var\(--weight-bold\)/)
+    expect(rule?.body).toMatch(/letter-spacing\s*:\s*var\(--tracking-body\)/)
   })
 
   // A short address is easier to read, but a copy must always give the full address, or money goes astray.
@@ -225,6 +279,8 @@ describe('ui components', () => {
     await user.click(screen.getByRole('button', { name: 'Copy address' }))
     expect(writeText).toHaveBeenCalledWith(ADDRESS)
     expect(await screen.findByText('Copied')).toBeTruthy()
+    // The button goes back to its name, so a second copy is announced the same way.
+    expect(await screen.findByRole('button', { name: 'Copy address' }, { timeout: 4000 })).toBeTruthy()
     const link = screen.getByRole('link', { name: /explorer/i })
     expect(link.getAttribute('href')).toMatch(new RegExp(`/address/${ADDRESS}$`))
     expect(link.getAttribute('rel')).toContain('noopener')
@@ -246,7 +302,16 @@ describe('ui styles', () => {
   // Each interactive part needs a visible ring for keyboard users, in the one focus colour.
   it('every interactive ui component has a focus-visible style', () => {
     const all = cssFiles.flatMap((f) => parse(css(f)).rules)
-    const interactive = ['.ui-btn', '.ui-tab', '.ui-dialog-close', '.ui-panel-close', '.ui-address-copy', '.ui-address-link']
+    // Anything with a pointer cursor is something people press, so a new one is checked without editing this list.
+    const interactive = [
+      ...new Set(
+        all
+          .filter((r) => /cursor\s*:\s*pointer/.test(r.body))
+          .flatMap((r) => r.selector.split(',').map((s) => s.trim()))
+          .filter((s) => !s.includes(':')),
+      ),
+    ]
+    expect(interactive).toEqual(expect.arrayContaining(['.ui-btn', '.ui-tab', '.ui-dialog-close', '.ui-panel-close', '.ui-address-copy', '.ui-address-link']))
     for (const selector of interactive) {
       const rule = all.find((r) => r.selector.split(',').map((s) => s.trim()).includes(`${selector}:focus-visible`))
       expect(rule, `${selector}:focus-visible`).toBeTruthy()
