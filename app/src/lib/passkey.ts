@@ -378,8 +378,18 @@ const ownershipAbi = parseAbi([
   'function ownershipInfoOf(address account) view returns (bytes30[] ownerIds, OwnerData[] ownersData, uint256 thresholdWeight)',
 ])
 
+// The owner read gives up after this, so a hanging RPC cannot hold back the backup prompt or a recovery.
+export const OWNER_READ_TIMEOUT_MS = 8_000
+
 // The account's owners on Arc, or null when the account is not deployed yet (its only owner is then the passkey).
+// Rejects on a failed read and after OWNER_READ_TIMEOUT_MS.
 async function readOwners(address: Address) {
+  const res = await withTimeout(readOwnersNow(address), OWNER_READ_TIMEOUT_MS)
+  if (res === 'timeout') throw new Error('Reading the account owners timed out.')
+  return res
+}
+
+async function readOwnersNow(address: Address) {
   const code = await arcClient.getCode({ address })
   if (!code || code === '0x') return null
   const [ownerIds, ownersData] = await arcClient.readContract({
@@ -582,16 +592,38 @@ function clearPendingRecovery(account: Address) {
   }
 }
 
+type TriedRecovery = { credentialId: string; publicKey: Hex; createdAt: number }
+// The last few attempts are kept, so a late landing is found even after more than one Start over.
+const MAX_TRIED = 3
+
+function readTried(account: Address): TriedRecovery[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(RECOVERY_TRIED_KEY + account.toLowerCase()) ?? '[]')
+    if (!Array.isArray(parsed)) return []
+    const oldest = Date.now() - BACKUP_MAX_AGE_MS
+    return parsed.filter(
+      (x: Partial<TriedRecovery> | null): x is TriedRecovery =>
+        !!x &&
+        typeof x.credentialId === 'string' &&
+        x.credentialId !== '' &&
+        typeof x.publicKey === 'string' &&
+        isHex(x.publicKey) &&
+        typeof x.createdAt === 'number' &&
+        x.createdAt > oldest,
+    )
+  } catch {
+    return []
+  }
+}
+
 // Start over: forget a recovery that never confirmed, so a new one can begin. Only the pending record goes. Its
 // passkey is kept aside, so the next recovery can find it if this one went through after all.
 export function discardPendingRecovery(account: Address) {
   const pending = readPendingRecovery(account)
   try {
     if (pending?.publicKey) {
-      localStorage.setItem(
-        RECOVERY_TRIED_KEY + account.toLowerCase(),
-        JSON.stringify({ credentialId: pending.credentialId, publicKey: pending.publicKey, createdAt: pending.createdAt }),
-      )
+      const tried = [...readTried(account), { credentialId: pending.credentialId, publicKey: pending.publicKey, createdAt: pending.createdAt }]
+      localStorage.setItem(RECOVERY_TRIED_KEY + account.toLowerCase(), JSON.stringify(tried.slice(-MAX_TRIED)))
     }
   } catch {
     // Without storage the next recovery simply makes a new passkey.
@@ -608,21 +640,19 @@ function publicKeyXY(publicKey: Hex): { x: bigint; y: bigint } | null {
 }
 
 // The credential id of a recovery the person started over from, when its passkey is an owner on chain now: that
-// recovery went through. null when there is none, it did not land, or the chain cannot be read (a new recovery
-// is safe then, it only adds another passkey).
+// recovery went through. null when there is none, none landed, or the chain cannot be read (a new recovery is
+// safe then, it only adds another passkey).
 async function earlierRecovery(account: Address): Promise<string | null> {
+  const tried = readTried(account)
+  if (tried.length === 0) return null
   try {
-    const x = JSON.parse(localStorage.getItem(RECOVERY_TRIED_KEY + account.toLowerCase()) ?? 'null') as {
-      credentialId?: unknown
-      publicKey?: unknown
-      createdAt?: unknown
-    } | null
-    if (!x || typeof x.credentialId !== 'string' || x.credentialId === '' || typeof x.publicKey !== 'string' || !isHex(x.publicKey)) return null
-    if (typeof x.createdAt !== 'number' || x.createdAt <= Date.now() - BACKUP_MAX_AGE_MS) return null
-    const key = publicKeyXY(x.publicKey)
-    const owners = key && (await readOwners(account))
-    if (!key || !owners) return null
-    return owners.ownersData.some((o) => o.publicKeyX === key.x && o.publicKeyY === key.y) ? x.credentialId : null
+    const owners = await readOwners(account)
+    if (!owners) return null
+    const found = tried.find((t) => {
+      const key = publicKeyXY(t.publicKey)
+      return key !== null && owners.ownersData.some((o) => o.publicKeyX === key.x && o.publicKeyY === key.y)
+    })
+    return found?.credentialId ?? null
   } catch {
     return null
   }

@@ -13,7 +13,8 @@ const ACCOUNT = '0x00000000000000000000000000000000000000cC' as Address
 const FRIEND = '0x1111111111111111111111111111111111111111'
 const HASH = `0x${'1'.repeat(64)}` as Hex
 const PENDING_KEY = 'fundit.pendingBridges'
-const BLOCKED = 'Your last transfer to another chain is still on its way. You can send another once it arrives.'
+const BLOCKED =
+  'Your last transfer to another chain is still on its way. You can send another once it arrives. If it is taking longer than expected, you can dismiss it below.'
 
 const balances = vi.hoisted(() => ({ usdc: 0n, eurc: 0n }))
 const fetchAccountBalances = vi.hoisted(() => vi.fn(async () => ({ ...balances })))
@@ -301,5 +302,24 @@ describe('AccountWithdraw', () => {
     await userEvent.click(submitButton())
     await screen.findByText('Your money was sent.')
     expect(localStorage.getItem(PENDING_KEY)).toBeNull()
+  })
+
+  // Another tab may send one after this form last read the store. The send itself reads it again.
+  it('refuses at send time when another tab started a cross-chain send', async () => {
+    balances.usdc = 10_000000n
+    renderForm()
+    await screen.findByText(/You have 10.00 USDC/)
+    await userEvent.selectOptions(screen.getByLabelText('Send to'), 'Base')
+    await fill('2', FRIEND)
+    await screen.findByText('At least 1.85 USDC')
+    expect((submitButton() as HTMLButtonElement).disabled).toBe(false)
+    // Written straight to storage with no event, as another tab would, so this form has not heard of it.
+    localStorage.setItem(
+      PENDING_KEY,
+      JSON.stringify([{ kind: 'payout', campaign: ACCOUNT.toLowerCase(), burnTx: `0x${'2'.repeat(64)}`, srcDomain: 26, destDomain: 6, amount: '1', createdAt: Date.now() }]),
+    )
+    await userEvent.click(submitButton())
+    expect((await screen.findAllByText(BLOCKED)).length).toBeGreaterThan(0)
+    expect(send).not.toHaveBeenCalled()
   })
 })

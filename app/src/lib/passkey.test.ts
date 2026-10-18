@@ -82,7 +82,7 @@ const balance = vi.hoisted(() => ({ value: 1_000_000n }))
 // Deployed code per address (lower case), for picking the live account when a key maps to several.
 const code = vi.hoisted(() => new Map<string, string>())
 // The account's owners in Circle's multisig plugin: owner ids only, the rest of ownershipInfoOf is not read.
-const owners = vi.hoisted(() => ({ ids: [] as string[], data: [] as unknown[], fail: false, reads: [] as unknown[] }))
+const owners = vi.hoisted(() => ({ ids: [] as string[], data: [] as unknown[], fail: false, hang: false, reads: [] as unknown[] }))
 vi.mock('./clients', () => ({
   arcClient: {
     readContract: async (args: { functionName: string }) => {
@@ -91,7 +91,8 @@ vi.mock('./clients', () => ({
       if (owners.fail) throw new Error('rpc down')
       return [owners.ids, owners.data, 1n]
     },
-    getCode: async ({ address }: { address: string }) => code.get(address.toLowerCase()),
+    getCode: ({ address }: { address: string }) =>
+      owners.hang ? new Promise<undefined>(() => {}) : Promise.resolve(code.get(address.toLowerCase())),
   },
 }))
 vi.mock('wagmi', () => ({
@@ -338,7 +339,28 @@ describe('backup from the chain', () => {
     code.clear()
     owners.ids = []
     owners.fail = false
+    owners.hang = false
     owners.reads = []
+  })
+
+  // A hanging RPC must not hide the prompt for long. After 8 seconds the read gives up, and My page falls back
+  // to the browser's flag.
+  it('gives up on a read that hangs for 8 seconds', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    owners.hang = true
+    const read = syncBackupFromChain(stored.address)
+    const outcome = read.then(
+      () => 'answered',
+      () => 'gave up',
+    )
+    await vi.advanceTimersByTimeAsync(7_999)
+    let settled = false
+    void outcome.then(() => (settled = true))
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(await outcome).toBe('gave up')
+    expect(flag()).toBeNull()
   })
 
   // A recovery key added in another browser leaves no flag here. The account's owners on Arc are the record,
@@ -734,6 +756,37 @@ describe('recoverWithPhrase', () => {
       owners.data = []
       owners.fail = false
       owners.reads = []
+    })
+
+    // Some authenticators give the key with its 0x04 prefix (65 bytes). It must match the same owner.
+    it('finds an earlier recovery whose public key has the 0x04 prefix', async () => {
+      kit.sdk.toWebAuthnCredential.mockResolvedValueOnce({ ...EARLIER, publicKey: `0x04${EARLIER.publicKey.slice(2)}` })
+      kit.bundler.waitForUserOperationReceipt.mockRejectedValueOnce(new Error('slow'))
+      await recoverWithPhrase({ phrase: PHRASE, username: 'ana' })
+      discardPendingRecovery(RECOVERED)
+      code.set(RECOVERED.toLowerCase(), '0x6001')
+      owners.data = [passkeyOwner(9n, 9n), passkeyOwner(1n, 2n)]
+      expect(await recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).toEqual({
+        status: 'recovered',
+        session: { address: RECOVERED, credentialId: 'cred-earlier' },
+      })
+      expect(kit.executeRecovery).toHaveBeenCalledTimes(1)
+    })
+
+    // Starting over twice must still find the first attempt if that is the one that landed late.
+    it('finds the first earlier recovery after two Start overs', async () => {
+      await stuckThenStartOver()
+      kit.sdk.toWebAuthnCredential.mockResolvedValueOnce({ id: 'cred-second', publicKey: `0x${'0'.repeat(63)}3${'0'.repeat(63)}4`, raw: {} })
+      kit.bundler.waitForUserOperationReceipt.mockRejectedValueOnce(new Error('slow'))
+      expect(await recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).toEqual({ status: 'pending', account: RECOVERED })
+      discardPendingRecovery(RECOVERED)
+      owners.data = [passkeyOwner(9n, 9n), passkeyOwner(1n, 2n)]
+      expect(await recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).toEqual({
+        status: 'recovered',
+        session: { address: RECOVERED, credentialId: 'cred-earlier' },
+      })
+      expect(kit.executeRecovery).toHaveBeenCalledTimes(2)
+      expect(kit.sdk.toWebAuthnCredential).toHaveBeenCalledTimes(2)
     })
 
     it('finds an earlier recovery that went through, before making a new passkey', async () => {
