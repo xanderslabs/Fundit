@@ -1,5 +1,7 @@
 {
-  "plugins": ["stylelint-declaration-strict-value"],
+  "plugins": [
+    "stylelint-declaration-strict-value"
+  ],
   "ignoreFiles": [
     "src/styles/base.css",
     "src/styles/campaigns.css",
@@ -11,18 +13,32 @@
   ],
   "rules": {
     "scale-unlimited/declaration-strict-value": [
-      ["font-size", "/^margin/", "/^padding/", "gap", "row-gap", "column-gap", "/radius$/", "color", "/^background/"],
+      [
+        "font-size",
+        "/^margin/",
+        "/^padding/",
+        "gap",
+        "row-gap",
+        "column-gap",
+        "/radius$/",
+        "color",
+        "/^background/"
+      ],
       {
+        "ignoreFunctions": {
+          "color": false,
+          "/^background/": false
+        },
         "ignoreValues": {
           "font-size": "/^(inherit|-?[\\d.]+%)$/",
           "/^margin/": "/^((0|auto|inherit|-?[\\d.]+%|var\\(--[\\w-]+\\))(\\s+|$))+$/",
           "/^padding/": "/^((0|inherit|[\\d.]+%|var\\(--[\\w-]+\\))(\\s+|$))+$/",
           "gap": "/^((0|inherit|[\\d.]+%|var\\(--[\\w-]+\\))(\\s+|$))+$/",
-          "row-gap": "/^(0|inherit|[\\d.]+%)$/",
-          "column-gap": "/^(0|inherit|[\\d.]+%)$/",
+          "row-gap": "/^((0|inherit|[\\d.]+%|var\\(--[\\w-]+\\))(\\s+|$))+$/",
+          "column-gap": "/^((0|inherit|[\\d.]+%|var\\(--[\\w-]+\\))(\\s+|$))+$/",
           "/radius$/": "/^((0|inherit|[\\d.]+%|var\\(--[\\w-]+\\))(\\s+|$))+$/",
-          "color": "/^(?!.*#[0-9a-fA-F]{3,8}\\b)/",
-          "/^background/": "/^(?!.*#[0-9a-fA-F]{3,8}\\b)/"
+          "color": "/^(transparent|currentColor|inherit)$/i",
+          "/^background/": "/^(transparent|currentColor|inherit|none|0|-?[\\d.]+%|auto|cover|contain|center|top|bottom|left|right|no-repeat|repeat|repeat-x|repeat-y|space|round|fixed|scroll|local|border-box|padding-box|content-box|\\/|url\\([^)]*\\)|(repeating-)?(linear|radial|conic)-gradient\\(((var\\(--[\\w-]+\\)|-?[\\d.]+(%|deg|turn)|to|at|top|bottom|left|right|center|circle|ellipse|,)\\s*)*\\))$/i"
         },
         "message": "Use a token from tokens.css for \"${property}\" instead of \"${value}\"."
       }

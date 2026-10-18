@@ -106,6 +106,18 @@ describe('design tokens', () => {
     for (const [fg, bg] of pairs) expect(contrast(fg, bg), `${fg} on ${bg}`).toBeGreaterThanOrEqual(4.5)
   })
 
+  // Primary buttons set their label in --text on the --action green, because white on that green fails AA.
+  it('primary button labels meet WCAG AA', () => {
+    expect(contrast('--text', '--action')).toBeGreaterThanOrEqual(4.5)
+  })
+
+  // A keyboard user must see the focus ring on every surface. WCAG 1.4.11 asks 3:1 for UI components.
+  it('the focus ring meets 3:1 on every surface', () => {
+    for (const bg of ['--bg', '--surface', '--surface-raised']) {
+      expect(contrast('--focus', bg), `--focus on ${bg}`).toBeGreaterThanOrEqual(3)
+    }
+  })
+
   // Until Task 7 moves every page onto the new names, the old names must still resolve.
   it('keeps the old token names as aliases', () => {
     const aliases: Record<string, string> = {
