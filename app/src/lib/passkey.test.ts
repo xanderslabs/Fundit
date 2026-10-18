@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { type Address, getAddress, type Hex, type TransactionReceipt } from 'viem'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { TX_TIMEOUT_MS } from '../config'
+import { CIRCLE_MULTISIG_PLUGIN, TX_TIMEOUT_MS } from '../config'
 import { useSender } from '../hooks/useSender'
 import {
   addBackupPasskey,
@@ -24,6 +24,7 @@ import {
   registerPasskey,
   savePasskeySession,
   storedPasskeySender,
+  syncBackupFromChain,
   useBackupNeeded,
   useBackupPrompt,
   usePasskeySession,
@@ -79,8 +80,18 @@ vi.mock('./passkeyKit', async () =>
 const balance = vi.hoisted(() => ({ value: 1_000_000n }))
 // Deployed code per address (lower case), for picking the live account when a key maps to several.
 const code = vi.hoisted(() => new Map<string, string>())
+// The account's owners in Circle's multisig plugin: owner ids only, the rest of ownershipInfoOf is not read.
+const owners = vi.hoisted(() => ({ ids: [] as string[], fail: false, reads: [] as unknown[] }))
 vi.mock('./clients', () => ({
-  arcClient: { readContract: async () => balance.value, getCode: async ({ address }: { address: string }) => code.get(address.toLowerCase()) },
+  arcClient: {
+    readContract: async (args: { functionName: string }) => {
+      if (args.functionName !== 'ownershipInfoOf') return balance.value
+      owners.reads.push(args)
+      if (owners.fail) throw new Error('rpc down')
+      return [owners.ids, [], 1n]
+    },
+    getCode: async ({ address }: { address: string }) => code.get(address.toLowerCase()),
+  },
 }))
 vi.mock('wagmi', () => ({
   useConfig: () => ({}),
@@ -313,6 +324,57 @@ describe('backup prompt', () => {
       await loginPasskey()
     })
     expect(result.current).toBe(false)
+  })
+})
+
+describe('backup from the chain', () => {
+  const stored = { address: getAddress('0x00000000000000000000000000000000000000cc') as Address, credentialId: 'cred-live' }
+  const flag = () => localStorage.getItem('fundit.backup.0x00000000000000000000000000000000000000cc')
+  const PASSKEY_ID = `0x${'95'.repeat(30)}`
+  const KEY_ID = `0x${'00'.repeat(10)}${'d2'.repeat(20)}`
+  afterEach(() => {
+    localStorage.clear()
+    code.clear()
+    owners.ids = []
+    owners.fail = false
+    owners.reads = []
+  })
+
+  // A recovery key added in another browser leaves no flag here. The account's owners on Arc are the record,
+  // so a second owner means the backup exists and the prompt must not ask for another one.
+  it('treats a second owner on chain as a saved backup and remembers it', async () => {
+    code.set(stored.address.toLowerCase(), '0x6001')
+    owners.ids = [PASSKEY_ID, KEY_ID]
+    const { result } = renderHook(() => useBackupNeeded(stored))
+    expect(result.current).toBe(true)
+    await act(async () => {
+      expect(await syncBackupFromChain(stored.address)).toBe(true)
+    })
+    expect(result.current).toBe(false)
+    expect(flag()).toBe('1')
+    expect(owners.reads[0]).toMatchObject({ address: CIRCLE_MULTISIG_PLUGIN, functionName: 'ownershipInfoOf', args: [stored.address] })
+  })
+
+  it('keeps asking when the passkey is the only owner', async () => {
+    code.set(stored.address.toLowerCase(), '0x6001')
+    owners.ids = [PASSKEY_ID]
+    expect(await syncBackupFromChain(stored.address)).toBe(false)
+    expect(flag()).toBeNull()
+  })
+
+  // Circle deploys the account with its first user operation. Before that its only owner is the passkey.
+  it('keeps asking for an account that is not deployed yet, without reading the plugin', async () => {
+    expect(await syncBackupFromChain(stored.address)).toBe(false)
+    expect(owners.reads).toHaveLength(0)
+    expect(flag()).toBeNull()
+  })
+
+  // A failed read must not hide the prompt: the caller falls back to this browser's flag.
+  it('rejects on a failed read and leaves the flag alone', async () => {
+    code.set(stored.address.toLowerCase(), '0x6001')
+    owners.fail = true
+    await expect(syncBackupFromChain(stored.address)).rejects.toThrow('rpc down')
+    expect(flag()).toBeNull()
   })
 })
 

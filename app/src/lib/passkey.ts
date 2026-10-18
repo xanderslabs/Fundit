@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { type Address, decodeErrorResult, getAddress, type Hex, isAddress, numberToHex, parseAbi, type TransactionReceipt, type Transport } from 'viem'
 import { erc20Abi } from '../abi/erc20'
-import { ARC_CHAIN, CIRCLE_CLIENT_KEY, MODULAR_WALLETS_URL, NETWORK, PASSKEY_GAS_BUFFER, TOKENS, TX_TIMEOUT_MS } from '../config'
+import { ARC_CHAIN, CIRCLE_CLIENT_KEY, CIRCLE_MULTISIG_PLUGIN, MODULAR_WALLETS_URL, NETWORK, PASSKEY_GAS_BUFFER, TOKENS, TX_TIMEOUT_MS } from '../config'
 import { arcClient } from './clients'
 import { formatAmount } from './format'
 import { isUserRejection, PlainError } from './errors'
@@ -289,8 +289,8 @@ export function storedPasskeySender(stored: StoredPasskey): Sender {
 }
 
 // Account safety. Losing every passkey loses the account, so a new account is asked to add a recovery key
-// (Circle's recovery support: the key's address becomes an extra owner of the account). The app cannot read
-// that back from Circle, so "saved" is remembered per account in this browser.
+// (Circle's recovery support: the key's address becomes an extra owner of the account). syncBackupFromChain
+// reads the owners on Arc, and "saved" is cached per account in this browser.
 const BACKUP_KEY = 'fundit.backup.'
 // A backup user operation that was sent but not confirmed yet. Only the account and the hash, never the words.
 const PENDING_KEY = 'fundit.backup.pending.'
@@ -369,6 +369,35 @@ function clearPendingBackup(address: Address) {
 export function dismissBackupPrompt() {
   newAccount = null
   notify()
+}
+
+// ownershipInfoOf on Circle's weighted multisig plugin (BaseWeightedMultisigPlugin in circlefin/buidl-wallet-contracts).
+// The OwnerData layout was checked against live accounts on Arc mainnet.
+const ownershipAbi = parseAbi([
+  'struct OwnerData { uint256 weight; uint8 credType; address addr; uint256 publicKeyX; uint256 publicKeyY; }',
+  'function ownershipInfoOf(address account) view returns (bytes30[] ownerIds, OwnerData[] ownersData, uint256 thresholdWeight)',
+])
+
+// The account's owners on Arc, or null when the account is not deployed yet (its only owner is then the passkey).
+async function readOwners(address: Address) {
+  const code = await arcClient.getCode({ address })
+  if (!code || code === '0x') return null
+  const [ownerIds, ownersData] = await arcClient.readContract({
+    address: CIRCLE_MULTISIG_PLUGIN,
+    abi: ownershipAbi,
+    functionName: 'ownershipInfoOf',
+    args: [address],
+  })
+  return { ownerIds, ownersData }
+}
+
+// Decides from the chain whether the account has a backup: a second owner next to the passkey is the recovery
+// key. A yes is cached in this browser. A failed read rejects, and the caller keeps the browser's own flag.
+export async function syncBackupFromChain(address: Address): Promise<boolean> {
+  const owners = await readOwners(address)
+  if (!owners || owners.ownerIds.length <= 1) return false
+  markBackupSaved(address)
+  return true
 }
 
 // True while this account has no saved backup in this browser. My page shows the prompt then.

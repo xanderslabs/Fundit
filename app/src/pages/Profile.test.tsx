@@ -38,12 +38,13 @@ vi.mock('../lib/deposit', async (importOriginal) => ({
 }))
 vi.mock('../hooks/useActivity', () => ({ blockTimes: async () => new Map() }))
 vi.mock('../hooks/useName', () => ({ useName: () => ({ data: undefined }) }))
-const backup = vi.hoisted(() => ({ needed: false }))
+const backup = vi.hoisted(() => ({ needed: false, chain: (): Promise<boolean> => Promise.resolve(false) }))
 vi.mock('../lib/passkey', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/passkey')>()),
   usePasskeySession: () => (backup.needed ? { address: '0x00000000000000000000000000000000000000cC', credentialId: 'c' } : null),
   useBackupNeeded: () => backup.needed,
   useBackupPending: () => false,
+  syncBackupFromChain: () => backup.chain(),
   canPayBackupGas: async () => true,
 }))
 
@@ -53,6 +54,7 @@ afterEach(() => {
   state.mine = null
   state.gifts = null
   backup.needed = false
+  backup.chain = () => Promise.resolve(false)
   flags.crosschain = false
 })
 
@@ -68,13 +70,37 @@ function renderProfile() {
 
 describe('Profile', () => {
   // Later only puts off the prompt after sign-up. My page keeps asking until a recovery key is saved.
-  it('shows the backup prompt for a passkey account without a backup, with no Later', () => {
+  it('shows the backup prompt for a passkey account without a backup, with no Later', async () => {
     backup.needed = true
     state.sender = { kind: 'passkey', address: '0x00000000000000000000000000000000000000cC', send: vi.fn() }
     renderProfile()
-    expect(screen.getByRole('heading', { name: 'Add a recovery key' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Add a recovery key' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Show my recovery key' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Later' })).toBeNull()
+  })
+
+  // On a new browser there is no flag yet. The chain decides: a second owner on the account is the recovery key.
+  it('shows no backup prompt when the chain shows a second owner', async () => {
+    backup.needed = true
+    let answer: (v: boolean) => void = () => {}
+    backup.chain = () => new Promise((r) => (answer = r))
+    state.sender = { kind: 'passkey', address: '0x00000000000000000000000000000000000000cC', send: vi.fn() }
+    renderProfile()
+    await screen.findByRole('heading', { name: 'Send money out' })
+    // While the read runs, the prompt waits rather than flashing up and away.
+    expect(screen.queryByRole('heading', { name: 'Add a recovery key' })).toBeNull()
+    answer(true)
+    await screen.findByText('12.50 USDC and 3.00 EURC')
+    expect(screen.queryByRole('heading', { name: 'Add a recovery key' })).toBeNull()
+  })
+
+  // A failed read must never hide the prompt or block the page. The browser's flag decides then.
+  it('shows the backup prompt when the chain read fails', async () => {
+    backup.needed = true
+    backup.chain = () => Promise.reject(new Error('rpc down'))
+    state.sender = { kind: 'passkey', address: '0x00000000000000000000000000000000000000cC', send: vi.fn() }
+    renderProfile()
+    expect(await screen.findByRole('heading', { name: 'Add a recovery key' })).toBeTruthy()
   })
 
   it('shows no backup prompt once a backup exists', () => {

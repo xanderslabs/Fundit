@@ -14,7 +14,7 @@ import { useSender } from '../hooks/useSender'
 import { type DonationItem, recentDonationsBy } from '../lib/activity'
 import { readMessage } from '../lib/anon'
 import { myCampaigns } from '../lib/campaigns'
-import { useBackupNeeded, usePasskeySession } from '../lib/passkey'
+import { syncBackupFromChain, useBackupNeeded, usePasskeySession } from '../lib/passkey'
 import { arcClient } from '../lib/clients'
 import { balancesKey, fetchAccountBalances } from '../lib/deposit'
 import { formatAmount } from '../lib/format'
@@ -150,6 +150,15 @@ export function Profile() {
   // Only for the passkey account, and only while it is the one acting. Later never hides it here.
   const passkey = sender?.kind === 'passkey' ? session : null
   const backupNeeded = useBackupNeeded(passkey)
+  // A new browser has no flag yet, so the chain decides. A failed read falls back to the flag: the prompt shows.
+  const backupOnChain = useQuery({
+    queryKey: ['backup-on-chain', passkey?.address.toLowerCase()],
+    queryFn: () => syncBackupFromChain(passkey!.address),
+    enabled: passkey !== null && backupNeeded,
+    retry: false,
+    staleTime: Infinity,
+  })
+  const showBackup = backupNeeded && (backupOnChain.isError || backupOnChain.data === false)
 
   if (!sender) {
     return (
@@ -178,7 +187,7 @@ export function Profile() {
           <AccountWithdraw sender={sender} />
         </section>
       )}
-      {passkey && backupNeeded && (
+      {passkey && showBackup && (
         <section className="section notice">
           <AddBackupPasskey stored={passkey} />
         </section>

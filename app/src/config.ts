@@ -177,6 +177,10 @@ export const FACTORY_ADDRESS: Address = deploy.factoryAddress
 export const FACTORY_DEPLOY_BLOCK: bigint = deploy.factoryDeployBlock
 export const REOWN_PROJECT_ID: string = deploy.reownProjectId
 export const CIRCLE_CLIENT_KEY: string = env.VITE_CIRCLE_CLIENT_KEY ?? ''
+// Circle's weighted multisig plugin, which holds the owners of every Circle Modular Wallets account
+// (CIRCLE_WEIGHTED_WEB_AUTHN_MULTISIG_PLUGIN in @circle-fin/modular-wallets-core dist/index.js). Same address on
+// Arc mainnet and Arc testnet, checked on-chain.
+export const CIRCLE_MULTISIG_PLUGIN: Address = '0x0000000C984AFf541D6cE86Bb697e68ec57873C8'
 // Arc network fees are paid in USDC from the sender's own balance. This much stays free for them (a Fundit
 // account, and a regular wallet adding USDC to one).
 export const PASSKEY_GAS_BUFFER = 50_000n
