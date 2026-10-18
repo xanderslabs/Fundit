@@ -388,6 +388,30 @@ input[type='checkbox'] {
   gap: 12px;
 }
 
+.recover-words {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.recover-words legend {
+  margin-bottom: 8px;
+  font-weight: var(--weight-medium);
+}
+
+.recover-fund {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.signin-body > a {
+  align-self: center;
+}
+
 .recovery-phrase {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));

@@ -9,6 +9,8 @@ import {
   clearPasskeySession,
   discardPendingBackup,
   dismissBackupPrompt,
+  checkPendingRecovery,
+  isValidRecoveryPhrase,
   loginPasskey,
   markBackupSaved,
   newRecoveryPhrase,
@@ -16,6 +18,9 @@ import {
   passkeySender,
   readPasskeySession,
   readPendingBackup,
+  readPendingRecovery,
+  RecoveryNeedsFunds,
+  recoverWithPhrase,
   registerPasskey,
   savePasskeySession,
   storedPasskeySender,
@@ -37,15 +42,20 @@ const kit = vi.hoisted(() => {
   const bundler = { waitForUserOperationReceipt: vi.fn(), estimateUserOperationGas: vi.fn(), sendUserOperation: vi.fn() }
   const registerRecoveryAddress = vi.fn()
   const estimateRegisterRecoveryAddressGas = vi.fn()
+  const executeRecovery = vi.fn()
+  const estimateExecuteRecoveryGas = vi.fn()
   return {
     bundler,
     registerRecoveryAddress,
     estimateRegisterRecoveryAddressGas,
+    executeRecovery,
+    estimateExecuteRecoveryGas,
     generateMnemonic: vi.fn(() => 'one two three four five six seven eight nine ten eleven twelve'),
     english: [],
     mnemonicToAccount: vi.fn(() => ({ address: '0x00000000000000000000000000000000000000Ee' })),
     sdk: {
-      recoveryActions: vi.fn(() => ({ registerRecoveryAddress, estimateRegisterRecoveryAddressGas })),
+      recoveryActions: vi.fn(() => ({ registerRecoveryAddress, estimateRegisterRecoveryAddressGas, executeRecovery, estimateExecuteRecoveryGas })),
+      getAddressMapping: vi.fn(),
       toWebAuthnCredential: vi.fn(async () => ({ id: 'cred-live', publicKey: '0x', raw: {} })),
       toPasskeyTransport: vi.fn(() => ({})),
       toModularTransport: vi.fn(() => ({})),
@@ -58,7 +68,8 @@ const kit = vi.hoisted(() => {
     toWebAuthnAccount: vi.fn(() => ({})),
   }
 })
-vi.mock('./passkeyKit', () => kit)
+// The real BIP-39 word list, so the checksum check runs for real.
+vi.mock('./passkeyKit', async () => Object.assign(kit, { english: (await vi.importActual<typeof import('viem/accounts')>('viem/accounts')).english }))
 // The account's USDC balance, read before a backup is added.
 const balance = vi.hoisted(() => ({ value: 1_000_000n }))
 vi.mock('./clients', () => ({ arcClient: { readContract: async () => balance.value } }))
@@ -467,5 +478,160 @@ describe('interrupted sign-up and the backup prompt', () => {
       await loginPasskey()
     })
     expect(result.current).toEqual({ needed: true, prompt: false })
+  })
+})
+
+describe('recoverWithPhrase', () => {
+  // BIP-39 test vectors (entropy 0x7f repeated, and all zeros). Both have a valid checksum.
+  const PHRASE = 'legal winner thank year wave sausage worth useful legal winner thank yellow'
+  const RECOVERED = getAddress('0x00000000000000000000000000000000000000Ab') as Address
+  const NEW_CRED = { id: 'cred-new', publicKey: '0x04', raw: {} }
+  const pendingKey = 'fundit.recovery.pending.0x00000000000000000000000000000000000000ab'
+  const fetchSpy = vi.fn()
+
+  beforeEach(() => {
+    balance.value = 1_000_000n
+    kit.mnemonicToAccount.mockClear()
+    kit.sdk.toWebAuthnCredential.mockReset()
+    kit.sdk.toWebAuthnCredential.mockResolvedValue(NEW_CRED)
+    kit.sdk.toCircleSmartAccount.mockClear()
+    kit.sdk.getAddressMapping.mockReset()
+    kit.sdk.getAddressMapping.mockResolvedValue([{ walletAddress: RECOVERED, owner: {} }])
+    kit.executeRecovery.mockReset()
+    kit.executeRecovery.mockResolvedValue(OP_HASH)
+    kit.estimateExecuteRecoveryGas.mockReset()
+    kit.estimateExecuteRecoveryGas.mockResolvedValue(GAS)
+    kit.bundler.waitForUserOperationReceipt.mockReset()
+    kit.bundler.waitForUserOperationReceipt.mockResolvedValue(receipt(true))
+    fetchSpy.mockReset()
+    vi.stubGlobal('fetch', fetchSpy)
+  })
+  afterEach(() => {
+    localStorage.clear()
+    sessionStorage.clear()
+  })
+
+  const sdkCalls = () => [
+    kit.sdk.toWebAuthnCredential,
+    kit.sdk.toCircleSmartAccount,
+    kit.sdk.getAddressMapping,
+    kit.executeRecovery,
+    kit.estimateExecuteRecoveryGas,
+    kit.bundler.waitForUserOperationReceipt,
+  ]
+
+  it('checks the BIP-39 checksum and the word count', async () => {
+    expect(await isValidRecoveryPhrase(PHRASE)).toBe(true)
+    expect(await isValidRecoveryPhrase(`${'abandon '.repeat(11)}about`)).toBe(true)
+    // Real words, wrong checksum.
+    expect(await isValidRecoveryPhrase('abandon '.repeat(12).trim())).toBe(false)
+    expect(await isValidRecoveryPhrase(PHRASE.split(' ').slice(0, 11).join(' '))).toBe(false)
+    expect(await isValidRecoveryPhrase(PHRASE.replace('sausage', 'sausagex'))).toBe(false)
+  })
+
+  // A typo must never reach Circle or the passkey prompt: nothing goes out until the words check out.
+  it.each([
+    ['a bad checksum', 'abandon '.repeat(12).trim()],
+    ['11 words', PHRASE.split(' ').slice(0, 11).join(' ')],
+  ])('refuses %s before any SDK call', async (_name, phrase) => {
+    await expect(recoverWithPhrase({ phrase, username: 'ana' })).rejects.toThrow(
+      "Those words don't form a valid recovery key. Check the order and spelling.",
+    )
+    for (const fn of sdkCalls()) expect(fn).not.toHaveBeenCalled()
+    expect(kit.mnemonicToAccount).not.toHaveBeenCalled()
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  // The recovery key's address finds the account (Circle mapped it when the key was added). A new passkey is
+  // made, and the phrase's local account signs executeRecovery, which adds that passkey as an owner. The account
+  // pays the gas in USDC: no paymaster, and the same call gas margin as every other send.
+  it('finds the account, registers a new passkey, runs the recovery and saves the new session', async () => {
+    const res = await recoverWithPhrase({ phrase: `  ${PHRASE.toUpperCase().replace(/ /g, '   ')} `, username: '  ana  ' })
+    expect(kit.mnemonicToAccount).toHaveBeenCalledWith(PHRASE)
+    expect(kit.sdk.getAddressMapping).toHaveBeenCalledWith(expect.anything(), {
+      owner: { type: 'EOAOWNER', identifier: { address: '0x00000000000000000000000000000000000000Ee' } },
+    })
+    expect(kit.sdk.toWebAuthnCredential).toHaveBeenCalledTimes(1)
+    expect((kit.sdk.toWebAuthnCredential.mock.calls[0] as unknown[])[0]).toMatchObject({ mode: 'Register', username: 'ana' })
+    const owner = kit.mnemonicToAccount.mock.results[0]!.value
+    expect(kit.sdk.toCircleSmartAccount).toHaveBeenLastCalledWith(expect.objectContaining({ owner, address: RECOVERED }))
+    expect(kit.executeRecovery).toHaveBeenCalledTimes(1)
+    const args = kit.executeRecovery.mock.calls[0]![0]
+    expect(args.credential).toBe(NEW_CRED)
+    expect(args.account.address).toBe('0x00000000000000000000000000000000000000cc')
+    expect(args.paymaster).toBeUndefined()
+    expect(args).toMatchObject({ callGasLimit: 125_003n, preVerificationGas: 50_000n, verificationGasLimit: 70_000n })
+    expect(res).toEqual({ status: 'recovered', session: { address: RECOVERED, credentialId: 'cred-new' } })
+    expect(readPasskeySession()).toEqual({ address: RECOVERED, credentialId: 'cred-new' })
+    expect(localStorage.getItem(pendingKey)).toBeNull()
+  })
+
+  // The old recovery key should be treated as exposed, so My page asks for a new one.
+  it('asks for a new recovery key after a recovery', async () => {
+    markBackupSaved(RECOVERED)
+    await recoverWithPhrase({ phrase: PHRASE, username: 'ana' })
+    expect(localStorage.getItem('fundit.backup.0x00000000000000000000000000000000000000ab')).toBeNull()
+  })
+
+  // The words control a money account. Only derived addresses and signatures may leave the browser.
+  it('never stores the phrase or sends it in any network call', async () => {
+    kit.bundler.waitForUserOperationReceipt.mockRejectedValueOnce(new Error('slow'))
+    await recoverWithPhrase({ phrase: PHRASE, username: 'ana' })
+    const stores = [localStorage, sessionStorage]
+    for (const store of stores) {
+      for (let i = 0; i < store.length; i++) {
+        const value = `${store.key(i)} ${store.getItem(store.key(i)!)}`
+        for (const word of ['sausage', 'useful', 'yellow', PHRASE]) expect(value).not.toContain(word)
+      }
+    }
+    const seen = JSON.stringify(
+      sdkCalls().flatMap((fn) => fn.mock.calls),
+      (_k, v: unknown) => (typeof v === 'bigint' ? v.toString() : v),
+    )
+    for (const word of ['sausage', 'useful', 'yellow']) expect(seen).not.toContain(word)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('refuses when no Fundit account uses this recovery key', async () => {
+    kit.sdk.getAddressMapping.mockResolvedValue([])
+    await expect(recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).rejects.toThrow("We couldn't find a Fundit account for this recovery key.")
+    expect(kit.sdk.toWebAuthnCredential).not.toHaveBeenCalled()
+  })
+
+  // The account pays the fee. Below the buffer, the person is told to fund the account first, and no passkey
+  // is made yet.
+  it('asks to fund the account first when its balance is below the gas buffer', async () => {
+    balance.value = 49_999n
+    const err = await recoverWithPhrase({ phrase: PHRASE, username: 'ana' }).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(RecoveryNeedsFunds)
+    expect((err as RecoveryNeedsFunds).account).toBe(RECOVERED)
+    expect(kit.sdk.toWebAuthnCredential).not.toHaveBeenCalled()
+    expect(kit.executeRecovery).not.toHaveBeenCalled()
+  })
+
+  // Same discipline as the backup: a recovery that may still land is never sent again.
+  it('keeps a timed-out recovery pending without the phrase, blocks a second one, and finishes it with recheck', async () => {
+    kit.bundler.waitForUserOperationReceipt.mockRejectedValueOnce(new Error('slow'))
+    expect(await recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).toEqual({ status: 'pending', account: RECOVERED })
+    expect(readPendingRecovery(RECOVERED)).toMatchObject({ account: RECOVERED, hash: OP_HASH, hashKind: 'userop', credentialId: 'cred-new' })
+    expect(localStorage.getItem(pendingKey)).not.toContain('sausage')
+    expect(readPasskeySession()).toBeNull()
+
+    expect(await recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).toEqual({ status: 'pending', account: RECOVERED })
+    expect(kit.sdk.toWebAuthnCredential).toHaveBeenCalledTimes(1)
+    expect(kit.executeRecovery).toHaveBeenCalledTimes(1)
+
+    expect(await checkPendingRecovery(RECOVERED)).toEqual({ status: 'recovered', session: { address: RECOVERED, credentialId: 'cred-new' } })
+    expect(kit.executeRecovery).toHaveBeenCalledTimes(1)
+    expect(kit.sdk.toWebAuthnCredential).toHaveBeenCalledTimes(1)
+    expect(readPendingRecovery(RECOVERED)).toBeNull()
+    expect(readPasskeySession()).toEqual({ address: RECOVERED, credentialId: 'cred-new' })
+  })
+
+  it('clears a recovery that reverted, so the person can try again', async () => {
+    kit.bundler.waitForUserOperationReceipt.mockResolvedValue(receipt(false))
+    await expect(recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).rejects.toThrow('The recovery did not go through.')
+    expect(readPendingRecovery(RECOVERED)).toBeNull()
+    expect(readPasskeySession()).toBeNull()
   })
 })

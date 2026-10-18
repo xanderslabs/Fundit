@@ -70,6 +70,13 @@ describe('AccountControl signed out', () => {
     expect(openWallet).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('button', { name: /0x/ })).toBeNull()
   })
+
+  // Recovery is for passkey accounts, which only exist with passkeys switched on.
+  it('offers no recovery link with passkeys off', async () => {
+    render(ui())
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(screen.queryByRole('link', { name: /Recover your account/ })).toBeNull()
+  })
 })
 
 describe('AccountControl signed in', () => {

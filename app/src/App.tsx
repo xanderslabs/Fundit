@@ -14,6 +14,7 @@ import { Terms } from './pages/Terms'
 
 // Only passkey users need this page, so it loads on demand.
 const FundWallet = lazy(() => import('./pages/FundWallet').then((m) => ({ default: m.FundWallet })))
+const Recover = lazy(() => import('./pages/Recover').then((m) => ({ default: m.Recover })))
 
 export function App() {
   return (
@@ -30,6 +31,16 @@ export function App() {
             element={
               <Suspense fallback={<p className="muted">Loading...</p>}>
                 <FundWallet />
+              </Suspense>
+            }
+          />
+        )}
+        {PASSKEYS_ENABLED && (
+          <Route
+            path="recover"
+            element={
+              <Suspense fallback={<p className="muted">Loading...</p>}>
+                <Recover />
               </Suspense>
             }
           />

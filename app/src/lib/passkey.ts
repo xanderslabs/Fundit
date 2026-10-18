@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { type Address, decodeErrorResult, type Hex, isAddress, parseAbi, type TransactionReceipt, type Transport } from 'viem'
+import { type Address, decodeErrorResult, getAddress, type Hex, hexToBytes, isAddress, parseAbi, sha256, type TransactionReceipt, type Transport } from 'viem'
 import { arc } from 'viem/chains'
 import { erc20Abi } from '../abi/erc20'
 import { CIRCLE_CLIENT_KEY, MODULAR_WALLETS_URL, PASSKEY_GAS_BUFFER, PASSKEYS_ENABLED, TOKENS, TX_TIMEOUT_MS } from '../config'
@@ -202,7 +202,15 @@ async function connect(lib: Sdk, credential: Credential, key: string): Promise<L
     client: client as unknown as Params['client'],
     owner: aa.toWebAuthnAccount({ credential: credential as never }) as unknown as Params['owner'],
   })
-  const bundler = aa.createBundlerClient({
+  return {
+    credentialId: credential.id,
+    account,
+    bundler: sendingBundler(lib, transport, client) as unknown as PasskeyBundler<{ address: Address }>,
+  }
+}
+
+function sendingBundler({ sdk, aa }: Sdk, transport: Transport, client: ReturnType<typeof clients>['client']) {
+  return aa.createBundlerClient({
     chain: arc,
     transport,
     userOperation: {
@@ -213,11 +221,6 @@ async function connect(lib: Sdk, credential: Credential, key: string): Promise<L
       },
     },
   })
-  return {
-    credentialId: credential.id,
-    account,
-    bundler: bundler as unknown as PasskeyBundler<{ address: Address }>,
-  }
 }
 
 async function credentialFor(mode: 'Register' | 'Login', opts: { username?: string; credentialId?: string }): Promise<Live> {
@@ -484,6 +487,165 @@ export async function checkPendingBackup(stored: StoredPasskey): Promise<BackupS
   if (!pending) return backupSaved(stored.address) ? 'added' : 'none'
   const status = settleBackup(stored.address, await storedPasskeySender(stored).recheck!(pending.hash))
   return status === 'pending' && Date.now() - pending.createdAt > BACKUP_STUCK_MS ? 'stuck' : status
+}
+
+// Recovery with the recovery key. The words stay in memory: they are never stored, logged or sent. Only the
+// key's address, the account address, the new passkey and signatures go out.
+const RECOVERY_PENDING_KEY = 'fundit.recovery.pending.'
+const INVALID_PHRASE = "Those words don't form a valid recovery key. Check the order and spelling."
+
+export type PendingRecovery = { account: Address; hash: Hex; hashKind: 'userop'; createdAt: number; credentialId: string }
+export type RecoveryResult = { status: 'recovered'; session: StoredPasskey } | { status: 'pending'; account: Address }
+
+// The account cannot pay the recovery's network fee yet. The page shows its address so it can be funded.
+export class RecoveryNeedsFunds extends PlainError {
+  constructor(readonly account: Address) {
+    super(`Recovery needs a small network fee. Send at least ${formatAmount(PASSKEY_GAS_BUFFER, 'USDC')} on Arc to your account address first.`)
+  }
+}
+
+// Lower case, single spaces. The words feed a key derivation, so stray spaces or capitals would give a
+// different key.
+export function normalizePhrase(text: string): string {
+  return text.trim().toLowerCase().split(/\s+/).join(' ')
+}
+
+// True for 12 words from the BIP-39 English list whose last 4 bits match the checksum (the first 4 bits of
+// SHA-256 of the other 128 bits).
+export async function isValidRecoveryPhrase(text: string): Promise<boolean> {
+  const words = normalizePhrase(text).split(' ')
+  if (words.length !== 12) return false
+  const { english } = await import('./passkeyKit')
+  const indexes = words.map((w) => english.indexOf(w))
+  if (indexes.some((i) => i < 0)) return false
+  const bits = indexes.map((i) => i.toString(2).padStart(11, '0')).join('')
+  const entropy = new Uint8Array(16)
+  for (let i = 0; i < 16; i++) entropy[i] = parseInt(bits.slice(i * 8, i * 8 + 8), 2)
+  const first = hexToBytes(sha256(entropy))[0]!
+  return (first >> 4).toString(2).padStart(4, '0') === bits.slice(128)
+}
+
+export function readPendingRecovery(account: Address): PendingRecovery | null {
+  const key = RECOVERY_PENDING_KEY + account.toLowerCase()
+  try {
+    const x = JSON.parse(localStorage.getItem(key) ?? 'null') as Partial<PendingRecovery> | null
+    if (!x || typeof x.hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(x.hash) || typeof x.account !== 'string' || !isAddress(x.account)) return null
+    if (typeof x.credentialId !== 'string' || x.credentialId === '') return null
+    if (typeof x.createdAt !== 'number' || x.createdAt <= Date.now() - BACKUP_MAX_AGE_MS) {
+      localStorage.removeItem(key)
+      return null
+    }
+    return { account: x.account, hash: x.hash, hashKind: 'userop', createdAt: x.createdAt, credentialId: x.credentialId }
+  } catch {
+    return null
+  }
+}
+
+function savePendingRecovery(p: PendingRecovery) {
+  try {
+    localStorage.setItem(RECOVERY_PENDING_KEY + p.account.toLowerCase(), JSON.stringify(p))
+  } catch {
+    // Without storage the pending recovery is only known while the page is open.
+  }
+}
+
+function clearPendingRecovery(account: Address) {
+  try {
+    localStorage.removeItem(RECOVERY_PENDING_KEY + account.toLowerCase())
+  } catch {
+    // Nothing stored to clear.
+  }
+}
+
+// The new passkey owns the account now. The old recovery key may be exposed, so the backup flag is cleared and
+// My page asks for a new key. The signing account loads on the next send, with the new passkey.
+function finishRecovery(account: Address, credentialId: string): RecoveryResult {
+  clearPendingRecovery(account)
+  savedThisLoad.delete(account.toLowerCase())
+  try {
+    localStorage.removeItem(BACKUP_KEY + account.toLowerCase())
+  } catch {
+    // Nothing stored to clear.
+  }
+  const session = { address: account, credentialId }
+  live = null
+  liveSession = session
+  savePasskeySession(session)
+  return { status: 'recovered', session }
+}
+
+function settleRecovery(pending: PendingRecovery, res: TxResult): RecoveryResult {
+  if (res.status === 'timeout') return { status: 'pending', account: pending.account }
+  clearPendingRecovery(pending.account)
+  if (res.status !== 'success') throw new PlainError('The recovery did not go through. Nothing changed. Try again.')
+  return finishRecovery(pending.account, pending.credentialId)
+}
+
+// Recovers a passkey account with its recovery key, as in Circle's passkey-recovery example:
+// 1. the words become a local account (viem mnemonicToAccount), checked first so a typo sends nothing;
+// 2. Circle's address mapping (made by registerRecoveryAddress) gives the account that key belongs to;
+// 3. the account must hold PASSKEY_GAS_BUFFER, since it pays the fee in USDC (no paymaster);
+// 4. a new passkey is registered with the given name;
+// 5. executeRecovery, signed by the local account, adds the new passkey as an owner.
+// 'pending' means the operation went out but did not confirm in time. It is saved (never the words) and
+// checkPendingRecovery finishes it. While it is pending, no second recovery is sent for that account.
+export async function recoverWithPhrase(p: { phrase: string; username: string }): Promise<RecoveryResult> {
+  const phrase = normalizePhrase(p.phrase)
+  if (!(await isValidRecoveryPhrase(phrase))) throw new PlainError(INVALID_PHRASE)
+  const username = p.username.trim()
+  if (username === '') throw new PlainError('Enter a name for your new passkey.')
+  const key = clientKey()
+  const lib = await loadSdk()
+  const { sdk } = lib
+  const recovery = lib.viem.mnemonicToAccount(phrase)
+  const { transport, client } = clients(lib, key)
+
+  const mappings = await sdk.getAddressMapping(client as never, {
+    owner: { type: 'EOAOWNER', identifier: { address: recovery.address } },
+  } as never)
+  const wallets = [...new Set(mappings.map((m) => m.walletAddress.toLowerCase()))]
+  if (wallets.length === 0) throw new PlainError("We couldn't find a Fundit account for this recovery key. Check the words and try again.")
+  if (wallets.length > 1) throw new PlainError('This recovery key belongs to more than one account, so Fundit cannot pick one.')
+  const account = getAddress(wallets[0]!)
+
+  const pending = readPendingRecovery(account)
+  if (pending) return { status: 'pending', account }
+  if (!(await canPayBackupGas(account))) throw new RecoveryNeedsFunds(account)
+
+  const credential = await sdk.toWebAuthnCredential({
+    transport: sdk.toPasskeyTransport(CLIENT_URL, key),
+    mode: sdk.WebAuthnMode.Register,
+    username,
+  })
+  type AccountParams = Parameters<typeof sdk.toCircleSmartAccount>[0]
+  const smart = await sdk.toCircleSmartAccount({
+    client: client as unknown as AccountParams['client'],
+    owner: recovery as unknown as AccountParams['owner'],
+    address: account,
+  })
+  const bundler = sendingBundler(lib, transport, client)
+  type Client = Parameters<typeof sdk.recoveryActions>[0]
+  type Params = Parameters<ReturnType<typeof sdk.recoveryActions>['executeRecovery']>[0]
+  const actions = sdk.recoveryActions(bundler as unknown as Client)
+  const base = { account: smart, credential } as unknown as Params
+  // Same margin on the call gas as every other send (see withGasMargin).
+  const gas = await actions.estimateExecuteRecoveryGas(base)
+  const hash = await actions.executeRecovery({
+    ...base,
+    callGasLimit: withGasMargin(gas.callGasLimit),
+    preVerificationGas: gas.preVerificationGas,
+    verificationGasLimit: gas.verificationGasLimit,
+  } as Params)
+  const record: PendingRecovery = { account, hash, hashKind: 'userop', createdAt: Date.now(), credentialId: credential.id }
+  savePendingRecovery(record)
+  return settleRecovery(record, await userOperationResult(bundler as unknown as ReceiptBundler, hash))
+}
+
+// Checks a pending recovery with a receipt read. It never sends anything again and needs no passkey.
+export async function checkPendingRecovery(account: Address): Promise<RecoveryResult | { status: 'none' }> {
+  const pending = readPendingRecovery(account)
+  if (!pending) return { status: 'none' }
+  return settleRecovery(pending, await userOperationResult(await readBundler(), pending.hash))
 }
 
 // True when Circle's Arc mainnet endpoint answers with Arc's chain id. Run by hand once a client key exists.

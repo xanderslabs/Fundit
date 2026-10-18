@@ -189,12 +189,17 @@ function SignInDialog({ className, label, onStart, onDismiss, onPasskeyDone, but
                 Continue with passkey
               </button>
             ) : (
-              <PasskeyLogin
-                onDone={() => {
-                  setOpen(false)
-                  onPasskeyDone?.()
-                }}
-              />
+              <>
+                <PasskeyLogin
+                  onDone={() => {
+                    setOpen(false)
+                    onPasskeyDone?.()
+                  }}
+                />
+                <Link to="/recover" onClick={() => setOpen(false)}>
+                  Lost your passkey? Recover your account
+                </Link>
+              </>
             )}
             <button
               type="button"

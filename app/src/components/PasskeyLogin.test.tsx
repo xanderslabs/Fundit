@@ -1,6 +1,6 @@
 import { act, cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router'
+import { MemoryRouter, Route, Routes } from 'react-router'
 import type { Address } from 'viem'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WalletChoice } from '../hooks/useSender'
@@ -126,6 +126,23 @@ describe('Sign in with passkeys on', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
     expect(document.activeElement).toBe(trigger)
+  })
+
+  // Someone who lost every passkey needs a way back in from the place they would look for it.
+  it('links to recovery from the passkey step, and the link closes the dialog', async () => {
+    render(
+      <MemoryRouter>
+        <AccountControl />
+        <Routes>
+          <Route path="/" element={<p>Home page</p>} />
+          <Route path="/recover" element={<p>Recover page</p>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    const user = await openPasskey()
+    await user.click(screen.getByRole('link', { name: 'Lost your passkey? Recover your account' }))
+    expect(screen.getByText('Recover page')).toBeTruthy()
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('offers a new account with a username, and sign-in for a returning person', async () => {
