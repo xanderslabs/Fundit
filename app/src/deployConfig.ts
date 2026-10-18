@@ -4,6 +4,7 @@ import { getAddress, isAddress, zeroAddress, type Address } from 'viem'
 // build fails before anything is bundled.
 export type DeployEnv = {
   PROD: boolean
+  VITE_ARC_NETWORK?: string
   VITE_FACTORY_ADDRESS?: string
   VITE_FACTORY_DEPLOY_BLOCK?: string
   VITE_REOWN_PROJECT_ID?: string
@@ -19,6 +20,13 @@ export function parseArcNetwork(value: string | undefined): ArcNetwork {
   if (!value || value === 'mainnet') return 'mainnet'
   if (value === 'testnet') return 'testnet'
   throw new Error(`VITE_ARC_NETWORK must be mainnet or testnet, not "${value}"`)
+}
+
+// The CampaignFactory deployed on each network and its deploy block, from contracts/deployments/arc-*.json.
+// loadConfig refuses the other network's factory, and a wrong deploy block for a known factory.
+export const KNOWN_FACTORIES: Record<ArcNetwork, { address: Address; deployBlock: bigint }> = {
+  mainnet: { address: '0xf1b2AEF82c37fC41D254D8e06BD7780ce34617d9', deployBlock: 26452579n },
+  testnet: { address: '0x6890D40a9A472D0d05aDb5938D85B07059ad54ab', deployBlock: 67870064n },
 }
 
 // Runtime backstop for the production build guard: true when a testnet bundle is served on fundit.fun. A
@@ -113,5 +121,16 @@ export function loadConfig(env: DeployEnv): DeployConfig {
     throw new Error(`VITE_FACTORY_ADDRESS is not a valid address: ${address}`)
   }
   if (!/^\d+$/.test(block)) throw new Error(`VITE_FACTORY_DEPLOY_BLOCK must be a block number: ${block}`)
+  const network = parseArcNetwork(env.VITE_ARC_NETWORK)
+  const other = network === 'testnet' ? 'mainnet' : 'testnet'
+  // The other network's factory has no code on this one: no Fundits would list, and Create would pay gas for nothing.
+  if (address.toLowerCase() === KNOWN_FACTORIES[other].address.toLowerCase()) {
+    throw new Error(`VITE_FACTORY_ADDRESS (${address}) is the Arc ${other} factory, but VITE_ARC_NETWORK is ${network}`)
+  }
+  // The campaign scan starts at this block. Earlier is before the factory existed, and later hides the first Fundits.
+  const known = KNOWN_FACTORIES[network]
+  if (address.toLowerCase() === known.address.toLowerCase() && BigInt(block) !== known.deployBlock) {
+    throw new Error(`VITE_FACTORY_DEPLOY_BLOCK (${block}) is wrong for the Arc ${network} factory, which was deployed at block ${known.deployBlock}`)
+  }
   return { factoryAddress: getAddress(address), factoryDeployBlock: BigInt(block), reownProjectId }
 }

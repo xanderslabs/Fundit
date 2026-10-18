@@ -1,7 +1,8 @@
 import { zeroAddress } from 'viem'
 import { describe, expect, it } from 'vitest'
 import headers from '../public/_headers?raw'
-import { checkBuildEnv, loadConfig, parseArcNetwork, testnetRefusedOn } from './deployConfig'
+import mainnetDeployment from '../../contracts/deployments/arc-mainnet.json'
+import { checkBuildEnv, KNOWN_FACTORIES, loadConfig, parseArcNetwork, testnetRefusedOn } from './deployConfig'
 
 const FACTORY = '0x1111111111111111111111111111111111111111'
 const prodEnv = { PROD: true, VITE_FACTORY_ADDRESS: FACTORY, VITE_FACTORY_DEPLOY_BLOCK: '26280000', VITE_REOWN_PROJECT_ID: 'abc123' }
@@ -38,6 +39,45 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ PROD: false, VITE_FACTORY_DEPLOY_BLOCK: '1' })).toThrow(/VITE_FACTORY_ADDRESS/)
     expect(() => loadConfig({ PROD: false, VITE_FACTORY_ADDRESS: '0x123', VITE_FACTORY_DEPLOY_BLOCK: '1' })).toThrow(/not a valid address/)
     expect(() => loadConfig({ PROD: false, VITE_FACTORY_ADDRESS: FACTORY, VITE_FACTORY_DEPLOY_BLOCK: '1e6' })).toThrow(/block number/)
+  })
+})
+
+// A factory from the other network has no code here: the site lists no Fundits and Create spends gas on a call
+// that does nothing. A wrong deploy block for the right factory makes the campaign scan miss or skip Fundits.
+describe('loadConfig factory and network', () => {
+  const MAINNET = KNOWN_FACTORIES.mainnet.address
+  const TESTNET = KNOWN_FACTORIES.testnet.address
+  const mainnet = { ...prodEnv, VITE_FACTORY_ADDRESS: MAINNET, VITE_FACTORY_DEPLOY_BLOCK: '26452579' }
+  const testnet = { ...prodEnv, VITE_ARC_NETWORK: 'testnet', VITE_FACTORY_ADDRESS: TESTNET, VITE_FACTORY_DEPLOY_BLOCK: '67870064' }
+
+  it('matches the mainnet deployment record', () => {
+    expect(MAINNET).toBe(mainnetDeployment.contracts.CampaignFactory)
+    expect(KNOWN_FACTORIES.mainnet.deployBlock).toBe(BigInt(mainnetDeployment.deployBlock))
+  })
+
+  it('accepts each known factory with its own network and deploy block', () => {
+    expect(loadConfig(mainnet).factoryAddress).toBe(MAINNET)
+    expect(loadConfig({ ...mainnet, VITE_ARC_NETWORK: 'mainnet' }).factoryDeployBlock).toBe(26452579n)
+    expect(loadConfig(testnet).factoryAddress).toBe(TESTNET)
+  })
+
+  it("refuses the other network's factory, in any case and in any mode", () => {
+    expect(() => loadConfig({ ...mainnet, VITE_FACTORY_ADDRESS: TESTNET, VITE_FACTORY_DEPLOY_BLOCK: '67870064' })).toThrow(/Arc testnet factory/)
+    expect(() => loadConfig({ ...mainnet, VITE_FACTORY_ADDRESS: TESTNET.toLowerCase() })).toThrow(/Arc testnet factory/)
+    expect(() => loadConfig({ ...testnet, VITE_FACTORY_ADDRESS: MAINNET, VITE_FACTORY_DEPLOY_BLOCK: '26452579' })).toThrow(/Arc mainnet factory/)
+    expect(() => loadConfig({ ...testnet, PROD: false, VITE_FACTORY_ADDRESS: MAINNET })).toThrow(/Arc mainnet factory/)
+  })
+
+  it('refuses a deploy block that is not the known one for a known factory', () => {
+    expect(() => loadConfig({ ...mainnet, VITE_FACTORY_DEPLOY_BLOCK: '26452578' })).toThrow(/deployed at block 26452579/)
+    expect(() => loadConfig({ ...mainnet, VITE_FACTORY_DEPLOY_BLOCK: '0' })).toThrow(/VITE_FACTORY_DEPLOY_BLOCK/)
+    // The testnet block with the mainnet factory: a copy slip that would hide every Fundit.
+    expect(() => loadConfig({ ...mainnet, VITE_FACTORY_DEPLOY_BLOCK: '67870064' })).toThrow(/VITE_FACTORY_DEPLOY_BLOCK/)
+    expect(() => loadConfig({ ...testnet, VITE_FACTORY_DEPLOY_BLOCK: '26452579' })).toThrow(/deployed at block 67870064/)
+  })
+
+  it('leaves an unknown factory alone, such as a local deploy', () => {
+    expect(() => loadConfig({ ...testnet, VITE_FACTORY_ADDRESS: FACTORY, VITE_FACTORY_DEPLOY_BLOCK: '1' })).not.toThrow()
   })
 })
 
