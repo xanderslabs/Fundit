@@ -259,7 +259,7 @@ async function ensureLive(stored: StoredPasskey): Promise<Live> {
   const next = await credentialFor('Login', { credentialId: stored.credentialId })
   // Never sign for a wallet other than the one the page shows.
   if (next.account.address.toLowerCase() !== stored.address.toLowerCase()) {
-    throw new Error('That passkey opens a different wallet. Log out and log in again.')
+    throw new Error('That passkey opens a different wallet. Sign out and sign in again.')
   }
   setLive(next)
   return next

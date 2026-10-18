@@ -4,13 +4,6 @@
   margin: 0 auto;
 }
 
-.create-connect {
-  padding: 12px 16px;
-  border-radius: var(--radius);
-  background: var(--card);
-  font-weight: var(--weight-medium);
-}
-
 .create-form {
   display: flex;
   flex-direction: column;
@@ -55,12 +48,6 @@
   min-height: 160px;
 }
 
-.create-form input:focus,
-.create-form textarea:focus {
-  outline: 2px solid var(--primary);
-  outline-offset: 1px;
-}
-
 .create-form [aria-invalid='true'] {
   border-color: var(--error);
 }
@@ -72,7 +59,7 @@
 }
 
 .counter-over {
-  color: var(--error);
+  color: var(--error-ink);
   font-weight: var(--weight-bold);
 }
 
@@ -84,7 +71,7 @@
 
 .field-error {
   margin: 0;
-  color: var(--error);
+  color: var(--error-ink);
   font-size: 14px;
   font-weight: var(--weight-medium);
 }
@@ -133,10 +120,10 @@
 }
 
 .choice input {
+  flex: none;
   width: 18px;
   height: 18px;
-  margin-top: 3px;
-  accent-color: var(--success);
+  margin: 3px 0 0;
 }
 
 .choice .hint {

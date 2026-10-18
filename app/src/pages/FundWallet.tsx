@@ -127,7 +127,7 @@ function BridgeToPasskey({ recipient }: { recipient: Address }) {
       <fieldset className="donate-fields" disabled={busy}>
         <div className="form-field">
           <label htmlFor="fund-source">From</label>
-          <select id="fund-source" value={sourceKey} onChange={(e) => setSourceKey(e.target.value as CctpChainKey)}>
+          <select id="fund-source" className="select" value={sourceKey} onChange={(e) => setSourceKey(e.target.value as CctpChainKey)}>
             {CCTP_CHAINS.map((c) => (
               <option key={c.key} value={c.key}>
                 {CHAIN_LABELS[c.key]}
@@ -241,7 +241,7 @@ export function FundWallet() {
     <section className="manage">
       <header className="page-head">
         <h1>Your passkey wallet</h1>
-        <p className="muted">This wallet lives on Arc. Add USDC here, then donate from it with your passkey.</p>
+        <p className="muted">This wallet lives on Arc. Add USDC here, then give from it with your passkey.</p>
       </header>
 
       <section className="panel manage-section" aria-labelledby="fund-address-heading">

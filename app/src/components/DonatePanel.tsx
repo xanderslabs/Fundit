@@ -35,7 +35,7 @@ const DAY_MS = 24 * 60 * 60 * 1000
 // A passkey wallet pays its network fee in USDC from the balance it donates from. This much stays free for it.
 const PASSKEY_GAS_BUFFER = 50_000n
 const START_OVER_WARNING =
-  'The earlier transaction may still go through. If it does and you donate again, you will give twice. Start a new donation anyway?'
+  'The earlier transaction may still go through. If it does and you give again, you will give twice. Start a new donation anyway?'
 
 // Where the money comes from.
 type PaySourceId = 'arc' | 'crosschain' | 'unified'
@@ -73,7 +73,7 @@ type Phase =
   | { kind: 'error'; message: string; hash?: Hex }
 
 function arcTimeout(saved: PendingArc): Phase {
-  const note = Date.now() - saved.createdAt > DAY_MS ? 'This was more than a day ago. Check the explorer before donating again.' : undefined
+  const note = Date.now() - saved.createdAt > DAY_MS ? 'This was more than a day ago. Check the explorer before giving again.' : undefined
   return { kind: 'timeout', hash: saved.hash, approve: saved.approve, userop: saved.hashKind === 'userop', note }
 }
 
@@ -89,7 +89,7 @@ function ConnectPrompt() {
   const { open } = useAppKit()
   return (
     <button type="button" className="btn btn-lg donate-submit" onClick={() => open()}>
-      Connect wallet to donate
+      Sign in to give
     </button>
   )
 }
@@ -318,8 +318,8 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   }
 
   return (
-    <section className="panel donate" aria-label="Donate">
-      <h2>Donate</h2>
+    <section className="panel donate" aria-label="Give">
+      <h2>Give</h2>
       {closed && <p className="field-error">This fundraiser is closed.</p>}
       <PendingBridgeTracker campaign={campaign} />
 
@@ -333,7 +333,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
             </span>
           </label>
         ))}
-        {symbol !== 'USDC' && <p className="hint">EURC campaigns accept donations on Arc only.</p>}
+        {symbol !== 'USDC' && <p className="hint">EURC fundraisers take donations on Arc only.</p>}
       </fieldset>
 
       {activeSource === 'crosschain' ? (
@@ -344,7 +344,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
               <div className="status-box">
                 <p>
                   <strong>Your cross-chain donation of {blocker.amount} USDC is still on its way.</strong> Wait for it to
-                  reach the campaign before you donate again, so you do not give twice.
+                  reach the fundraiser before you give again, so you do not give twice.
                 </p>
                 {!crossChainBusy && (
                   <div className="donate-actions">
@@ -524,7 +524,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
             </button>
           ) : (
             <button type="submit" className="btn btn-lg donate-submit" disabled={!canSubmit}>
-              {busy ? 'Donating...' : 'Donate'}
+              {busy ? 'Giving...' : 'Give'}
             </button>
           )}
         </form>

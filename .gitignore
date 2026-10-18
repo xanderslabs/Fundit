@@ -17,3 +17,4 @@ app/dist-e2e/
 app/test-results/
 app/playwright-report/
 .superpowers/
+.cloudflare/

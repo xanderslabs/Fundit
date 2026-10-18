@@ -72,15 +72,15 @@ afterEach(() => {
 
 describe('CampaignPage', () => {
   // An address that the factory does not know may be a clone with a hostile creator, so it is never shown as a fundraiser.
-  it("shows 'Not a Fundit campaign' for an address the factory does not know", () => {
+  it("shows 'Not a Fundit fundraiser' for an address the factory does not know", () => {
     hookState.current = { data: 'not-a-campaign', isPending: false, isError: false }
     renderPage()
-    expect(screen.getByText('Not a Fundit campaign')).toBeTruthy()
+    expect(screen.getByText('Not a Fundit fundraiser')).toBeTruthy()
   })
 
-  it("shows 'Not a Fundit campaign' for a URL that is not an address", () => {
+  it("shows 'Not a Fundit fundraiser' for a URL that is not an address", () => {
     renderPage('/c/hello')
-    expect(screen.getByText('Not a Fundit campaign')).toBeTruthy()
+    expect(screen.getByText('Not a Fundit fundraiser')).toBeTruthy()
   })
 
   // Campaign text is written by anyone, so it must render as inert text.
@@ -114,8 +114,8 @@ describe('CampaignPage', () => {
     expect(screen.getAllByText(/250\.00 USDC/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/1,000\.00 USDC/).length).toBeGreaterThan(0)
     expect(screen.getByText('25%')).toBeTruthy()
-    expect(screen.getByRole('region', { name: 'Donate' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Connect wallet to donate' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Give' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Sign in to give' })).toBeTruthy()
   })
 
   // A closed campaign reverts every donation, so the page must not offer one.
@@ -123,6 +123,6 @@ describe('CampaignPage', () => {
     hookState.current = { data: view({}, true), isPending: false, isError: false }
     renderPage()
     expect(screen.getByText('This fundraiser is closed.')).toBeTruthy()
-    expect((screen.getByRole('button', { name: 'Donate' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Give' }) as HTMLButtonElement).disabled).toBe(true)
   })
 })

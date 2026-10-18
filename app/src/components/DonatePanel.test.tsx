@@ -115,7 +115,7 @@ function renderPanel(v: CampaignView, client = new QueryClient()) {
   return client
 }
 
-const donateButton = () => screen.getByRole('button', { name: 'Donate' }) as HTMLButtonElement
+const donateButton = () => screen.getByRole('button', { name: 'Give' }) as HTMLButtonElement
 
 afterEach(() => {
   cleanup()
@@ -146,7 +146,7 @@ async function fillAndDonate(amount = '10') {
 
 // Nothing in the panel may start a second donation while one may still be mined.
 function expectBlocked() {
-  expect(screen.queryByRole('button', { name: 'Donate' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Give' })).toBeNull()
   expect(screen.queryByRole('button', { name: 'Finish donation' })).toBeNull()
   expect(screen.getByLabelText('Amount').matches(':disabled')).toBe(true)
   expect(screen.getByRole('link', { name: /explorer/i }).getAttribute('href')).toBe(`https://explorer.arc.io/tx/${HASH}`)
@@ -290,8 +290,8 @@ describe('DonatePanel', () => {
 
   it('shows a connect prompt instead of the submit button when no wallet is connected', async () => {
     renderPanel(view('USDC'))
-    expect(screen.queryByRole('button', { name: 'Donate' })).toBeNull()
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Connect wallet to donate' }))
+    expect(screen.queryByRole('button', { name: 'Give' })).toBeNull()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in to give' }))
     expect(open).toHaveBeenCalled()
   })
 
@@ -400,7 +400,7 @@ describe('DonatePanel', () => {
     recheck.next = async () => ({ status: 'reverted', hash: HASH, error: 'The transaction failed on chain.', completed: 0 })
     await user.click(await screen.findByRole('button', { name: 'Check again' }))
     expect(await screen.findByText('The transaction failed on chain.')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Donate' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Give' })).toBeTruthy()
   })
 
   it('moves to Finish donation once Check again finds the approval mined', async () => {
@@ -450,7 +450,7 @@ describe('DonatePanel', () => {
     )
     fakeSender()
     renderPanel(view('USDC'))
-    expect(screen.getByText('This was more than a day ago. Check the explorer before donating again.')).toBeTruthy()
+    expect(screen.getByText('This was more than a day ago. Check the explorer before giving again.')).toBeTruthy()
     expectBlocked()
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     await userEvent.setup().click(screen.getByRole('button', { name: 'Start over' }))
@@ -544,7 +544,7 @@ describe('DonatePanel', () => {
       expect(screen.getByText(/unified balance donation is not confirmed yet/)).toBeTruthy()
       expect(screen.getByRole('button', { name: 'Check again' })).toBeTruthy()
       expect(screen.getByRole('radio', { name: /Arc wallet/ }).matches(':disabled')).toBe(true)
-      expect(screen.queryByRole('button', { name: 'Donate' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Give' })).toBeNull()
     })
 
     it('off: a stored cross-chain transfer still shows and blocks', () => {
@@ -557,7 +557,7 @@ describe('DonatePanel', () => {
       renderPanel(view('USDC'))
       expect(screen.getByText(/cross-chain donation of 25 USDC is still on its way/)).toBeTruthy()
       expect(screen.getByRole('radio', { name: /Arc wallet/ }).matches(':disabled')).toBe(true)
-      expect(screen.queryByRole('button', { name: 'Donate' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Give' })).toBeNull()
     })
   })
 
@@ -611,7 +611,7 @@ describe('DonatePanel', () => {
       const el = screen.getByRole('radio', { name }) as HTMLInputElement
       return { disabled: el.matches(':disabled') }
     }
-    const unsubmittable = () => expect(screen.queryByRole('button', { name: 'Donate' })).toBeNull()
+    const unsubmittable = () => expect(screen.queryByRole('button', { name: 'Give' })).toBeNull()
 
     // The wallet that signed the unified spend is not connected after the reload, which used to drop the
     // panel back to an open Arc wallet form.
@@ -719,9 +719,9 @@ describe('DonatePanel', () => {
       fakeSender()
       state.balance = 1000_000000n
       renderPanel(view('USDC'))
-      expect(await screen.findByText(/reached the campaign/)).toBeTruthy()
+      expect(await screen.findByText(/reached the fundraiser/)).toBeTruthy()
       await waitFor(() => expect(radio(/Arc wallet/).disabled).toBe(false))
-      expect(screen.getByRole('button', { name: 'Donate' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Give' })).toBeTruthy()
     })
   })
 
@@ -794,7 +794,7 @@ describe('DonatePanel', () => {
       expect(screen.getByText('Log in with your passkey to check this transaction.')).toBeTruthy()
       expect(screen.queryByRole('button', { name: 'Check again' })).toBeNull()
       expect(screen.queryByRole('link', { name: /explorer/i })).toBeNull()
-      expect(screen.queryByRole('button', { name: 'Donate' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Give' })).toBeNull()
     })
   })
 })

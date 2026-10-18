@@ -1,9 +1,9 @@
-import { useAppKit } from '@reown/appkit/react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router'
 import { type Address, encodeFunctionData, formatUnits, isAddress, isAddressEqual, zeroAddress } from 'viem'
 import { campaignAbi } from '../abi/campaign'
+import { SignInButton } from '../components/AccountMenu'
 import { PendingBridgeTracker } from '../components/CrossChainDonate'
 import { TxStatus, useTx } from '../components/TxStatus'
 import { ARC_DOMAIN, CHAIN_LABELS } from '../config'
@@ -283,7 +283,7 @@ function WithdrawSection({ view, sender }: { view: CampaignView; sender: Sender 
 
           <div className="form-field">
             <label htmlFor="withdraw-dest">Send to</label>
-            <select id="withdraw-dest" className="manage-select" value={dest} onChange={(e) => setDest(e.target.value as PayoutDest)}>
+            <select id="withdraw-dest" className="select" value={dest} onChange={(e) => setDest(e.target.value as PayoutDest)}>
               {destinations.map((d) => (
                 <option key={d} value={d}>
                   {CHAIN_LABELS[d]}
@@ -509,14 +509,11 @@ function BackupSection({ view, sender }: { view: CampaignView; sender: Sender })
 }
 
 function ConnectNotice() {
-  const { open } = useAppKit()
   return (
     <section className="notice">
       <h1>Manage fundraiser</h1>
-      <p>Connect the organiser's wallet to manage this fundraiser.</p>
-      <button type="button" className="btn" onClick={() => open()}>
-        Connect wallet
-      </button>
+      <p>Sign in with the organiser's wallet to manage this fundraiser.</p>
+      <SignInButton />
     </section>
   )
 }
@@ -531,7 +528,7 @@ export function Manage() {
   if (!valid || query.data === 'not-a-campaign') {
     return (
       <section className="notice">
-        <h1>Not a Fundit campaign</h1>
+        <h1>Not a Fundit fundraiser</h1>
         <p>This address was not created by the Fundit factory.</p>
       </section>
     )

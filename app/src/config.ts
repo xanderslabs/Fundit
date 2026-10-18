@@ -106,3 +106,11 @@ export const EXTERNAL_HOSTS: readonly string[] = [
   GATEWAY_URL,
   MODULAR_WALLETS_URL,
 ]
+
+// TODO before launch: replace placeholder social handles
+export const SOCIAL_LINKS: readonly { name: string; href: string; icon: string }[] = [
+  { name: 'X', href: 'https://x.com/fundit', icon: '/images/x.svg' },
+  { name: 'Telegram', href: 'https://t.me/fundit', icon: '/images/telegram.svg' },
+  { name: 'Discord', href: 'https://discord.gg/fundit', icon: '/images/discord.svg' },
+  { name: 'Instagram', href: 'https://instagram.com/fundit', icon: '/images/instagram.svg' },
+]

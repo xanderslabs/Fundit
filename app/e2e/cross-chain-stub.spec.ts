@@ -42,7 +42,7 @@ test('a stubbed CCTP mint shows in raised, and as a cross-chain donation once se
 
   await page.goto(`/c/${campaign}`)
   await connect(page, ACCOUNTS.donor)
-  await expect(page.getByText('5 USDC from Base reached the campaign.')).toBeVisible()
+  await expect(page.getByText('5 USDC from Base reached the fundraiser.')).toBeVisible()
   expect(irisCalls).toBeGreaterThan(0)
   // raised() counts unaccounted funds, so the total is right before anyone settles.
   await expect(page.locator('.stats-raised')).toContainText('5.00 USDC')
@@ -74,14 +74,14 @@ test('an EURC campaign offers only "Arc wallet" in the donate panel', async ({ a
   await page.goto(`/c/${campaign}`)
   await connect(page, ACCOUNTS.donor)
 
-  const donate = page.getByRole('region', { name: 'Donate' })
+  const donate = page.getByRole('region', { name: 'Give' })
   await expect(donate.getByText(/Your balance: .* EURC/)).toBeVisible()
   const sources = donate.getByRole('group', { name: 'Pay with' }).getByRole('radio')
   await expect(sources).toHaveCount(1)
   await expect(donate.getByRole('radio', { name: /^Arc wallet/ })).toBeChecked()
   await expect(donate.getByText('USDC on another chain')).toHaveCount(0)
   await expect(donate.getByText('Unified USDC balance')).toHaveCount(0)
-  await expect(donate.getByText('EURC campaigns accept donations on Arc only.')).toBeVisible()
+  await expect(donate.getByText('EURC fundraisers take donations on Arc only.')).toBeVisible()
 })
 
 test('with VITE_CROSSCHAIN off, a USDC campaign offers only "Arc wallet" to a connected wallet', async ({ as }) => {
@@ -91,7 +91,7 @@ test('with VITE_CROSSCHAIN off, a USDC campaign offers only "Arc wallet" to a co
   const page = await as(ACCOUNTS.donor)
   await page.goto(`/c/${campaign}`)
   await connect(page, ACCOUNTS.donor)
-  const donate = page.getByRole('region', { name: 'Donate' })
+  const donate = page.getByRole('region', { name: 'Give' })
   await expect(donate.getByText(/Your balance: .* USDC/)).toBeVisible()
   const sources = donate.getByRole('group', { name: 'Pay with' }).getByRole('radio')
   await expect(sources).toHaveCount(1)

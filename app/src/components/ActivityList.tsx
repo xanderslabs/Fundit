@@ -117,7 +117,7 @@ function Unaccounted({ campaign, symbol }: { campaign: Address; symbol: TokenSym
               {tx.busy ? 'Counting...' : 'Count it now'}
             </button>
           ) : (
-            <p className="muted">Connect any wallet to count it.</p>
+            <p className="muted">Sign in with any wallet to count it.</p>
           )}
         </>
       )}

@@ -75,6 +75,6 @@ describe('ActivityList cross-chain inflows not counted yet', () => {
     renderList()
     expect(await screen.findByText('5.00 USDC from other chains, not counted yet')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Count it now' })).toBeNull()
-    expect(screen.getByText('Connect any wallet to count it.')).toBeTruthy()
+    expect(screen.getByText('Sign in with any wallet to count it.')).toBeTruthy()
   })
 })

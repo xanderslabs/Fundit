@@ -21,7 +21,7 @@ const EXPLORER_URL = arc.blockExplorers.default.url
 function NotACampaign() {
   return (
     <section className="notice">
-      <h1>Not a Fundit campaign</h1>
+      <h1>Not a Fundit fundraiser</h1>
       <p>This address was not created by the Fundit factory, so we will not show it as a fundraiser.</p>
       <Link to="/explore" className="btn">
         Explore fundraisers

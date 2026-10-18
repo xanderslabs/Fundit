@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router'
 import { type Address, decodeEventLog, encodeFunctionData, type Hex, isAddressEqual, type TransactionReceipt } from 'viem'
 import { arc } from 'viem/chains'
 import { factoryAbi } from '../abi/factory'
+import { SignInButton } from '../components/AccountMenu'
 import { CampaignImage } from '../components/CampaignImage'
 import { PASSKEY_PROCESSING, recheckResult } from '../components/TxStatus'
 import { FACTORY_ADDRESS, type TokenSymbol } from '../config'
@@ -174,14 +175,24 @@ export function Create() {
     setTouched((t) => Object.fromEntries(Object.entries(t).filter(([k]) => !k.startsWith('link-'))))
   }
 
+  // Signed out, the page asks to sign in and stays here, so the form shows once a wallet is connected. A
+  // transaction already in flight keeps the form and its status on screen even if the wallet goes away.
+  if (!sender && phase.kind === 'idle') {
+    return (
+      <section className="notice">
+        <h1>Sign in to start a fundraiser</h1>
+        <p>Sign in first. Then you can tell your story and set your goal.</p>
+        <SignInButton className="btn btn-lg" />
+      </section>
+    )
+  }
+
   return (
     <section className="create">
       <header className="page-head">
         <h1>Start a fundraiser</h1>
-        <p className="muted">Donations go into an on-chain escrow on Arc. Only you can withdraw them.</p>
+        <p className="muted">The money people give is held for your fundraiser, and only you can withdraw it.</p>
       </header>
-
-      {!sender && <p className="create-connect">Connect your wallet to start a fundraiser. Use the button at the top of the page.</p>}
 
       <form className="create-form" onSubmit={submit} noValidate>
         <div className="form-field">

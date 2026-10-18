@@ -1,8 +1,8 @@
-import { useAppKit } from '@reown/appkit/react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router'
 import type { Address } from 'viem'
 import { arc } from 'viem/chains'
+import { SignInButton } from '../components/AccountMenu'
 import { CampaignGrid, LoadError } from '../components/CampaignGrid'
 import { Name } from '../components/Name'
 import { CROSSCHAIN_ENABLED } from '../config'
@@ -107,23 +107,20 @@ function MyDonations({ address }: { address: Address }) {
           Older donations: view on explorer
         </a>
       </p>
-      {CROSSCHAIN_ENABLED && <p className="muted">Donations made from other chains appear on the campaign as cross-chain donations.</p>}
+      {CROSSCHAIN_ENABLED && <p className="muted">Donations made from other chains appear on the fundraiser as cross-chain donations.</p>}
     </section>
   )
 }
 
 export function Profile() {
   const sender = useSender()
-  const { open } = useAppKit()
 
   if (!sender) {
     return (
       <section className="notice">
         <h1>My page</h1>
-        <p>Connect a wallet to see your fundraisers.</p>
-        <button type="button" className="btn" onClick={() => open()}>
-          Connect wallet
-        </button>
+        <p>Sign in to see your fundraisers and the donations you made.</p>
+        <SignInButton />
       </section>
     )
   }
@@ -135,6 +132,9 @@ export function Profile() {
           <Name address={sender.address} />
         </h1>
         <p className="muted">Your fundraisers and the donations you made from this address on Arc.</p>
+        <Link to="/create" className="btn btn-lg profile-start">
+          Start a fundraiser
+        </Link>
       </section>
       <MyFundraisers address={sender.address} />
       <MyDonations address={sender.address} />

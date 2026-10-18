@@ -132,11 +132,11 @@ export const test = base.extend<Actors>({
 
 export { expect }
 
-// Connects the mock wallet if the page is not already connected (it reconnects by itself after a reload),
-// then checks the header shows the account.
+// Signs in with the mock wallet through the top bar's Sign in if the page is not already connected (it
+// reconnects by itself after a reload), then checks the header shows the account pill.
 export async function connect(page: Page, account: Address): Promise<void> {
   const banner = page.getByRole('banner')
-  const connectButton = banner.getByRole('button', { name: 'Connect wallet' })
+  const connectButton = banner.getByRole('button', { name: 'Sign in' })
   const accountButton = banner.getByRole('button', { name: `${account.slice(0, 6)}...${account.slice(-4)}` })
   await expect(connectButton.or(accountButton)).toBeVisible()
   if (await connectButton.isVisible()) await connectButton.click()

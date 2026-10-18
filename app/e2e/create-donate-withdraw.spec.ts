@@ -7,10 +7,16 @@ const B = ACCOUNTS.donor
 test('A creates a USDC campaign, B donates with a tip and message, A withdraws to Arc and closes', async ({ as }) => {
   const usdc = await tokenAddress('USDC')
 
-  // 1. A creates a USDC campaign with a goal of 100 and lands on its page.
+  // 1. A signs in on Home, opens the account menu, picks Start a fundraiser, creates a USDC fundraiser with a
+  // goal of 100 and lands on its page.
   const a = await as(A)
-  await a.goto('/create')
+  await a.goto('/')
   await connect(a, A)
+  const pill = a.getByRole('banner').getByRole('button', { name: `${A.slice(0, 6)}...${A.slice(-4)}` })
+  await pill.click()
+  await expect(a.getByRole('menu')).toBeVisible()
+  await a.getByRole('menuitem', { name: 'Start a fundraiser' }).click()
+  await expect(a).toHaveURL(/\/create$/)
   await a.getByLabel('Title').fill('E2E garden fund')
   await a.getByLabel('Description').fill('Seeds and tools for the community garden.')
   await a.getByLabel('Goal').fill('100')
@@ -29,13 +35,13 @@ test('A creates a USDC campaign, B donates with a tip and message, A withdraws t
   const b = await as(B)
   await b.goto(`/c/${campaign}`)
   await connect(b, B)
-  const donate = b.getByRole('region', { name: 'Donate' })
+  const donate = b.getByRole('region', { name: 'Give' })
   await expect(donate.getByText(/Your balance: /)).toBeVisible()
   await donate.getByRole('textbox', { name: 'Amount' }).fill('10')
   await donate.getByLabel('10%').check()
   await donate.getByLabel('Message (optional)').fill('good luck')
   await expect(donate.getByRole('definition').filter({ hasText: '11.00 USDC' })).toBeVisible()
-  await donate.getByRole('button', { name: 'Donate', exact: true }).click()
+  await donate.getByRole('button', { name: 'Give', exact: true }).click()
   await expect(donate.getByText('Thank you. Your donation went through.')).toBeVisible()
 
   const activity = b.getByRole('region', { name: 'Activity' })
@@ -97,10 +103,10 @@ test('A creates a USDC campaign, B donates with a tip and message, A withdraws t
   // The donate panel is disabled for B.
   await b.reload()
   await connect(b, B)
-  const closedPanel = b.getByRole('region', { name: 'Donate' })
+  const closedPanel = b.getByRole('region', { name: 'Give' })
   await expect(closedPanel.getByText('This fundraiser is closed.')).toBeVisible()
   await expect(closedPanel.getByRole('textbox', { name: 'Amount' })).toBeDisabled()
-  await expect(closedPanel.getByRole('button', { name: 'Donate', exact: true })).toBeDisabled()
+  await expect(closedPanel.getByRole('button', { name: 'Give', exact: true })).toBeDisabled()
 })
 
 // Regression: Campaign._activity() skips its two SSTOREs when the last activity is in the current block.

@@ -1,12 +1,9 @@
-import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router'
-import { useWalletChoice } from '../hooks/useSender'
+import { type FormEvent, useState } from 'react'
 import { explainError } from '../lib/errors'
-import { shortAddress } from '../lib/names'
-import { loginPasskey, logoutPasskey, registerPasskey, type StoredPasskey, usePasskeySession } from '../lib/passkey'
+import { loginPasskey, registerPasskey } from '../lib/passkey'
 
 export const PASSKEY_INTRO =
-  'A passkey lets you sign in with your fingerprint, face or device PIN, with no wallet app to install. It opens a Fundit wallet on Arc that you add USDC to before you donate.'
+  'A passkey lets you sign in with your fingerprint, face or device PIN, with no wallet app to install. It opens a Fundit wallet on Arc that you add USDC to before you give.'
 
 const MAX_USERNAME = 50
 
@@ -64,79 +61,13 @@ export function PasskeyLogin({ onDone }: { onDone?: () => void }) {
         </button>
       </form>
       <button type="button" className="btn btn-outline" disabled={busy} onClick={() => void run(() => loginPasskey())}>
-        Log in with a passkey
+        Sign in with a passkey
       </button>
       {busy && <p className="hint">Follow the steps your browser shows.</p>}
       {error && (
         <p className="field-error" role="alert">
           {error}
         </p>
-      )}
-    </div>
-  )
-}
-
-// The logged-in passkey wallet. With a connected wallet as well, it says which one acts and offers the switch.
-function PasskeySession({ session }: { session: StoredPasskey }) {
-  const choice = useWalletChoice()
-  return (
-    <div className="passkey-menu">
-      <Link to="/fund" className="btn btn-outline" title="Your passkey wallet">
-        Passkey {shortAddress(session.address)}
-      </Link>
-      {choice.both && (
-        <>
-          <span className="hint">In use: {choice.active === 'passkey' ? 'passkey wallet' : 'connected wallet'}</span>
-          <button
-            type="button"
-            className="btn btn-outline"
-            onClick={() => choice.setActive(choice.active === 'passkey' ? 'external' : 'passkey')}
-          >
-            {choice.active === 'passkey' ? 'Use connected wallet' : 'Use passkey wallet'}
-          </button>
-        </>
-      )}
-      <button type="button" className="btn btn-outline" onClick={() => logoutPasskey()}>
-        Log out
-      </button>
-    </div>
-  )
-}
-
-// The header entry: the passkey wallet when logged in, otherwise a button that opens the sign-in panel.
-export function PasskeyMenu() {
-  const session = usePasskeySession()
-  const [open, setOpen] = useState(false)
-  const navigate = useNavigate()
-  const trigger = useRef<HTMLButtonElement>(null)
-  const popover = useRef<HTMLDivElement>(null)
-
-  // Focus moves into the panel when it opens, to its first field.
-  useEffect(() => {
-    if (open) popover.current?.querySelector<HTMLElement>('input, button')?.focus()
-  }, [open])
-
-  function onKeyDown(e: KeyboardEvent) {
-    if (e.key !== 'Escape' || !open) return
-    setOpen(false)
-    trigger.current?.focus()
-  }
-
-  if (session) return <PasskeySession session={session} />
-  return (
-    <div className="passkey-menu" onKeyDown={onKeyDown}>
-      <button ref={trigger} type="button" className="btn btn-outline" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        Use a passkey
-      </button>
-      {open && (
-        <div ref={popover} className="passkey-popover panel">
-          <PasskeyLogin
-            onDone={() => {
-              setOpen(false)
-              navigate('/fund')
-            }}
-          />
-        </div>
       )}
     </div>
   )

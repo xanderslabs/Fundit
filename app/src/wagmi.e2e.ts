@@ -10,7 +10,7 @@ const arcLocal = { ...arc, rpcUrls: { default: { http: [ARC_RPC_URL] } } } as co
 
 // Anvil default account 1. A test picks another unlocked account by setting this key before the page loads.
 // defaultConnected plus reconnect lets a page reload keep the wallet connected after the first connect, as a real
-// wallet does. Before that first connect the app shows "Connect wallet".
+// wallet does. Before that first connect the app shows "Sign in".
 const DEFAULT_ACCOUNT: Address = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
 export const E2E_ACCOUNT_KEY = 'fundit.e2e.account'
 

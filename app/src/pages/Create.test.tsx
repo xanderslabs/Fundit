@@ -22,6 +22,7 @@ const HASH = `0x${'ab'.repeat(32)}` as Hex
 
 const state: { sender: Sender | null } = { sender: null }
 vi.mock('../hooks/useSender', () => ({ useSender: () => state.sender }))
+vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: () => {} }) }))
 // What "Check again" gets back on the wallet path. The default throws so an unplanned re-check is loud.
 const recheck: { next: () => Promise<TxResult> } = { next: async () => { throw new Error('no re-check planned') } }
 vi.mock('../lib/sender', async (importOriginal) => ({
@@ -85,6 +86,35 @@ afterEach(() => {
   recheck.next = async () => {
     throw new Error('no re-check planned')
   }
+})
+
+describe('Create signed out', () => {
+  // Signed out, /create stays put and asks to sign in, so the form appears here once a wallet connects.
+  it('shows the sign-in screen and no form', () => {
+    renderCreate()
+    expect(screen.getByRole('heading', { level: 1, name: 'Sign in to start a fundraiser' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy()
+    expect(screen.queryByLabelText('Title')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Create fundraiser' })).toBeNull()
+  })
+
+  it('shows the form once signed in, without leaving /create', () => {
+    const view = renderCreate()
+    expect(screen.queryByLabelText('Title')).toBeNull()
+    fakeSender({ status: 'rejected', completed: 0 })
+    view.rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/create']}>
+          <Routes>
+            <Route path="/create" element={<Create />} />
+            <Route path="/c/:address" element={<CampaignStub />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    expect(screen.getByRole('heading', { level: 1, name: 'Start a fundraiser' })).toBeTruthy()
+    expect(screen.getByLabelText('Title')).toBeTruthy()
+  })
 })
 
 describe('Create', () => {

@@ -77,7 +77,7 @@ function renderIt() {
   )
 }
 
-const donateButton = () => screen.getByRole('button', { name: 'Donate' }) as HTMLButtonElement
+const donateButton = () => screen.getByRole('button', { name: 'Give' }) as HTMLButtonElement
 
 async function typeAndDonate(amount: string) {
   const user = userEvent.setup()
@@ -173,11 +173,11 @@ describe('UnifiedDonate', () => {
     renderIt()
     const user = await typeAndDonate('5')
     expect(await screen.findByText(/not confirmed yet/)).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Donate' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Give' })).toBeNull()
     await user.click(screen.getByRole('button', { name: 'Check again' }))
     await waitFor(() => expect(m.transfer).toHaveBeenCalledWith('t-9'))
     expect(await screen.findByText(/not confirmed yet/)).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Donate' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Give' })).toBeNull()
     expect(m.donate).toHaveBeenCalledTimes(1)
     expect(JSON.parse(localStorage.getItem('fundit.pendingBridges')!)[0]).toMatchObject({ kind: 'unified', amount: '5', transferId: 't-9' })
   })
@@ -192,7 +192,7 @@ describe('UnifiedDonate', () => {
     renderIt()
     await typeAndDonate('5')
     expect(await screen.findByText(/not confirmed yet/)).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Donate' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Give' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Check again' })).toBeNull()
     expect(screen.getByText(/raised amount and your unified balance/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Start over' })).toBeTruthy()
@@ -253,7 +253,7 @@ describe('UnifiedDonate', () => {
       silently({ kind: 'unified', amount: '9', transferId: 't-7' })
       window.dispatchEvent(new StorageEvent('storage', { key: 'fundit.pendingBridges' }))
       expect(await screen.findByText(/unified balance donation is not confirmed yet/)).toBeTruthy()
-      expect(screen.queryByRole('button', { name: 'Donate' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Give' })).toBeNull()
     })
   })
 
@@ -270,7 +270,7 @@ describe('UnifiedDonate', () => {
       m.transfer.mockResolvedValue({ status: 'failed' })
       renderIt()
       expect(screen.getByText(/not confirmed yet/)).toBeTruthy()
-      expect(screen.queryByRole('button', { name: 'Donate' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Give' })).toBeNull()
       await userEvent.setup().click(screen.getByRole('button', { name: 'Check again' }))
       expect(await screen.findByText(/Circle could not finish this transfer/)).toBeTruthy()
       expect(m.transfer).toHaveBeenCalledWith('t-3')
@@ -284,7 +284,7 @@ describe('UnifiedDonate', () => {
       expect(screen.getByText(/raised amount and your unified balance/)).toBeTruthy()
       expect(screen.queryByRole('button', { name: 'Check again' })).toBeNull()
       await userEvent.setup().click(screen.getByRole('button', { name: 'Start over' }))
-      expect(screen.getByRole('button', { name: 'Donate' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Give' })).toBeTruthy()
       expect(localStorage.getItem('fundit.pendingBridges')).toBeNull()
     })
   })
@@ -298,7 +298,7 @@ describe('UnifiedDonate', () => {
     await typeAndDonate('39')
     expect(await screen.findByText(/does not cover this amount plus Circle's fees/)).toBeTruthy()
     // Refused before Circle accepted anything, so the form opens again.
-    expect(screen.getByRole('button', { name: 'Donate' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Give' })).toBeTruthy()
     expect(localStorage.getItem('fundit.pendingBridges')).toBeNull()
   })
 })

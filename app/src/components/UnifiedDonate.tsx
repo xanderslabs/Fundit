@@ -34,7 +34,7 @@ import {
 const EXPLORER_URL = arc.blockExplorers.default.url
 const GATEWAY_DOCS = 'https://developers.circle.com/gateway'
 const NO_REFERENCE_NOTE =
-  "We have no reference from Circle to check this transfer. Look at the campaign's raised amount and your unified balance before you donate again."
+  "We have no reference from Circle to check this transfer. Look at the fundraiser's raised amount and your unified balance before you give again."
 
 type Phase =
   | { kind: 'idle' }
@@ -243,7 +243,7 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
 
   function startOver() {
     const ok = window.confirm(
-      'The earlier transfer may still go through. If it does and you donate again, you will give twice. Start a new donation anyway?',
+      'The earlier transfer may still go through. If it does and you give again, you will give twice. Start a new donation anyway?',
     )
     if (!ok) return
     clearPendingUnified(campaign)
@@ -314,7 +314,7 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
       </fieldset>
 
       <p className="hint">
-        The campaign gets the full amount. Circle's fees come out of your unified balance on top of it, so keep a little
+        The fundraiser gets the full amount. Circle's fees come out of your unified balance on top of it, so keep a little
         extra. Fundit's platform fee ({bpsToPercent(summary.donationFeeBps)}) applies once the donation is counted.
       </p>
       <p className="hint">
@@ -324,13 +324,13 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
 
       <div className="donate-status" aria-live="polite">
         {phase.kind === 'sending' && (
-          <p>Sign once in your wallet. Circle then sends the USDC to the campaign on Arc. This can take a few minutes.</p>
+          <p>Sign once in your wallet. Circle then sends the USDC to the fundraiser on Arc. This can take a few minutes.</p>
         )}
         {phase.kind === 'checking' && <p>Checking the transfer again...</p>}
         {phase.kind === 'success' && (
           <div className="status-box status-success">
             <p>
-              <strong>Thank you. Your donation reached the campaign.</strong>
+              <strong>Thank you. Your donation reached the fundraiser.</strong>
             </p>
             <p>
               <ExplorerLink hash={phase.hash} url={phase.explorerUrl} />
@@ -375,7 +375,7 @@ export function UnifiedDonate({ view, onBusyChange }: { view: CampaignView; onBu
 
       {phase.kind === 'timeout' ? null : (
         <button type="submit" className="btn btn-lg donate-submit" disabled={!canSubmit}>
-          {busy ? 'Donating...' : 'Donate'}
+          {busy ? 'Giving...' : 'Give'}
         </button>
       )}
     </form>

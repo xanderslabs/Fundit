@@ -6,7 +6,7 @@
 }
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 
   /* Brand, from the legacy CSS */
   --primary: #586283;
@@ -16,11 +16,18 @@
   --success: #19b820;
   --error: #ff3b30;
 
+  /* Darker shades of the brand colours, for text on white where the brand colour itself is below WCAG AA. */
+  --success-ink: #0f7a14;
+  --error-ink: #c0150b;
+
   --bg: #ffffff;
   --text: var(--ink);
   --muted: var(--primary);
   --card: var(--surface);
   --border: #d5dade;
+  --line: #e4e8eb;
+  --hover: #e2e6e9;
+  --shadow-pop: 0 14px 36px rgb(16 25 40 / 0.14), 0 2px 6px rgb(16 25 40 / 0.06);
 
   --font: 'Outfit', system-ui, sans-serif;
   --weight-regular: 400;
@@ -32,14 +39,4 @@
   --radius: 16px;
   --radius-pill: 999px;
   --page-width: 1200px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0b111c;
-    --text: #eceff1;
-    --muted: #a3abc4;
-    --card: #172131;
-    --border: #2a3547;
-  }
 }

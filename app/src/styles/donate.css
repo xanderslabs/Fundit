@@ -22,7 +22,6 @@
 }
 
 .donate-form input:not([type='radio']),
-.donate-form select,
 .donate-form textarea {
   flex: 1;
   min-width: 0;
@@ -39,13 +38,6 @@
 
 .donate-form textarea {
   resize: vertical;
-}
-
-.donate-form input:focus,
-.donate-form select:focus,
-.donate-form textarea:focus {
-  outline: 2px solid var(--primary);
-  outline-offset: 1px;
 }
 
 .donate-form [aria-invalid='true'] {
@@ -85,7 +77,11 @@
   width: 16px;
   height: 16px;
   margin: 0;
-  accent-color: var(--success);
+}
+
+.donate-option:has(input:checked) {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
 }
 
 .donate-fields:disabled .donate-option {

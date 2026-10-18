@@ -138,7 +138,7 @@ export function CrossChainDonate({
       <fieldset className="donate-fields" disabled={summary.closed || busy || blocked}>
         <div className="form-field">
           <label htmlFor="xchain-source">From</label>
-          <select id="xchain-source" value={sourceKey} onChange={(e) => setSourceKey(e.target.value as CctpChainKey)}>
+          <select id="xchain-source" className="select" value={sourceKey} onChange={(e) => setSourceKey(e.target.value as CctpChainKey)}>
             {CCTP_CHAINS.map((c) => (
               <option key={c.key} value={c.key}>
                 {CHAIN_LABELS[c.key]}
@@ -193,7 +193,7 @@ export function CrossChainDonate({
             <dd>{quote !== undefined ? formatExact(quote.fee, 'USDC') : fee.isError ? 'Not available' : 'Checking...'}</dd>
           </div>
           <div className="donate-total">
-            <dt>Reaches the campaign</dt>
+            <dt>Reaches the fundraiser</dt>
             {/* Bridge Kit's estimate is the most it will charge, so this is a floor. */}
             <dd>{reaches !== null && !tooSmall ? `At least ${formatExact(reaches, 'USDC')}` : '-'}</dd>
           </div>
@@ -215,7 +215,7 @@ export function CrossChainDonate({
         {phase.kind === 'sent' && (
           <div className="status-box status-success">
             <p>
-              <strong>Your USDC left {CHAIN_LABELS[phase.chain]}.</strong> Follow it on its way to the campaign below.
+              <strong>Your USDC left {CHAIN_LABELS[phase.chain]}.</strong> Follow it on its way to the fundraiser below.
             </p>
           </div>
         )}
@@ -228,11 +228,11 @@ export function CrossChainDonate({
 
       {blocked && !busy ? null : !wallet && !summary.closed ? (
         <button type="button" className="btn btn-lg donate-submit" onClick={() => open()}>
-          Connect wallet to donate
+          Sign in to give
         </button>
       ) : (
         <button type="submit" className="btn btn-lg donate-submit" disabled={!canSubmit}>
-          {busy ? 'Donating...' : 'Donate'}
+          {busy ? 'Giving...' : 'Give'}
         </button>
       )}
     </form>
@@ -251,7 +251,7 @@ function forCampaign(campaign: Address, kind: TrackerKind): (PendingCrossChain |
 // showing until dismissed. destination names the address in the text.
 export function PendingBridgeTracker({
   campaign,
-  destination = 'the campaign',
+  destination = 'the fundraiser',
   kind = 'donation',
 }: {
   campaign: Address
@@ -301,7 +301,7 @@ function rowText(entry: PendingBridge | PendingPayout, destination: string) {
     attested: 'Circle confirmed it. Arriving on Arc now.',
     waiting: `Waiting for ${CHAIN_LABELS[from.key]} to confirm it.`,
     explorer: from.viemChain.blockExplorers?.default.url,
-    thanks: destination === 'the campaign' ? ' Thank you.' : null,
+    thanks: destination === 'the fundraiser' ? ' Thank you.' : null,
   }
 }
 

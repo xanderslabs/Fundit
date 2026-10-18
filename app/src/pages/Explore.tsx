@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { CampaignGrid, LoadError } from '../components/CampaignGrid'
 import { campaignsQuery, PAGE_SIZE } from '../hooks/useCampaigns'
+import { useSender } from '../hooks/useSender'
 import { type CampaignView, uniqueByAddress } from '../lib/campaigns'
 
 type Sort = 'newest' | 'raised' | 'closest'
@@ -39,6 +40,7 @@ export function Explore() {
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<Sort>('newest')
   const [showClosed, setShowClosed] = useState(false)
+  const signedIn = useSender() !== null
 
   const results = useQueries({
     queries: Array.from({ length: pages }, (_, i) => campaignsQuery(BigInt(i) * PAGE_SIZE)),
@@ -66,7 +68,7 @@ export function Explore() {
     <>
       <section className="page-head">
         <h1>Explore fundraisers</h1>
-        <p className="muted">Every fundraiser here holds its donations in its own escrow on Arc.</p>
+        <p className="muted">Find a fundraiser you care about and help it reach its goal.</p>
       </section>
 
       <form className="filters" role="search" onSubmit={(e) => e.preventDefault()}>
@@ -81,7 +83,7 @@ export function Explore() {
         </label>
         <label className="field">
           <span className="sr-only">Sort by</span>
-          <select value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
+          <select className="select" value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
             {SORTS.map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}
@@ -104,12 +106,16 @@ export function Explore() {
           skeletons={9}
           empty={
             loaded.length === 0 ? (
-              <>
-                <p>No fundraisers yet.</p>
-                <Link to="/create" className="btn">
-                  Start the first one
-                </Link>
-              </>
+              signedIn ? (
+                <>
+                  <p>No fundraisers yet. Yours could be the first.</p>
+                  <Link to="/create" className="btn">
+                    Start a fundraiser
+                  </Link>
+                </>
+              ) : (
+                <p>No fundraisers yet. Sign in to start the first one.</p>
+              )
             ) : (
               <p>No fundraisers match. Try another search or show closed ones.</p>
             )
