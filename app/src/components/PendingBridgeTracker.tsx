@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import type { Address, Hex } from 'viem'
-import { CCTP_CHAINS, CHAIN_LABELS, EXPLORER_URL } from '../config'
+import { ARC_DOMAIN, CCTP_CHAINS, CHAIN_LABELS, EXPLORER_URL } from '../config'
 import {
   clearBridge,
   clearSubmitted,
@@ -29,13 +29,17 @@ function forCampaign(campaign: Address, kind: TrackerKind): (PendingCrossChain |
 
 // Cross-chain transfers to this address that have not reached it yet, or with kind 'payout', this campaign's
 // payouts on their way from Arc to another chain. Read from localStorage, so they survive a reload and keep
-// showing until dismissed. destination names the address in the text.
+// showing until dismissed. destination names the address in the text. account is the Fundit account that sent a
+// payout from Arc, for the explorer link once it is overdue; without it the entry's own address is linked (Send
+// money out saves the account there).
 export function PendingBridgeTracker({
   campaign,
+  account,
   destination = 'the Fundit',
   kind = 'donation',
 }: {
   campaign: Address
+  account?: Address
   destination?: string
   kind?: TrackerKind
 }) {
@@ -51,7 +55,7 @@ export function PendingBridgeTracker({
   return (
     <section className="bridge-tracker" aria-label={kind === 'payout' ? 'Payouts on the way' : 'Cross-chain transfers on the way'}>
       {entries.map((e) =>
-        e.kind === 'submitted' ? <SubmittedRow key={e.id} entry={e} /> : <BridgeRow key={e.burnTx} entry={e} destination={destination} />,
+        e.kind === 'submitted' ? <SubmittedRow key={e.id} entry={e} /> : <BridgeRow key={e.burnTx} entry={e} destination={destination} account={account ?? campaign} />,
       )}
     </section>
   )
@@ -86,7 +90,7 @@ function rowText(entry: PendingBridge | PendingPayout, destination: string) {
   }
 }
 
-function BridgeRow({ entry, destination }: { entry: PendingBridge | PendingPayout; destination: string }) {
+function BridgeRow({ entry, destination, account }: { entry: PendingBridge | PendingPayout; destination: string; account: Address }) {
   const { campaign, burnTx, srcDomain, createdAt } = entry
   const queryClient = useQueryClient()
   const overdue = () => Date.now() - createdAt > MAX_TRACK_MS
@@ -136,6 +140,12 @@ function BridgeRow({ entry, destination }: { entry: PendingBridge | PendingPayou
             {what} {text.arrived}
           </strong>
           {text.thanks}
+        </p>
+      ) : status === 'expired' && srcDomain === ARC_DOMAIN ? (
+        // Sent from the Fundit account on Arc: there is no other wallet to check, so link the account itself.
+        <p>
+          <strong>{what} has not been confirmed yet.</strong>{' '}
+          <AccountActivityLink account={account} />
         </p>
       ) : status === 'expired' ? (
         <>
@@ -196,6 +206,15 @@ function SubmittedRow({ entry }: { entry: PendingSubmitted }) {
         </div>
       )}
     </div>
+  )
+}
+
+function AccountActivityLink({ account }: { account: Address }) {
+  if (!EXPLORER_URL.startsWith('https://')) return null
+  return (
+    <a href={`${EXPLORER_URL}/address/${account}`} target="_blank" rel="noopener noreferrer">
+      See your Fundit account's activity on the Arc explorer.
+    </a>
   )
 }
 

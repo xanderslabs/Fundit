@@ -3,6 +3,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { getAddress, type Hex } from 'viem'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { EXPLORER_URL } from '../config'
 import { PendingBridgeTracker } from './PendingBridgeTracker'
 
 const CAMPAIGN = getAddress('0x00000000000000000000000000000000000000a1')
@@ -89,6 +90,43 @@ describe('PendingBridgeTracker', () => {
     expect(link.getAttribute('href')).toBe(`https://basescan.org/tx/${BURN}`)
     await new Promise((r) => setTimeout(r, 20))
     expect(fetchFn).toHaveBeenCalledTimes(1)
+  })
+
+  // Money that left from the person's own wallet on another chain: only that wallet's history shows what happened.
+  it('sends an overdue outside-wallet transfer to the wallet activity on its chain', () => {
+    localStorage.setItem(KEY, JSON.stringify([{ kind: 'submitted', id: 'a', campaign: CAMPAIGN, srcDomain: 6, amount: '25', createdAt: Date.now() - 2 * 60 * 60 * 1000 - 1 }]))
+    stubFetch(() => ({ messages: [] }))
+    wrap(<PendingBridgeTracker campaign={CAMPAIGN} />)
+    expect(screen.getByText(/Check your wallet's activity on Base/)).toBeTruthy()
+    expect(screen.queryByText(/Fundit account's activity/)).toBeNull()
+  })
+
+  // Money that left from the Fundit account on Arc: the person has no other wallet to check, so point to the
+  // account's own page on the Arc explorer.
+  it('sends an overdue transfer from Arc to the Fundit account on the Arc explorer', async () => {
+    const ACCOUNT = getAddress('0x00000000000000000000000000000000000000c3')
+    localStorage.setItem(
+      KEY,
+      JSON.stringify([{ kind: 'payout', campaign: CAMPAIGN, burnTx: BURN, srcDomain: 26, destDomain: 6, amount: '25', createdAt: Date.now() - 2 * 60 * 60 * 1000 - 1 }]),
+    )
+    stubFetch(() => ({ messages: [] }))
+    wrap(<PendingBridgeTracker campaign={CAMPAIGN} account={ACCOUNT} kind="payout" />)
+    expect(await screen.findByText('25 USDC to Base has not been confirmed yet.')).toBeTruthy()
+    const link = screen.getByRole('link', { name: "See your Fundit account's activity on the Arc explorer." })
+    expect(link.getAttribute('href')).toBe(`${EXPLORER_URL}/address/${ACCOUNT}`)
+    expect(screen.queryByText(/your wallet's activity/)).toBeNull()
+  })
+
+  // Send money out saves the account itself as the entry's address, so no separate account is needed.
+  it('links the entry address when no account is given', async () => {
+    localStorage.setItem(
+      KEY,
+      JSON.stringify([{ kind: 'payout', campaign: CAMPAIGN, burnTx: BURN, srcDomain: 26, destDomain: 6, amount: '25', createdAt: Date.now() - 2 * 60 * 60 * 1000 - 1 }]),
+    )
+    stubFetch(() => ({ messages: [] }))
+    wrap(<PendingBridgeTracker campaign={CAMPAIGN} kind="payout" />)
+    const link = await screen.findByRole('link', { name: /Fundit account's activity/ })
+    expect(link.getAttribute('href')).toBe(`${EXPLORER_URL}/address/${CAMPAIGN}`)
   })
 
   // A transfer that arrived while the tab was closed must not show as overdue, nor keep blocking donations.

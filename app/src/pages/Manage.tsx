@@ -381,7 +381,7 @@ function WithdrawSection({ view, sender }: { view: CampaignView; sender: Sender 
           </button>
         )}
       </form>
-      <PendingBridgeTracker campaign={campaign} kind="payout" />
+      <PendingBridgeTracker campaign={campaign} account={sender.address} kind="payout" />
     </section>
   )
 }
