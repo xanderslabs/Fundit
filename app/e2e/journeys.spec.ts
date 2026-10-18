@@ -215,8 +215,12 @@ test('gives anonymously with a message, and the activity shows Anonymous', async
   await expect(give.getByText(/Your balance: /)).toBeVisible()
   await give.getByRole('textbox', { name: 'Amount' }).fill(GIFT)
   await give.getByLabel('Message (optional)').fill(MESSAGE)
-  await give.getByLabel('Give anonymously').check()
+  // No tip: the gift checks below expect a zero tip.
+  await expect(give.getByRole('group', { name: 'Tip Fundit (optional)' }).getByRole('radio', { name: 'No tip' })).toBeChecked()
+  await give.getByRole('switch', { name: 'Hide my name' }).check()
   await expect(give.getByText(`${new TextEncoder().encode(MESSAGE).length} of 274 bytes`)).toBeVisible()
+  // The account's real reserve estimate, shown as the most the network fee can take.
+  await expect(give.getByLabel('Breakdown').getByText(/^up to \d+\.\d+ USDC$/)).toBeVisible()
   await give.getByRole('button', { name: 'Give', exact: true }).click()
   await settled(give, 'Thank you. Your donation went through.')
   const shownLink = await give.getByRole('link', { name: 'View it on the Arc explorer' }).getAttribute('href')
