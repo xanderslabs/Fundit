@@ -197,15 +197,17 @@ From [`contracts/deployments/arc-mainnet.json`](contracts/deployments/arc-mainne
 
 ### Arc testnet (chain ID `5042002`)
 
-The testnet factory is not deployed yet. When it is, its record goes in
-`contracts/deployments/arc-testnet.json` and these rows get filled. The explorer is
-`https://explorer.testnet.arc.io`.
+From `contracts/deployments/arc-testnet.json`. The explorer is `https://explorer.testnet.arc.io`.
 
 | Contract | Address |
 | --- | --- |
-| `CampaignFactory` | `TBD: not deployed on Arc testnet yet` |
-| `Campaign` implementation | `TBD: not deployed on Arc testnet yet` |
-| Deploy block | `TBD` |
+| `CampaignFactory` | [`0x6890D40a9A472D0d05aDb5938D85B07059ad54ab`](https://explorer.testnet.arc.io/address/0x6890D40a9A472D0d05aDb5938D85B07059ad54ab) |
+| `Campaign` implementation | [`0xC7109CAAA5375EE740b95a3DeE52c4C92A02Ba8E`](https://explorer.testnet.arc.io/address/0xC7109CAAA5375EE740b95a3DeE52c4C92A02Ba8E) |
+| Owner and treasury | [`0x3552E9c14C7b6050839009A5B160A4446a1e916D`](https://explorer.testnet.arc.io/address/0x3552E9c14C7b6050839009A5B160A4446a1e916D) |
+
+- Deploy block: `67870064` ([deploy transaction](https://explorer.testnet.arc.io/tx/0xbf0bbbbb106dbca7294a4e72a3ab1c153519b6c1269589684a45f55aaf80a728)). Set `VITE_FACTORY_DEPLOY_BLOCK` to this
+  value.
+- Fees: 1% on donations and 1% on withdrawals, the same as on mainnet.
 
 ### External contracts
 
@@ -303,8 +305,8 @@ tokens have no value. The unit tests use mocks, and the contract fork suite only
    `VITE_ALLOW_TESTNET_BUILD=1` is needed only for `npm run build`. The dev server accepts `testnet`
    without it.
 
-2. Fill in the factory values from [Arc testnet](#arc-testnet-chain-id-5042002). The testnet factory is
-   not deployed yet, so these two values have no source today.
+2. Fill in the factory values from [Arc testnet](#arc-testnet-chain-id-5042002):
+   `VITE_FACTORY_ADDRESS=0x6890D40a9A472D0d05aDb5938D85B07059ad54ab` and `VITE_FACTORY_DEPLOY_BLOCK=67870064`.
 3. Get testnet USDC from the [Circle faucet](https://faucet.circle.com) and send it to your Fundit
    account address in **Add money**.
 
@@ -312,7 +314,9 @@ tokens have no value. The unit tests use mocks, and the contract fork suite only
 
 The Playwright suite runs on Arc testnet with a virtual passkey. It signs up, saves a recovery key, adds
 money from a funder account, creates a Fundit, gives anonymously, withdraws and sends money out. A run
-costs about 2.5 testnet USDC. See [`app/e2e/README.md`](app/e2e/README.md).
+costs the funder about 2.2 to 2.5 testnet USDC. Most of that is gas: Circle's bundler prices each user
+operation at about 730 to 900 gwei, against an Arc base fee of about 20 gwei, and the first operation also
+deploys the account. See [`app/e2e/README.md`](app/e2e/README.md).
 
 ## Status and roadmap
 
@@ -320,7 +324,8 @@ costs about 2.5 testnet USDC. See [`app/e2e/README.md`](app/e2e/README.md).
 
 - Contracts: deployed on Arc mainnet and verified on Sourcify. See
   [Deployed addresses](#deployed-addresses). Tested with unit, fuzz, invariant and Arc mainnet fork tests.
-- Contracts on Arc testnet: not deployed yet.
+- Contracts on Arc testnet: deployed at block `67870064`. See
+  [Arc testnet](#arc-testnet-chain-id-5042002). The end-to-end suite runs on them.
 - App: live at [fundit.fun](https://fundit.fun) on Arc mainnet. Passkey-only sign-in (this branch)
   ships with the next release, once the `fundit.fun` Circle client key is set. Unit tests run with mocks.
 - `VITE_CROSSCHAIN`: off by default.

@@ -15,8 +15,8 @@ creator can withdraw, and anyone can audit every dollar.
 
 ## 0:30 to 1:45. Demo
 
-[Use a testnet build for any step that moves money. The banner reads "Test network". This demo needs
-the Arc testnet factory, which is not deployed yet.]
+[Use a testnet build for any step that moves money. The banner reads "Test network". The Arc testnet
+factory is at `0x6890D40a9A472D0d05aDb5938D85B07059ad54ab`.]
 
 [Open the home page.]
 
@@ -66,8 +66,8 @@ Fundit is built on Circle from the contract up:
   their Fundit account.
 - **Bridge Kit** brings USDC in from another chain when you add money. It's behind a flag.
 
-The app has an Arc testnet build setting. Every test that moves money will run on Arc testnet once the
-testnet factory is deployed. We'd rather under-claim than ship a path that strands a donation.
+The app has an Arc testnet build setting. The end-to-end tests run every money flow on Arc testnet with
+a real passkey sign-up. We'd rather under-claim than ship a path that strands a donation.
 
 ## 2:30 to 3:15. The trust model
 

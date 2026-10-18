@@ -17,7 +17,8 @@ results on Arc testnet with viem.
 5. Gives 0.2 USDC anonymously with a message. The activity must show "Anonymous" and the message, with no
    `[anon]` text. The `Donated` event must name the account and carry `[anon]` at the start of the message.
 6. Withdraws everything on Arc from **Manage** to the account.
-7. Sends the money out on Arc from **My page** back to the funder, keeping 0.35 USDC in the account.
+7. Sends the money out on Arc from **My page** back to the funder with **Max**. Max keeps back the
+   estimated prefund for the send, and the funder must receive exactly the Max amount.
 
 Each step prints the explorer link of its transaction, for example:
 
@@ -58,14 +59,17 @@ Playwright starts the Vite dev server on `http://localhost:5174`, which reads `a
 
 ## Cost
 
-A full run costs the funder about 2.3 to 2.5 USDC of testnet USDC. Two runs on 2026-10-18 cost 2.29 and
-2.47 USDC. The money goes to:
+A full run costs the funder about 2.2 to 2.5 testnet USDC. Green runs on 2026-10-18 cost 2.29, 2.47 and
+2.20 USDC. The money goes to:
 
-- Gas for five user operations, about 2.2 USDC. The first one also deploys the account, so it costs about
-  1.07 USDC. Circle's bundler prices user operations at its `medium` gas price, about 700 to 870 gwei on
-  Arc testnet, against a base fee of about 20 gwei.
-- What stays in the throwaway account: about 0.2 USDC, plus any prefund left in its EntryPoint deposit.
-  Nobody can spend it after the run, because the passkey goes away with the browser context.
+- Gas for five user operations, about 2.1 USDC. Circle's bundler prices user operations far above Arc's own
+  price: the app uses Circle's `low` tier, which charged 732 to 900 gwei per gas in the 2.20 USDC run,
+  against a base fee of about 20 gwei. The first operation (the recovery key) also deploys the account and
+  costs about 0.96 to 1.07 USDC. Creating the Fundit costs about 0.46, the gift about 0.28, the withdrawal
+  about 0.20 and the send about 0.18.
+- What stays in the throwaway account: about 0.06 USDC, plus about 0.05 USDC of prefund left in its
+  EntryPoint deposit. Nobody can spend it after the run, because the passkey goes away with the browser
+  context.
 - The 1% donation and withdrawal fees on the 0.2 USDC gift, and the funder's own transfer gas.
 
 A run that fails part way leaves the rest of the 3 USDC in that account, and nobody can recover it. The funder
@@ -74,9 +78,6 @@ and after.
 
 ## Limits
 
-- **Send money out** uses a typed amount, not **Max**. Max keeps only the 0.05 USDC gas reserve, and the
-  EntryPoint takes the user operation's prefund (about 0.22 USDC) before the transfer runs, so a Max send
-  reverts with `ERC20: transfer amount exceeds balance`.
 - The passkey name is `e2e-<milliseconds>`. Circle accepts 5 to 50 characters from `A-Z`, `a-z`, `0-9` and
   `_@.:+-` only.
 - The suite does not cover Add money from a connected wallet (AppKit) or from another chain.

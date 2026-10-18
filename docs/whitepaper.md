@@ -242,10 +242,10 @@ second address that controls the same asset.
   support.
 - **Static analysis.** Slither, with every accepted finding listed in `contracts/SECURITY.md`.
 - **Arc testnet.** The app has an Arc testnet build setting. A build with `VITE_ARC_NETWORK=testnet`
-  reads every address and URL for testnet, and refuses to run on `fundit.fun`. Every end-to-end test
-  and every test that moves money will run on Arc testnet once the testnet factory is deployed. Until
-  then, the end-to-end specs are skipped. They will sign up with a virtual passkey and run each money
-  flow on testnet.
+  reads every address and URL for testnet, and refuses to run on `fundit.fun`. The end-to-end suite
+  runs on Arc testnet against the testnet factory. It signs up with a virtual passkey through Circle's
+  real flow and runs each money flow: add money, create, give anonymously, withdraw and send money out.
+  It checks every result on chain.
 
 The contracts have not had a third-party audit. A grant would fund one (section 10).
 
@@ -265,7 +265,7 @@ As of October 2026:
 - Contracts: deployed on Arc mainnet and verified on Sourcify (exact match). They are not verified on
   the Arc explorer, which blocks automated verification. The addresses and deploy block are in the
   table below.
-- Contracts on Arc testnet: not deployed yet. Addresses: `TBD`.
+- Contracts on Arc testnet: deployed at block `67870064`. The addresses are in the table below.
 - App: `fundit.fun` runs on Arc mainnet. Passkey sign-in ships with the next release, once the
   `fundit.fun` Circle client key is set. In that release, sign-in is passkey only. Add money from
   another chain is behind `VITE_CROSSCHAIN`.
@@ -279,11 +279,19 @@ Arc mainnet contracts (deploy block `26452579`):
 | `Campaign` implementation | [`0x083CE7a68Ae418f832E12c2aB976615237e03853`](https://explorer.arc.io/address/0x083CE7a68Ae418f832E12c2aB976615237e03853) |
 | Owner and treasury | [`0x3552E9c14C7b6050839009A5B160A4446a1e916D`](https://explorer.arc.io/address/0x3552E9c14C7b6050839009A5B160A4446a1e916D) |
 
+Arc testnet contracts (deploy block `67870064`):
+
+| Contract | Address |
+| --- | --- |
+| `CampaignFactory` | [`0x6890D40a9A472D0d05aDb5938D85B07059ad54ab`](https://explorer.testnet.arc.io/address/0x6890D40a9A472D0d05aDb5938D85B07059ad54ab) |
+| `Campaign` implementation | [`0xC7109CAAA5375EE740b95a3DeE52c4C92A02Ba8E`](https://explorer.testnet.arc.io/address/0xC7109CAAA5375EE740b95a3DeE52c4C92A02Ba8E) |
+| Owner and treasury | [`0x3552E9c14C7b6050839009A5B160A4446a1e916D`](https://explorer.testnet.arc.io/address/0x3552E9c14C7b6050839009A5B160A4446a1e916D) |
+
 ## 9. Launch plan
 
-1. Deploy the factory to Arc testnet and record its address.
-2. Run the end-to-end specs on Arc testnet with a virtual passkey: sign up, save a recovery key, add
-   money, create a fundraiser, give, withdraw and send money out.
+1. Done: deploy the factory to Arc testnet and record its address.
+2. Done: run the end-to-end specs on Arc testnet with a virtual passkey: sign up, save a recovery key,
+   add money, create a fundraiser, give, withdraw and send money out.
 3. Run a manual passkey check on a testnet build.
 4. Set the `fundit.fun` client key and release passkey sign-in on `fundit.fun`.
 

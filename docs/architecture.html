@@ -82,7 +82,7 @@
     <p class="lede">Every fundraiser is its own escrow contract on Arc. In the next release, people sign in with a Fundit account, a passkey smart account. Donations arrive in USDC or EURC, the creator withdraws to Arc or to another CCTP chain, and no operator key can move a creator's balance.</p>
   </header>
 
-  <div class="note prose"><strong>Live on Arc mainnet.</strong> fundit.fun runs on Arc mainnet, and the factory and implementation are deployed. Passkey sign-in ships with the next release. See <a href="#deployed">Deployed contracts</a>. The app has an Arc testnet build setting. Every test that moves money will run on Arc testnet once the testnet factory is deployed.</div>
+  <div class="note prose"><strong>Live on Arc mainnet.</strong> fundit.fun runs on Arc mainnet, and the factory and implementation are deployed. Passkey sign-in ships with the next release. See <a href="#deployed">Deployed contracts</a>. The app has an Arc testnet build setting, and the end-to-end suite runs every money flow on Arc testnet against the testnet factory.</div>
 
   <section aria-labelledby="flow">
     <h2 id="flow">Money flow</h2>
@@ -215,14 +215,14 @@
 
   <section aria-labelledby="deployed">
     <h2 id="deployed">Deployed contracts</h2>
-    <p class="prose">Arc mainnet, chain ID <code>5042</code>, from <code>contracts/deployments/arc-mainnet.json</code>. Deploy block <code>26452579</code>. Both contracts are an exact match on Sourcify.</p>
+    <p class="prose">Arc mainnet, chain ID <code>5042</code>, from <code>contracts/deployments/arc-mainnet.json</code>. Deploy block <code>26452579</code>. Both contracts are an exact match on Sourcify. Arc testnet, chain ID <code>5042002</code>, from <code>contracts/deployments/arc-testnet.json</code>: deploy block <code>67870064</code>.</p>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Contract</th><th>Arc mainnet</th><th>Arc testnet</th></tr></thead>
         <tbody>
-          <tr><td>CampaignFactory</td><td><a href="https://explorer.arc.io/address/0xf1b2AEF82c37fC41D254D8e06BD7780ce34617d9"><code>0xf1b2AEF82c37fC41D254D8e06BD7780ce34617d9</code></a></td><td>Not deployed yet (TBD)</td></tr>
-          <tr><td>Campaign implementation</td><td><a href="https://explorer.arc.io/address/0x083CE7a68Ae418f832E12c2aB976615237e03853"><code>0x083CE7a68Ae418f832E12c2aB976615237e03853</code></a></td><td>Not deployed yet (TBD)</td></tr>
-          <tr><td>Owner and treasury</td><td><a href="https://explorer.arc.io/address/0x3552E9c14C7b6050839009A5B160A4446a1e916D"><code>0x3552E9c14C7b6050839009A5B160A4446a1e916D</code></a></td><td>TBD</td></tr>
+          <tr><td>CampaignFactory</td><td><a href="https://explorer.arc.io/address/0xf1b2AEF82c37fC41D254D8e06BD7780ce34617d9"><code>0xf1b2AEF82c37fC41D254D8e06BD7780ce34617d9</code></a></td><td><a href="https://explorer.testnet.arc.io/address/0x6890D40a9A472D0d05aDb5938D85B07059ad54ab"><code>0x6890D40a9A472D0d05aDb5938D85B07059ad54ab</code></a></td></tr>
+          <tr><td>Campaign implementation</td><td><a href="https://explorer.arc.io/address/0x083CE7a68Ae418f832E12c2aB976615237e03853"><code>0x083CE7a68Ae418f832E12c2aB976615237e03853</code></a></td><td><a href="https://explorer.testnet.arc.io/address/0xC7109CAAA5375EE740b95a3DeE52c4C92A02Ba8E"><code>0xC7109CAAA5375EE740b95a3DeE52c4C92A02Ba8E</code></a></td></tr>
+          <tr><td>Owner and treasury</td><td><a href="https://explorer.arc.io/address/0x3552E9c14C7b6050839009A5B160A4446a1e916D"><code>0x3552E9c14C7b6050839009A5B160A4446a1e916D</code></a></td><td><a href="https://explorer.testnet.arc.io/address/0x3552E9c14C7b6050839009A5B160A4446a1e916D"><code>0x3552E9c14C7b6050839009A5B160A4446a1e916D</code></a></td></tr>
         </tbody>
       </table>
     </div>
