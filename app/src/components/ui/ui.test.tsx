@@ -6,7 +6,7 @@ import { useState } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../App'
-import { AddressChip, AmountInput, Button, Dialog, Field, Stat, TabPanel, Tabs } from './index'
+import { AddressChip, AmountInput, Button, Card, Dialog, Field, Stat, TabPanel, Tabs } from './index'
 
 // Only the routing matters for the style guide check, so the real layout (wallet code, top bar) stays out.
 vi.mock('../Layout', async () => {
@@ -265,6 +265,31 @@ describe('ui components', () => {
     // Figures are weight 700 with no letter spacing, never the display weights.
     expect(rule?.body).toMatch(/font-weight\s*:\s*var\(--weight-bold\)/)
     expect(rule?.body).toMatch(/letter-spacing\s*:\s*var\(--tracking-body\)/)
+  })
+
+  // Balances sit in a <dl>, so the currency is the term for its amount. The figure must still show above the label.
+  it('Stat term renders the label as dt and the figure as dd, figure first', () => {
+    render(
+      <dl>
+        <Stat term value="12.50" label="USDC" size="lg" />
+      </dl>,
+    )
+    expect(screen.getByRole('term').textContent).toBe('USDC')
+    const value = screen.getByRole('definition')
+    expect(value.textContent).toBe('12.50')
+    expect(value.classList.contains('ui-stat-value')).toBe(true)
+    const rule = parse(css('Stat.css')).rules.find((r) => r.selector === '.ui-stat-label')
+    expect(rule?.body).toMatch(/order\s*:\s*1/)
+  })
+
+  // A named Card section is a region landmark, so screen reader users (and tests) can find it by name.
+  it('Card label names the card as a region', () => {
+    render(
+      <Card label="Your Fundit account">
+        <p>Inside</p>
+      </Card>,
+    )
+    expect(screen.getByRole('region', { name: 'Your Fundit account' }).textContent).toBe('Inside')
   })
 
   // A short address is easier to read, but a copy must always give the full address, or money goes astray.

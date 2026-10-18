@@ -18,10 +18,15 @@
   line-height: var(--text-sm-line);
 }
 
-.dash-note a {
+.dash-note a,
+.dash-link {
   color: var(--text);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+.dash-link {
+  font-weight: var(--weight-medium);
 }
 
 /* The account card: name and address, the two balances, then Add money and Send. */
@@ -180,11 +185,4 @@
   .account-card-actions .ui-btn {
     flex: 1 1 100%;
   }
-}
-
-.dash-link {
-  color: var(--text);
-  font-weight: var(--weight-medium);
-  text-decoration: underline;
-  text-underline-offset: 2px;
 }

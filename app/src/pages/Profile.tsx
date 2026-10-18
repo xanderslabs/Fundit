@@ -101,7 +101,8 @@ function YourFundits({ address }: { address: Address }) {
               <ShareDialog address={v.address} title={v.summary.meta.title} isCreator />
             </>
           )}
-          empty={<EmptyState>You have not started a Fundit yet.</EmptyState>}
+          // The branch above shows the empty state, so CampaignGrid's own (boxed) one is never used here.
+          empty={null}
         />
       )}
     </div>
@@ -250,6 +251,7 @@ function BalanceCard({
         <p className="account-card-name">{username ?? 'Fundit account'}</p>
         <AddressChip address={address} />
       </div>
+      {/* dash-balances has no styles: the e2e reads the balance through it. */}
       <dl className="dash-balances account-card-balances" aria-live="polite">
         <Stat term size="lg" label="USDC" value={amount(balances.data?.usdc, 'USDC')} />
         <Stat term size="lg" label="EURC" value={amount(balances.data?.eurc, 'EURC')} />

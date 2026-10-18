@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -181,7 +182,9 @@ describe('My page balance card', () => {
     const card = screen.getByRole('region', { name: 'Your Fundit account' })
     expect(card.classList.contains('ui-card-raised')).toBe(true)
     expect(card.className).not.toMatch(/gradient|dash-card/)
-    for (const path of ['src/pages/Profile.css', 'src/components/ui/Card.css']) expect(readFileSync(path, 'utf8')).not.toMatch(/gradient/)
+    for (const path of ['./Profile.css', '../components/ui/Card.css']) {
+      expect(readFileSync(fileURLToPath(new URL(path, import.meta.url)), 'utf8')).not.toMatch(/gradient/)
+    }
     expect(await within(card).findByText('12.50')).toBeTruthy()
     const stats = [...card.querySelectorAll('.ui-stat')]
     expect(stats).toHaveLength(2)
