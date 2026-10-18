@@ -5,6 +5,7 @@ import { TX_TIMEOUT_MS } from '../config'
 import { pickWallet, setActiveWallet, useSender, useWalletChoice } from '../hooks/useSender'
 import {
   addBackupPasskey,
+  checkPendingBackup,
   clearPasskeySession,
   dismissBackupPrompt,
   loginPasskey,
@@ -13,6 +14,7 @@ import {
   type PasskeyBundler,
   passkeySender,
   readPasskeySession,
+  readPendingBackup,
   registerPasskey,
   savePasskeySession,
   storedPasskeySender,
@@ -33,14 +35,16 @@ vi.mock('../config', async (importOriginal) => ({
 const kit = vi.hoisted(() => {
   const bundler = { waitForUserOperationReceipt: vi.fn(), estimateUserOperationGas: vi.fn(), sendUserOperation: vi.fn() }
   const registerRecoveryAddress = vi.fn()
+  const estimateRegisterRecoveryAddressGas = vi.fn()
   return {
     bundler,
     registerRecoveryAddress,
+    estimateRegisterRecoveryAddressGas,
     generateMnemonic: vi.fn(() => 'one two three four five six seven eight nine ten eleven twelve'),
     english: [],
     mnemonicToAccount: vi.fn(() => ({ address: '0x00000000000000000000000000000000000000Ee' })),
     sdk: {
-      recoveryActions: vi.fn(() => ({ registerRecoveryAddress })),
+      recoveryActions: vi.fn(() => ({ registerRecoveryAddress, estimateRegisterRecoveryAddressGas })),
       toWebAuthnCredential: vi.fn(async () => ({ id: 'cred-live', publicKey: '0x', raw: {} })),
       toPasskeyTransport: vi.fn(() => ({})),
       toModularTransport: vi.fn(() => ({})),
@@ -317,39 +321,112 @@ describe('backup prompt', () => {
 
 describe('addBackupPasskey', () => {
   const stored = { address: getAddress('0x00000000000000000000000000000000000000cc') as Address, credentialId: 'cred-live' }
+  const PHRASE = 'one two three four five six seven eight nine ten eleven twelve'
+  const saved = () => localStorage.getItem('fundit.backup.0x00000000000000000000000000000000000000cc') === '1'
 
   beforeEach(() => {
     balance.value = 1_000_000n
     kit.registerRecoveryAddress.mockReset()
     kit.registerRecoveryAddress.mockResolvedValue(OP_HASH)
+    kit.estimateRegisterRecoveryAddressGas.mockReset()
+    kit.estimateRegisterRecoveryAddressGas.mockResolvedValue(GAS)
+    kit.bundler.waitForUserOperationReceipt.mockReset()
     kit.bundler.waitForUserOperationReceipt.mockResolvedValue(receipt(true))
+    kit.sdk.toWebAuthnCredential.mockClear()
   })
+  afterEach(() => localStorage.clear())
 
   it('makes a 12-word recovery phrase', async () => {
     expect((await newRecoveryPhrase()).split(' ')).toHaveLength(12)
   })
 
-  // Circle's recovery support: the phrase's address becomes a recovery owner of the account. No paymaster: the
-  // account pays the gas, and the call only counts once the user operation succeeds.
-  it('registers the phrase address as the recovery address with no paymaster', async () => {
-    await addBackupPasskey(stored, 'one two three')
-    expect(kit.mnemonicToAccount).toHaveBeenCalledWith('one two three')
+  // Circle's recovery support: the phrase's address becomes an owner of the account. No paymaster: the account
+  // pays the gas, with the same call gas margin as every other send. Saved only once the operation succeeds.
+  it('registers the phrase address with the gas margin and no paymaster, then marks the backup saved', async () => {
+    expect(await addBackupPasskey(stored, PHRASE)).toBe('added')
+    expect(kit.mnemonicToAccount).toHaveBeenCalledWith(PHRASE)
     expect(kit.registerRecoveryAddress).toHaveBeenCalledTimes(1)
     const args = kit.registerRecoveryAddress.mock.calls[0]![0]
     expect(args.recoveryAddress).toBe('0x00000000000000000000000000000000000000Ee')
     expect(args.account.address).toBe('0x00000000000000000000000000000000000000cc')
     expect(args.paymaster).toBeUndefined()
+    expect(args).toMatchObject({ callGasLimit: 125_003n, preVerificationGas: 50_000n, verificationGasLimit: 70_000n })
+    expect(saved()).toBe(true)
+    expect(readPendingBackup(stored.address)).toBeNull()
   })
 
   // The gas comes out of the account's USDC. Below the buffer the bundler would refuse with a code nobody can read.
   it('refuses with a plain message when the account cannot pay the gas', async () => {
     balance.value = 49_999n
-    await expect(addBackupPasskey(stored, 'one two three')).rejects.toThrow('Add at least 0.05 USDC')
+    await expect(addBackupPasskey(stored, PHRASE)).rejects.toThrow('Add at least 0.05 USDC')
     expect(kit.registerRecoveryAddress).not.toHaveBeenCalled()
   })
 
-  it('fails when the user operation reverts', async () => {
+  it('fails when the user operation reverts, and marks nothing saved', async () => {
     kit.bundler.waitForUserOperationReceipt.mockResolvedValue(receipt(false))
-    await expect(addBackupPasskey(stored, 'one two three')).rejects.toThrow()
+    await expect(addBackupPasskey(stored, PHRASE)).rejects.toThrow('The backup did not go through.')
+    expect(saved()).toBe(false)
+    expect(readPendingBackup(stored.address)).toBeNull()
+  })
+
+  // A backup that may still land must never be followed by a second one with other words: that would leave an
+  // owner nobody holds the words for. Only the account and the hash are stored, never the words.
+  it('keeps a timed-out backup pending, blocks a new one, and resolves it with recheck, not a resend', async () => {
+    kit.bundler.waitForUserOperationReceipt.mockRejectedValueOnce(new Error('slow'))
+    expect(await addBackupPasskey(stored, PHRASE)).toBe('pending')
+    const pending = readPendingBackup(stored.address)
+    expect(pending).toMatchObject({ account: stored.address, hash: OP_HASH, hashKind: 'userop' })
+    for (let i = 0; i < localStorage.length; i++) {
+      expect(localStorage.getItem(localStorage.key(i)!)).not.toContain('twelve')
+    }
+    await expect(addBackupPasskey(stored, PHRASE)).rejects.toThrow('still confirming')
+    expect(kit.registerRecoveryAddress).toHaveBeenCalledTimes(1)
+
+    clearPasskeySession()
+    kit.sdk.toWebAuthnCredential.mockClear()
+    expect(await checkPendingBackup(stored)).toBe('added')
+    expect(kit.sdk.toWebAuthnCredential).not.toHaveBeenCalled()
+    expect(kit.registerRecoveryAddress).toHaveBeenCalledTimes(1)
+    expect(readPendingBackup(stored.address)).toBeNull()
+    expect(saved()).toBe(true)
+  })
+
+  it('clears a pending backup that reverted, so a new one can start', async () => {
+    kit.bundler.waitForUserOperationReceipt.mockRejectedValueOnce(new Error('slow'))
+    await addBackupPasskey(stored, PHRASE)
+    kit.bundler.waitForUserOperationReceipt.mockResolvedValue(receipt(false))
+    await expect(checkPendingBackup(stored)).rejects.toThrow('The backup did not go through.')
+    expect(readPendingBackup(stored.address)).toBeNull()
+    expect(saved()).toBe(false)
+  })
+
+  // addOwners reverts InvalidOwner for an address that is already an owner. With the same words that means an
+  // earlier attempt landed, so a retry reports success instead of an error.
+  it('reports success when the recovery address is already an owner', async () => {
+    kit.estimateRegisterRecoveryAddressGas.mockRejectedValue(new Error('UserOperation reverted during simulation with reason: 0xb7ed090c000000'))
+    expect(await addBackupPasskey(stored, PHRASE)).toBe('added')
+    expect(kit.registerRecoveryAddress).not.toHaveBeenCalled()
+    expect(saved()).toBe(true)
+  })
+})
+
+describe('interrupted sign-up and the backup prompt', () => {
+  afterEach(() => localStorage.clear())
+
+  // The account is not known as new when sign-up failed, so the dialog does not appear after the following
+  // login. My page still asks for the backup. Accepted behaviour, pinned here.
+  it('does not show the new-account prompt after an interrupted register and a login, but My page still asks', async () => {
+    const { result } = renderHook(() => {
+      const stored = usePasskeySession()
+      return { needed: useBackupNeeded(stored), prompt: useBackupPrompt(stored) }
+    })
+    kit.sdk.toCircleSmartAccount.mockRejectedValueOnce(new Error('network down'))
+    await act(async () => {
+      await expect(registerPasskey('ana')).rejects.toThrow('network down')
+    })
+    await act(async () => {
+      await loginPasskey()
+    })
+    expect(result.current).toEqual({ needed: true, prompt: false })
   })
 })

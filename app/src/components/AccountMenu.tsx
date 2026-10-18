@@ -1,5 +1,5 @@
 import { useAppKit } from '@reown/appkit/react'
-import { type KeyboardEvent, type ReactNode, type Ref, type RefObject, useEffect, useId, useRef, useState } from 'react'
+import { type KeyboardEvent, type ReactNode, type Ref, type RefObject, useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import type { Address } from 'viem'
 import { useDisconnect } from 'wagmi'
@@ -59,8 +59,18 @@ export function SignInButton(props: SignInProps) {
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
 
 // A modal dialog. Focus moves to its first control and stays inside: Tab wraps at the ends. Escape, a click on
-// the backdrop and the Close button all call onClose.
-function ModalDialog({ labelledBy, onClose, children }: { labelledBy: string; onClose: () => void; children: ReactNode }) {
+// the backdrop and the Close button all call onClose, unless canClose returns false.
+function ModalDialog({
+  labelledBy,
+  onClose,
+  canClose,
+  children,
+}: {
+  labelledBy: string
+  onClose: () => void
+  canClose?: () => boolean
+  children: ReactNode
+}) {
   const dialog = useRef<HTMLDialogElement>(null)
 
   useEffect(() => {
@@ -73,6 +83,7 @@ function ModalDialog({ labelledBy, onClose, children }: { labelledBy: string; on
 
   // The native dialog is closed first, so the page behind is no longer inert when focus goes back to it.
   function close() {
+    if (canClose && !canClose()) return
     const d = dialog.current
     if (d?.open && typeof d.close === 'function') d.close()
     onClose()
@@ -203,11 +214,22 @@ function SignInDialog({ className, label, onStart, onDismiss, onPasskeyDone, but
 }
 
 // Right after sign-up: the backup prompt as a dialog over whatever page the person is on.
+// Closing while the words are on screen asks first. Leaving drops the words.
 function BackupDialog({ stored }: { stored: StoredPasskey }) {
   const headingId = useId()
+  const guard = useRef<string | null>(null)
+  const onGuardChange = useCallback((message: string | null) => {
+    guard.current = message
+  }, [])
   return (
-    <ModalDialog labelledBy={headingId} onClose={dismissBackupPrompt}>
-      <AddBackupPasskey stored={stored} headingId={headingId} onLater={dismissBackupPrompt} />
+    <ModalDialog labelledBy={headingId} onClose={dismissBackupPrompt} canClose={() => !guard.current || window.confirm(guard.current)}>
+      <AddBackupPasskey
+        stored={stored}
+        headingId={headingId}
+        onLater={dismissBackupPrompt}
+        onDone={dismissBackupPrompt}
+        onGuardChange={onGuardChange}
+      />
     </ModalDialog>
   )
 }

@@ -28,6 +28,8 @@ vi.mock('../lib/passkey', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/passkey')>()),
   usePasskeySession: () => (backup.needed ? { address: '0x00000000000000000000000000000000000000cC', credentialId: 'c' } : null),
   useBackupNeeded: () => backup.needed,
+  useBackupPending: () => false,
+  canPayBackupGas: async () => true,
 }))
 
 afterEach(() => {
@@ -54,15 +56,15 @@ describe('Profile', () => {
     backup.needed = true
     state.sender = { kind: 'passkey', address: '0x00000000000000000000000000000000000000cC', send: vi.fn() }
     renderProfile()
-    expect(screen.getByRole('heading', { name: 'Add a backup' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Add a backup' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Add a recovery key' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Show my recovery key' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Later' })).toBeNull()
   })
 
   it('shows no backup prompt once a backup exists', () => {
     state.sender = { kind: 'passkey', address: '0x00000000000000000000000000000000000000cC', send: vi.fn() }
     renderProfile()
-    expect(screen.queryByRole('heading', { name: 'Add a backup' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Add a recovery key' })).toBeNull()
   })
 
   // With no wallet there is no address to look up, so the page asks to connect instead of loading forever.

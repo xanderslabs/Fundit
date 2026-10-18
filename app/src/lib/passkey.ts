@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { type Address, type Hex, isAddress, type TransactionReceipt, type Transport } from 'viem'
+import { type Address, type Hex, isAddress, toFunctionSelector, type TransactionReceipt, type Transport } from 'viem'
 import { arc } from 'viem/chains'
 import { erc20Abi } from '../abi/erc20'
 import { CIRCLE_CLIENT_KEY, MODULAR_WALLETS_URL, PASSKEY_GAS_BUFFER, PASSKEYS_ENABLED, TOKENS, TX_TIMEOUT_MS } from '../config'
@@ -290,28 +290,60 @@ export function storedPasskeySender(stored: StoredPasskey): Sender {
 // (Circle's recovery support: the key's address becomes an extra owner of the account). The app cannot read
 // that back from Circle, so "saved" is remembered per account in this browser.
 const BACKUP_KEY = 'fundit.backup.'
+// A backup user operation that was sent but not confirmed yet. Only the account and the hash, never the words.
+const PENDING_KEY = 'fundit.backup.pending.'
 // The account created on this page load, until the person picks Later. Never stored.
 let newAccount: string | null = null
 // Accounts marked saved on this page load, for when storage throws.
 const savedThisLoad = new Set<string>()
 
+export type PendingBackup = { account: Address; hash: Hex; hashKind: 'userop'; createdAt: number }
+
 function backupSaved(address: Address): boolean {
   const a = address.toLowerCase()
   try {
-    return localStorage.getItem(BACKUP_KEY + a) === '1' || savedThisLoad.has(a)
+    return localStorage.getItem(BACKUP_KEY + a) === '1'
   } catch {
     return savedThisLoad.has(a)
   }
 }
 
-// The person confirmed they wrote the recovery key down.
+// The recovery key is on the account.
 export function markBackupSaved(address: Address) {
   const a = address.toLowerCase()
-  savedThisLoad.add(a)
   try {
     localStorage.setItem(BACKUP_KEY + a, '1')
   } catch {
     // Storage is unavailable. My page asks again after a reload.
+    savedThisLoad.add(a)
+  }
+  notify()
+}
+
+export function readPendingBackup(address: Address): PendingBackup | null {
+  try {
+    const x = JSON.parse(localStorage.getItem(PENDING_KEY + address.toLowerCase()) ?? 'null') as Partial<PendingBackup> | null
+    if (!x || typeof x.hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(x.hash) || typeof x.account !== 'string') return null
+    return { account: x.account, hash: x.hash, hashKind: 'userop', createdAt: Number(x.createdAt) || 0 }
+  } catch {
+    return null
+  }
+}
+
+function savePendingBackup(p: PendingBackup) {
+  try {
+    localStorage.setItem(PENDING_KEY + p.account.toLowerCase(), JSON.stringify(p))
+  } catch {
+    // Without storage the pending backup is only known while the words are on screen.
+  }
+  notify()
+}
+
+function clearPendingBackup(address: Address) {
+  try {
+    localStorage.removeItem(PENDING_KEY + address.toLowerCase())
+  } catch {
+    // Nothing stored to clear.
   }
   notify()
 }
@@ -334,39 +366,98 @@ export function useBackupPrompt(stored: StoredPasskey | null): boolean {
   return useSyncExternalStore(subscribe, get, () => false)
 }
 
-// 12 words from the browser's secure random source. They are shown to the person once and never stored.
+// True while a sent backup has not confirmed. No new backup starts until it does.
+export function useBackupPending(stored: StoredPasskey | null): boolean {
+  const get = () => stored !== null && readPendingBackup(stored.address) !== null
+  return useSyncExternalStore(subscribe, get, () => false)
+}
+
+// 12 words from the browser's secure random source. They live only in the backup dialog's memory.
 export async function newRecoveryPhrase(): Promise<string> {
   const kit = await import('./passkeyKit')
   return kit.generateMnemonic(kit.english)
 }
 
-// Registers the recovery phrase's address as a recovery owner of the account, with Circle's
-// registerRecoveryAddress. The account pays the gas in USDC (no paymaster), so it needs the gas buffer first.
-export async function addBackupPasskey(stored: StoredPasskey, recoveryPhrase: string): Promise<void> {
-  const usdc = await arcClient.readContract({ address: TOKENS.USDC.address, abi: erc20Abi, functionName: 'balanceOf', args: [stored.address] })
-  if (usdc < PASSKEY_GAS_BUFFER) {
+// True when the account holds enough USDC to pay the backup's network fee.
+export async function canPayBackupGas(address: Address): Promise<boolean> {
+  const usdc = await arcClient.readContract({ address: TOKENS.USDC.address, abi: erc20Abi, functionName: 'balanceOf', args: [address] })
+  return usdc >= PASSKEY_GAS_BUFFER
+}
+
+// The weighted multisig plugin reverts addOwners for an address that is already an owner with
+// InvalidOwner(bytes30) (BaseWeightedMultisigPlugin._addOwners in circlefin/buidl-wallet-contracts). For the
+// same recovery address that means an earlier backup already landed.
+const INVALID_OWNER = toFunctionSelector('InvalidOwner(bytes30)')
+export function isAlreadyOwner(e: unknown): boolean {
+  let cur = e
+  for (let i = 0; cur && typeof cur === 'object' && i < 20; i++) {
+    const x = cur as { message?: unknown; details?: unknown; data?: unknown; cause?: unknown }
+    const data = typeof x.data === 'object' && x.data !== null ? (x.data as { data?: unknown }).data : x.data
+    for (const v of [x.message, x.details, data]) {
+      if (typeof v === 'string' && v.toLowerCase().includes(INVALID_OWNER)) return true
+    }
+    cur = x.cause
+  }
+  return false
+}
+
+export type BackupStatus = 'added' | 'pending'
+
+// Registers the recovery phrase's address as an owner of the account, with Circle's registerRecoveryAddress.
+// The account pays the gas in USDC (no paymaster). 'pending' means the operation was sent but not confirmed in
+// time: it is saved, and checkPendingBackup finds out later. Only the derived address leaves the browser.
+export async function addBackupPasskey(stored: StoredPasskey, recoveryPhrase: string): Promise<BackupStatus> {
+  if (readPendingBackup(stored.address)) {
+    throw new PlainError('Your last backup is still confirming. Check it before you start a new one.')
+  }
+  if (!(await canPayBackupGas(stored.address))) {
     throw new PlainError(
       `Add at least ${formatAmount(PASSKEY_GAS_BUFFER, 'USDC')} to your Fundit account first. It pays the network fee for the backup.`,
     )
   }
   const { account, bundler } = await ensureLive(stored)
   const kit = await import('./passkeyKit')
-  const recovery = kit.mnemonicToAccount(recoveryPhrase)
+  const recoveryAddress = kit.mnemonicToAccount(recoveryPhrase).address
   type Client = Parameters<typeof kit.sdk.recoveryActions>[0]
   type Params = Parameters<ReturnType<typeof kit.sdk.recoveryActions>['registerRecoveryAddress']>[0]
+  const actions = kit.sdk.recoveryActions(bundler as unknown as Client)
+  const owner = account as unknown as Params['account']
   let hash: Hex
   try {
-    hash = await kit.sdk.recoveryActions(bundler as unknown as Client).registerRecoveryAddress({
-      account: account as unknown as Params['account'],
-      recoveryAddress: recovery.address,
+    // Same margin on the call gas as every other send (see withGasMargin).
+    const gas = await actions.estimateRegisterRecoveryAddressGas({ account: owner, recoveryAddress } as Params)
+    hash = await actions.registerRecoveryAddress({
+      account: owner,
+      recoveryAddress,
+      callGasLimit: withGasMargin(gas.callGasLimit),
+      preVerificationGas: gas.preVerificationGas,
+      verificationGasLimit: gas.verificationGasLimit,
     } as Params)
   } catch (err) {
+    if (isAlreadyOwner(err)) {
+      markBackupSaved(stored.address)
+      return 'added'
+    }
     if (isUserRejection(err)) throw new PlainError('You cancelled the request. No backup was added.')
     throw err
   }
-  const res = await userOperationResult(bundler, hash)
-  if (res.status === 'timeout') throw new PlainError('The backup is taking a while to confirm. Try again in a minute.')
+  savePendingBackup({ account: stored.address, hash, hashKind: 'userop', createdAt: Date.now() })
+  return settleBackup(stored.address, await userOperationResult(bundler, hash))
+}
+
+function settleBackup(address: Address, res: TxResult): BackupStatus {
+  if (res.status === 'timeout') return 'pending'
+  clearPendingBackup(address)
   if (res.status !== 'success') throw new PlainError('The backup did not go through. Nothing was added. Try again.')
+  markBackupSaved(address)
+  return 'added'
+}
+
+// Checks a pending backup with the passkey sender's recheck. It never sends anything again.
+export async function checkPendingBackup(stored: StoredPasskey): Promise<BackupStatus | 'none'> {
+  const pending = readPendingBackup(stored.address)
+  if (!pending) return backupSaved(stored.address) ? 'added' : 'none'
+  return settleBackup(stored.address, await storedPasskeySender(stored).recheck!(pending.hash))
 }
 
 // True when Circle's Arc mainnet endpoint answers with Arc's chain id. Run by hand once a client key exists.

@@ -39,6 +39,9 @@ vi.mock('../lib/passkey', async (importOriginal) => ({
   loginPasskey: () => loginPasskey(),
   useBackupPrompt: () => prompt.value,
   dismissBackupPrompt: () => dismissBackupPrompt(),
+  useBackupPending: () => false,
+  canPayBackupGas: async () => true,
+  newRecoveryPhrase: async () => 'one two three four five six seven eight nine ten eleven twelve',
 }))
 vi.mock('../hooks/useSender', () => ({
   useWalletChoice: (): WalletChoice => ({
@@ -62,6 +65,7 @@ afterEach(() => {
   loginPasskey.mockReset()
   dismissBackupPrompt.mockReset()
   prompt.value = false
+  vi.restoreAllMocks()
 })
 
 function renderControl() {
@@ -174,9 +178,9 @@ describe('Backup prompt after sign-up', () => {
     state.session = { address: PASSKEY, credentialId: 'cred-1' }
     prompt.value = true
     renderControl()
-    const dialog = screen.getByRole('dialog', { name: 'Add a backup' })
+    const dialog = screen.getByRole('dialog', { name: 'Add a recovery key' })
     expect(dialog.textContent).toContain('If you lose every device with your passkey, nobody can recover your Fundit account.')
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Later' }))
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Later' }))
     expect(dismissBackupPrompt).toHaveBeenCalledTimes(1)
   })
 
@@ -185,6 +189,24 @@ describe('Backup prompt after sign-up', () => {
     prompt.value = true
     renderControl()
     await userEvent.setup().keyboard('{Escape}')
+    expect(dismissBackupPrompt).toHaveBeenCalledTimes(1)
+  })
+
+  // Escape, the backdrop and Close would drop words the person may not have written down yet.
+  it('asks before closing while the words are on screen, and stays open when the person says no', async () => {
+    state.session = { address: PASSKEY, credentialId: 'cred-1' }
+    prompt.value = true
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    renderControl()
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Show my recovery key' }))
+    await user.keyboard('{Escape}')
+    expect(confirm).toHaveBeenCalledWith('Leave without saving your backup? Your recovery key has not been added yet.')
+    expect(dismissBackupPrompt).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+    expect(dismissBackupPrompt).not.toHaveBeenCalled()
+    confirm.mockReturnValue(true)
+    await user.click(screen.getByRole('button', { name: 'Close' }))
     expect(dismissBackupPrompt).toHaveBeenCalledTimes(1)
   })
 
