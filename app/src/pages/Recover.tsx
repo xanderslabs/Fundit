@@ -2,7 +2,7 @@ import { type ClipboardEvent, type FormEvent, useRef, useState } from 'react'
 import type { Address } from 'viem'
 import { AddressQr, CopyAddress } from '../components/AddressTools'
 import { AddBackupPasskey } from '../components/AddBackupPasskey'
-import { MAX_USERNAME } from '../components/PasskeyLogin'
+import { usernameError } from '../components/PasskeyLogin'
 import { explainError } from '../lib/errors'
 import { checkPendingRecovery, discardPendingRecovery, normalizePhrase, RecoveryNeedsFunds, recoverWithPhrase, type StoredPasskey } from '../lib/passkey'
 
@@ -69,7 +69,8 @@ export function Recover() {
   }
 
   const name = username.trim()
-  const nameError = name.length > MAX_USERNAME ? `Keep the name to ${MAX_USERNAME} characters.` : null
+  const [submitted, setSubmitted] = useState(false)
+  const nameError = usernameError(name, submitted)
 
   function submit(e: FormEvent) {
     e.preventDefault()
@@ -82,7 +83,8 @@ export function Recover() {
       setError('Enter a name for your new passkey.')
       return
     }
-    if (nameError) return
+    setSubmitted(true)
+    if (usernameError(name, true)) return
     void run(async () => {
       setNeedsFunds(null)
       settle(await recoverWithPhrase({ phrase, username: name }))

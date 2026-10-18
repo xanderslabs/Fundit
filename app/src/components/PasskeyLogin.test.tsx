@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import type { Address } from 'viem'
+import { type Address, RpcRequestError, UnknownRpcError } from 'viem'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { StoredPasskey } from '../lib/passkey'
 import { AccountControl } from './AccountMenu'
@@ -134,20 +134,61 @@ describe('Sign in', () => {
     registerPasskey.mockResolvedValue({ address: PASSKEY })
     renderControl()
     const user = await openPasskey()
-    await user.type(screen.getByLabelText('Name for your passkey'), '  ana  ')
+    await user.type(screen.getByLabelText('Name for your passkey'), '  ana.phone  ')
     await user.click(screen.getByRole('button', { name: 'Create my Fundit account' }))
-    expect(registerPasskey).toHaveBeenCalledWith('ana')
+    expect(registerPasskey).toHaveBeenCalledWith('ana.phone')
   })
 
-  it('refuses an empty or over-32-character username with a plain message', async () => {
+  it('refuses an empty username with a plain message', async () => {
     renderControl()
     const user = await openPasskey()
     await user.click(screen.getByRole('button', { name: 'Create my Fundit account' }))
     expect(screen.getByRole('alert').textContent).toBe('Enter a name for your account.')
-    await user.type(screen.getByLabelText('Name for your passkey'), 'a'.repeat(33))
-    await user.click(screen.getByRole('button', { name: 'Create my Fundit account' }))
-    expect(screen.getByRole('alert').textContent).toBe('Keep the name to 32 characters.')
     expect(registerPasskey).not.toHaveBeenCalled()
+  })
+
+  // Circle takes 5 to 50 characters from A-Z, a-z, 0-9 and _@.:+- only, and refuses anything else with an
+  // RPC error the person cannot read. On Arc testnet "e2e 2026-10-18T16:50" failed that way.
+  it.each([
+    ['a space', 'Jane Doe'],
+    ['too short', 'ana'],
+    ['too long', 'a'.repeat(51)],
+    ['an accent', 'Zoë-phone'],
+  ])("refuses a name with %s before Circle sees it", async (_why, name) => {
+    renderControl()
+    const user = await openPasskey()
+    await user.type(screen.getByLabelText('Name for your passkey'), name)
+    await user.click(screen.getByRole('button', { name: 'Create my Fundit account' }))
+    expect(screen.getByRole('alert').textContent).toBe('Use 5 to 50 letters, numbers or _ @ . : + - (no spaces).')
+    expect(registerPasskey).not.toHaveBeenCalled()
+  })
+
+  it('takes every character Circle allows', async () => {
+    registerPasskey.mockResolvedValue({ address: PASSKEY })
+    renderControl()
+    const user = await openPasskey()
+    await user.type(screen.getByLabelText('Name for your passkey'), 'Ana_9@home.pc:1+2-3')
+    await user.click(screen.getByRole('button', { name: 'Create my Fundit account' }))
+    expect(registerPasskey).toHaveBeenCalledWith('Ana_9@home.pc:1+2-3')
+  })
+
+  // If Circle still refuses the name, the person reads the rule, not "An unknown RPC error occurred.", and is not
+  // told to sign in with a passkey that was never made.
+  it("maps Circle's invalid-username error to the rule", async () => {
+    const circle = new RpcRequestError({
+      body: { method: 'rp_getRegistrationOptions' },
+      error: {
+        code: -32025,
+        message: 'The username is invalid. It should be 5 to 50 characters and contain only alphanumeric and _@.:+- characters.',
+      },
+      url: 'https://modular-sdk.circle.com/v1/rpc/w3s/buidl',
+    })
+    registerPasskey.mockRejectedValue(new UnknownRpcError(circle))
+    renderControl()
+    const user = await openPasskey()
+    await user.type(screen.getByLabelText('Name for your passkey'), 'ana-phone')
+    await user.click(screen.getByRole('button', { name: 'Create my Fundit account' }))
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Use 5 to 50 letters, numbers or _ @ . : + - (no spaces).')
   })
 
   // Sign-up can fail after the browser already saved the passkey. The person must be able to use it.
@@ -156,7 +197,7 @@ describe('Sign in', () => {
     loginPasskey.mockResolvedValue({ address: PASSKEY })
     renderControl()
     const user = await openPasskey()
-    await user.type(screen.getByLabelText('Name for your passkey'), 'ana')
+    await user.type(screen.getByLabelText('Name for your passkey'), 'ana-phone')
     await user.click(screen.getByRole('button', { name: 'Create my Fundit account' }))
     expect(screen.getByRole('alert').textContent).toMatch(/If your browser saved a passkey, sign in with it\./)
     await user.click(screen.getByRole('button', { name: 'Sign in with a passkey' }))

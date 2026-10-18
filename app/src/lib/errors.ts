@@ -112,6 +112,20 @@ export function isUserRejection(e: unknown): boolean {
   )
 }
 
+// Circle's rule for a passkey username: 5 to 50 characters, only letters, digits and _ @ . : + -. Its RPC
+// refuses any other name with error -32025, "The username is invalid. It should be 5 to 50 characters and
+// contain only alphanumeric and _@.:+- characters.", which viem shows as "An unknown RPC error occurred."
+export const USERNAME_PATTERN = /^[A-Za-z0-9_@.:+-]{5,50}$/
+export const USERNAME_RULE = 'Use 5 to 50 letters, numbers or _ @ . : + - (no spaces).'
+const INVALID_USERNAME_CODE = -32025
+
+export function isInvalidUsername(e: unknown): boolean {
+  return chain(e).some((x) => {
+    const { code, message, details } = x as { code?: unknown; message?: unknown; details?: unknown }
+    return code === INVALID_USERNAME_CODE || [message, details].some((t) => typeof t === 'string' && /username is invalid/i.test(t))
+  })
+}
+
 function revertName(e: unknown): string | null {
   for (const x of chain(e)) {
     const named = (x as { data?: { errorName?: unknown } }).data?.errorName
@@ -141,6 +155,7 @@ function detail(e: unknown): string {
 export function explainError(e: unknown, generic = GENERIC): string {
   if (isUserRejection(e)) return 'You cancelled the request.'
   if (e instanceof PlainError) return e.message
+  if (isInvalidUsername(e)) return USERNAME_RULE
   const kit = kitText(e)
   if (kit) return kit
   const name = revertName(e)

@@ -50,7 +50,7 @@ function renderPage() {
   return userEvent.setup()
 }
 
-async function fill(user: UserEvent, phrase = PHRASE, name = 'ana') {
+async function fill(user: UserEvent, phrase = PHRASE, name = 'ana-phone') {
   await user.click(screen.getByLabelText('Word 1'))
   await user.paste(phrase)
   await user.type(screen.getByLabelText('Name for your new passkey'), name)
@@ -83,6 +83,14 @@ describe('Recover', () => {
     expect(recoverWithPhrase).not.toHaveBeenCalled()
   })
 
+  // The new passkey's name goes to Circle, which takes only 5 to 50 of A-Z, a-z, 0-9 and _@.:+-.
+  it("refuses a name Circle would reject, before starting a recovery", async () => {
+    const user = renderPage()
+    await fill(user, PHRASE, 'my phone')
+    expect(screen.getByText('Use 5 to 50 letters, numbers or _ @ . : + - (no spaces).')).toBeTruthy()
+    expect(recoverWithPhrase).not.toHaveBeenCalled()
+  })
+
   it('shows the plain message when the words fail the checksum', async () => {
     recoverWithPhrase.mockRejectedValue(new PlainError("Those words don't form a valid recovery key. Check the order and spelling."))
     const user = renderPage()
@@ -95,7 +103,7 @@ describe('Recover', () => {
     recoverWithPhrase.mockResolvedValue({ status: 'recovered', session: SESSION })
     const user = renderPage()
     await fill(user)
-    expect(recoverWithPhrase).toHaveBeenCalledWith({ phrase: PHRASE, username: 'ana' })
+    expect(recoverWithPhrase).toHaveBeenCalledWith({ phrase: PHRASE, username: 'ana-phone' })
     expect(await screen.findByText('Your account is back.')).toBeTruthy()
     expect(screen.getByText(`Backup prompt for ${ACCOUNT}`)).toBeTruthy()
     expect(screen.queryByLabelText('Word 1')).toBeNull()
