@@ -1,4 +1,5 @@
 import { type Address, getAddress, parseUnits } from 'viem'
+import { campaignAbi } from '../src/abi/campaign'
 import { ACCOUNTS, approveAndDonate, balanceOf, connect, createCampaign, expect, node, summary, test, tokenAddress } from './fixtures'
 
 const A = ACCOUNTS.creator
@@ -154,4 +155,48 @@ test('a withdrawal right after a donation in the latest block goes through', asy
   const receipt = await node.getTransactionReceipt({ hash: tx.hash })
   expect(receipt.status).toBe('success')
   expect((await summary(campaign)).available).toBe(0n)
+})
+
+// Give anonymously only hides the name on Fundit. The marker is the record: the Donated event keeps B as donor
+// and carries "[anon]" at the start of the message, so the app must read the marker and never show B.
+test('an anonymous gift shows as Anonymous with its message, and the event message starts with [anon]', async ({ as }) => {
+  const campaign = await createCampaign(A, 'USDC', 'E2E anonymous fund')
+  const fromBlock = await node.getBlockNumber()
+
+  const b = await as(B)
+  await b.goto(`/c/${campaign}`)
+  await connect(b, B)
+  const donate = b.getByRole('region', { name: 'Give' })
+  await expect(donate.getByText(/Your balance: /)).toBeVisible()
+  await donate.getByRole('textbox', { name: 'Amount' }).fill('1')
+  await donate.getByLabel('Message (optional)').fill('quiet thanks')
+  await donate.getByLabel('Give anonymously').check()
+  await expect(donate.getByText('12 of 274 bytes')).toBeVisible()
+  await donate.getByRole('button', { name: 'Give', exact: true }).click()
+  await expect(donate.getByText('Thank you. Your donation went through.')).toBeVisible()
+
+  const activity = b.getByRole('region', { name: 'Activity' })
+  await expect(activity.getByRole('listitem').first()).toContainText('Anonymous gave 1.00 USDC')
+  await expect(activity.getByText('quiet thanks', { exact: true })).toBeVisible()
+  await expect(activity.getByText(/\[anon\]/)).toHaveCount(0)
+
+  // Another visitor's page: B's address, full or short, appears nowhere, and neither does the marker.
+  const a = await as(A)
+  await a.goto(`/c/${campaign}`)
+  await connect(a, A)
+  const seen = a.getByRole('region', { name: 'Activity' })
+  await expect(seen.getByText('quiet thanks', { exact: true })).toBeVisible()
+  await expect(seen.getByRole('listitem').first()).toContainText('Anonymous gave 1.00 USDC')
+  const html = (await a.content()).toLowerCase()
+  expect(html).not.toContain(B.toLowerCase())
+  expect(html).not.toContain(B.slice(2).toLowerCase())
+  expect(html).not.toContain(`${B.slice(0, 6)}...${B.slice(-4)}`.toLowerCase())
+  expect(html).not.toContain('[anon]')
+
+  // On chain the gift is public: the event names B and the message carries the marker.
+  const events = await node.getContractEvents({ address: campaign, abi: campaignAbi, eventName: 'Donated', fromBlock })
+  expect(events).toHaveLength(1)
+  expect(getAddress(events[0]!.args.donor!)).toBe(getAddress(B))
+  expect(events[0]!.args.amount).toBe(parseUnits('1', 6))
+  expect(events[0]!.args.message).toBe('[anon]quiet thanks')
 })
