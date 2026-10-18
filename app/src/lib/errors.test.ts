@@ -5,7 +5,7 @@ import {
   UserRejectedRequestError,
   zeroAddress,
 } from 'viem'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { campaignAbi } from '../abi/campaign'
 import { factoryAbi } from '../abi/factory'
 import { explainAfterApproval, explainError } from './errors'
@@ -156,5 +156,24 @@ describe('explainAfterApproval', () => {
     expect(explainAfterApproval(new UserRejectedRequestError(new Error('x')))).toBe('You cancelled the request.')
     const token = Object.assign(new Error('Insufficient USDC balance on Base'), { name: 'BALANCE_INSUFFICIENT_TOKEN' })
     expect(explainAfterApproval(token)).toBe('You do not have enough USDC on Base.')
+  })
+})
+
+// On testnet Bridge Kit names chains Base_Sepolia and so on. Errors must still show the name people know.
+describe('Bridge Kit errors on testnet', () => {
+  it('maps Base_Sepolia to Base Sepolia and its ETH', async () => {
+    vi.stubEnv('VITE_ARC_NETWORK', 'testnet')
+    vi.resetModules()
+    try {
+      const { explainError: explain } = await import('./errors')
+      const gas = Object.assign(new Error('Insufficient native token on Base_Sepolia to cover gas fees'), {
+        name: 'BALANCE_INSUFFICIENT_GAS',
+        cause: { trace: { chain: 'Base_Sepolia' } },
+      })
+      expect(explain(gas)).toBe('You do not have enough ETH on Base Sepolia to pay the network fee.')
+    } finally {
+      vi.unstubAllEnvs()
+      vi.resetModules()
+    }
   })
 })

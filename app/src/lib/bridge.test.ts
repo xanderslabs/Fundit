@@ -198,6 +198,24 @@ describe('donateCrossChain', () => {
     expect(pendingBridges()[0]).toMatchObject({ srcDomain: 7 })
   })
 
+  // Bridge Kit names testnet chains differently. 'Base' and 'Arc' there would mean the mainnets.
+  it('uses the testnet Bridge Kit chain names on testnet', async () => {
+    vi.stubEnv('VITE_ARC_NETWORK', 'testnet')
+    vi.resetModules()
+    try {
+      const fresh = await import('./bridge')
+      kit.bridge = (_p, emit) => {
+        emit('burn', { name: 'burn', state: 'success', txHash: BURN })
+        return new Promise(() => {})
+      }
+      await fresh.donateCrossChain({ provider, sourceKey: 'Base', campaign: CAMPAIGN, amount: '25', fast: true })
+      expect(kit.params).toMatchObject({ from: { chain: 'Base_Sepolia' }, to: { chain: 'Arc_Testnet' } })
+    } finally {
+      vi.unstubAllEnvs()
+      vi.resetModules()
+    }
+  })
+
   it('refuses Fast on a chain where CCTP does not offer it', async () => {
     await expect(run({ sourceKey: 'Avalanche', fast: true })).rejects.toThrow(/Fast/)
     expect(kit.params).toBeUndefined()

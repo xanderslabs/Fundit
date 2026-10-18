@@ -59,3 +59,9 @@ export function realPercent(raised: bigint, goal: bigint): number {
   if (goal <= 0n) return 0
   return Number((raised * 100n) / goal)
 }
+
+// "A", "A or B", "A, B or C".
+export function orList(items: readonly string[]): string {
+  if (items.length < 2) return items.join('')
+  return `${items.slice(0, -1).join(', ')} or ${items.at(-1)}`
+}

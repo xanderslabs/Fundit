@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { type Address, type EIP1193Provider, formatUnits, type Hex } from 'viem'
 import { useConnection } from 'wagmi'
-import { ARC_DOMAIN, CCTP_CHAINS, EXPLORER_URL, CHAIN_LABELS, type CctpChainKey } from '../config'
+import { ARC_DOMAIN, CCTP_CHAINS, CHAIN_LABELS, type CctpChainKey, EXPLORER_URL } from '../config'
 import {
   chainByKey,
   clearBridge,

@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import type { Hex } from 'viem'
 import { useConnection } from 'wagmi'
-import { CROSSCHAIN_ENABLED, EXPLORER_URL, PASSKEY_GAS_BUFFER } from '../config'
+import { CHAIN_NAMES, CROSSCHAIN_ENABLED, EXPLORER_URL, PASSKEY_GAS_BUFFER } from '../config'
 import { useSender } from '../hooks/useSender'
 import {
   type BlockingEntry,
@@ -47,7 +47,7 @@ const PAY_SOURCES: readonly PaySource[] = [
   {
     id: 'crosschain',
     label: 'USDC on another chain',
-    hint: 'Send USDC from Ethereum, Base, Arbitrum, OP Mainnet, Polygon or Avalanche.',
+    hint: `Send USDC from ${CHAIN_NAMES}.`,
     usdcOnly: true,
   },
   {

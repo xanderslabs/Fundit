@@ -21,6 +21,12 @@ export function parseArcNetwork(value: string | undefined): ArcNetwork {
   throw new Error(`VITE_ARC_NETWORK must be mainnet or testnet, not "${value}"`)
 }
 
+// Runtime backstop for the production build guard: true when a testnet bundle is served on fundit.fun. A
+// separate test site on a subdomain (testnet.fundit.fun, for example) is allowed.
+export function testnetRefusedOn(network: ArcNetwork, hostname: string): boolean {
+  return network === 'testnet' && (hostname === 'fundit.fun' || hostname === 'www.fundit.fun')
+}
+
 export type BuildEnv = {
   PROD: boolean
   VITE_ARC_NETWORK?: string
@@ -53,6 +59,14 @@ export function connectSrcAllows(headers: string, url: string): boolean {
     })
 }
 
+function hostLabels(url: string): string[] {
+  try {
+    return new URL(url).hostname.split('.')
+  } catch {
+    return []
+  }
+}
+
 // Production build checks, run by vite.config.ts with the text of public/_headers. A site that fails one of
 // these builds fine but cannot work: a passkey sign-in with no client key, or an RPC the browser blocks.
 // The default RPCs are not set here; config.test.ts checks them against the same connect-src.
@@ -62,6 +76,11 @@ export function connectSrcAllows(headers: string, url: string): boolean {
 // meant for a test site. That flag must never be set where the fundit.fun build runs.
 export function checkBuildEnv(env: BuildEnv, headers: string): void {
   const network = parseArcNetwork(env.VITE_ARC_NETWORK)
+  // A VITE_ARC_RPC_URL left over from the other network would read the wrong chain with no error.
+  const other = network === 'testnet' ? 'mainnet' : 'testnet'
+  if (env.VITE_ARC_RPC_URL && hostLabels(env.VITE_ARC_RPC_URL).includes(other)) {
+    throw new Error(`VITE_ARC_RPC_URL (${env.VITE_ARC_RPC_URL}) is an Arc ${other} RPC, but VITE_ARC_NETWORK is ${network}`)
+  }
   if (!env.PROD) return
   if (network === 'testnet' && env.VITE_ALLOW_TESTNET_BUILD !== '1') {
     throw new Error('VITE_ARC_NETWORK=testnet is refused in a production build, which is for fundit.fun. Set VITE_ALLOW_TESTNET_BUILD=1 only for a test site.')

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bpsToPercent, formatAmount, formatExact, parseAmount, progressPercent } from './format'
+import { bpsToPercent, formatAmount, formatExact, orList, parseAmount, progressPercent } from './format'
 
 describe('parseAmount', () => {
   // Amounts are 6-decimal ERC-20 units, so "0.1" must be 100000n, never an 18-decimal value.
@@ -55,5 +55,14 @@ describe('formatExact', () => {
     expect(formatExact(1234_000001n, 'USDC')).toBe('1,234.000001 USDC')
     expect(formatExact(0n, 'USDC')).toBe('0.00 USDC')
     expect(formatExact(1n, 'USDC')).toBe('0.000001 USDC')
+  })
+})
+
+describe('orList', () => {
+  it('joins names with commas and a final "or"', () => {
+    expect(orList(['A'])).toBe('A')
+    expect(orList(['A', 'B'])).toBe('A or B')
+    expect(orList(['A', 'B', 'C'])).toBe('A, B or C')
+    expect(orList([])).toBe('')
   })
 })

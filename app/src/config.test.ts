@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import headers from '../public/_headers?raw'
 import redirects from '../public/_redirects?raw'
 import { campaignAbi } from './abi/campaign'
 import { factoryAbi } from './abi/factory'
-import { ARC_RPC_FALLBACKS, ARC_RPC_URL, CCTP_CHAINS, EXTERNAL_HOSTS, FORWARD_HOOK_DATA, NETWORK, NETWORKS, networkHosts, TOKENS } from './config'
+import { ARC_RPC_FALLBACKS, ARC_RPC_URL, CCTP_CHAINS, cctpChainNames, EXTERNAL_HOSTS, FORWARD_HOOK_DATA, NETWORK, NETWORKS, networkHosts, TOKENS } from './config'
 import { connectSrcAllows } from './deployConfig'
 
 describe('config', () => {
@@ -64,15 +64,18 @@ describe('NETWORKS', () => {
     expect(n.irisUrl).toBe('https://iris-api.circle.com')
     expect(n.gatewayUrl).toBe('https://gateway-api.circle.com')
     expect(n.modularChainPath).toBe('/arc')
-    expect(n.cctpChains.map((c) => [c.key, c.chainId, c.domain])).toEqual([
-      ['Ethereum', 1, 0],
-      ['Avalanche', 43114, 1],
-      ['Optimism', 10, 2],
-      ['Arbitrum', 42161, 3],
-      ['Base', 8453, 6],
-      ['Polygon', 137, 7],
+    expect(n.cctpChains.map((c) => [c.key, c.chainId, c.domain, c.usdc, c.rpcUrl])).toEqual([
+      ['Ethereum', 1, 0, '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', 'https://ethereum-rpc.publicnode.com'],
+      ['Avalanche', 43114, 1, '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E', 'https://api.avax.network/ext/bc/C/rpc'],
+      ['Optimism', 10, 2, '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', 'https://mainnet.optimism.io'],
+      ['Arbitrum', 42161, 3, '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', 'https://arb1.arbitrum.io/rpc'],
+      ['Base', 8453, 6, '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', 'https://mainnet.base.org'],
+      ['Polygon', 137, 7, '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', 'https://polygon.drpc.org'],
     ])
     expect(n.chainLabels.Arc).toBe('Arc')
+    // Circle Bridge Kit chain names. On mainnet they are the same as our keys.
+    expect(n.bridgeKitChain).toBe('Arc')
+    expect(n.cctpChains.map((c) => c.bridgeKitChain)).toEqual(['Ethereum', 'Avalanche', 'Optimism', 'Arbitrum', 'Base', 'Polygon'])
   })
 
   it('resolves the Arc testnet values', () => {
@@ -96,6 +99,9 @@ describe('NETWORKS', () => {
       ['Base', 84532, 6, '0x036CbD53842c5426634e7929541eC2318f3dCF7e', 'https://sepolia.base.org'],
     ])
     expect(n.chainLabels).toMatchObject({ Arc: 'Arc Testnet', Ethereum: 'Ethereum Sepolia', Base: 'Base Sepolia' })
+    // Bridge Kit's Blockchain enum names for the testnets. 'Base' here would bridge on mainnet.
+    expect(n.bridgeKitChain).toBe('Arc_Testnet')
+    expect(n.cctpChains.map((c) => c.bridgeKitChain)).toEqual(['Ethereum_Sepolia', 'Base_Sepolia'])
   })
 
   // viem's arcTestnet still lists the old .arc.network hosts, which the CSP does not allow.
@@ -107,6 +113,41 @@ describe('NETWORKS', () => {
 
   it.each(['mainnet', 'testnet'] as const)('lets a %s build call every host it uses', (name) => {
     for (const url of networkHosts(NETWORKS[name])) expect(connectSrcAllows(headers, url), url).toBe(true)
+  })
+})
+
+// The donate panel and the FAQ name the chains people can send from. On testnet only two exist.
+describe('cctpChainNames', () => {
+  it('reads as before on mainnet', () => {
+    expect(cctpChainNames(NETWORKS.mainnet)).toBe('Ethereum, Base, Arbitrum, OP Mainnet, Polygon or Avalanche')
+  })
+
+  it('names only the testnet chains on testnet', () => {
+    expect(cctpChainNames(NETWORKS.testnet)).toBe('Ethereum Sepolia or Base Sepolia')
+  })
+})
+
+// The values every module imports are derived once from VITE_ARC_NETWORK. This proves the env switch reaches them.
+describe('VITE_ARC_NETWORK=testnet', () => {
+  it('switches every derived export to testnet', async () => {
+    vi.stubEnv('VITE_ARC_NETWORK', 'testnet')
+    vi.resetModules()
+    try {
+      const c = await import('./config')
+      expect(c.NETWORK.name).toBe('testnet')
+      expect(c.ARC_CHAIN_ID).toBe(5042002)
+      expect(c.ARC_RPC_URL).toBe('https://rpc.testnet.arc.io')
+      expect(c.EXPLORER_URL).toBe('https://explorer.testnet.arc.io')
+      expect(c.IRIS_URL).toBe('https://iris-api-sandbox.circle.com')
+      expect(c.GATEWAY_URL).toBe('https://gateway-api-testnet.circle.com')
+      expect(c.TOKENS.EURC.address).toBe('0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a')
+      expect(c.TOKEN_MESSENGER_V2).toBe('0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA')
+      expect(c.CCTP_CHAINS).toHaveLength(2)
+      expect(c.CHAIN_NAMES).toBe('Ethereum Sepolia or Base Sepolia')
+    } finally {
+      vi.unstubAllEnvs()
+      vi.resetModules()
+    }
   })
 })
 

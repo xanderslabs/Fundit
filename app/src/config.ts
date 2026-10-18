@@ -1,6 +1,7 @@
 import { type Address, type Chain, type Hex, parseAbi } from 'viem'
 import { arbitrum, arc, arcTestnet, avalanche, base, baseSepolia, mainnet, optimism, polygon, sepolia } from 'viem/chains'
-import { type ArcNetwork, loadConfig, parseArcNetwork } from './deployConfig'
+import { type ArcNetwork, loadConfig, parseArcNetwork, testnetRefusedOn } from './deployConfig'
+import { orList } from './lib/format'
 
 export type TokenSymbol = 'USDC' | 'EURC'
 
@@ -8,6 +9,9 @@ export type TokenSymbol = 'USDC' | 'EURC'
 export const FORWARD_HOOK_DATA: Hex = '0x636374702d666f72776172640000000000000000000000000000000000000000'
 
 export type CctpChainKey = 'Ethereum' | 'Avalanche' | 'Optimism' | 'Arbitrum' | 'Base' | 'Polygon'
+
+// Chain names in Circle Bridge Kit's Blockchain enum (@circle-fin/bridge-kit chains.d.ts).
+export type BridgeKitChain = CctpChainKey | 'Ethereum_Sepolia' | 'Base_Sepolia'
 
 export type CctpChain = {
   key: CctpChainKey
@@ -18,6 +22,7 @@ export type CctpChain = {
   rpcUrl: string
   // false where only the standard (slow) CCTP transfer is offered.
   fast: boolean
+  bridgeKitChain: BridgeKitChain
 }
 
 // Everything that differs between Arc mainnet and Arc testnet. Values are checked on-chain; see
@@ -43,6 +48,8 @@ export type NetworkConfig = {
   // Appended to the Modular Wallets client URL for the Arc bundler transport.
   modularChainPath: '/arc' | '/arcTestnet'
   cctpChains: readonly CctpChain[]
+  // Arc's name in Circle Bridge Kit.
+  bridgeKitChain: 'Arc' | 'Arc_Testnet'
   // The names people see for each chain.
   chainLabels: Record<'Arc' | CctpChainKey, string>
 }
@@ -74,13 +81,14 @@ export const NETWORKS: Record<ArcNetwork, NetworkConfig> = {
     gatewayUrl: 'https://gateway-api.circle.com',
     modularChainPath: '/arc',
     cctpChains: [
-      { key: 'Ethereum', chainId: 1, domain: 0, usdc: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', viemChain: mainnet, rpcUrl: MAINNET_RPC_URL, fast: true },
-      { key: 'Avalanche', chainId: 43114, domain: 1, usdc: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E', viemChain: avalanche, rpcUrl: 'https://api.avax.network/ext/bc/C/rpc', fast: false },
-      { key: 'Optimism', chainId: 10, domain: 2, usdc: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', viemChain: optimism, rpcUrl: 'https://mainnet.optimism.io', fast: true },
-      { key: 'Arbitrum', chainId: 42161, domain: 3, usdc: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', viemChain: arbitrum, rpcUrl: 'https://arb1.arbitrum.io/rpc', fast: true },
-      { key: 'Base', chainId: 8453, domain: 6, usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', viemChain: base, rpcUrl: BASE_RPC_URL, fast: true },
-      { key: 'Polygon', chainId: 137, domain: 7, usdc: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', viemChain: polygon, rpcUrl: 'https://polygon.drpc.org', fast: false },
+      { key: 'Ethereum', chainId: 1, domain: 0, usdc: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', viemChain: mainnet, rpcUrl: MAINNET_RPC_URL, fast: true, bridgeKitChain: 'Ethereum' },
+      { key: 'Avalanche', chainId: 43114, domain: 1, usdc: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E', viemChain: avalanche, rpcUrl: 'https://api.avax.network/ext/bc/C/rpc', fast: false, bridgeKitChain: 'Avalanche' },
+      { key: 'Optimism', chainId: 10, domain: 2, usdc: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', viemChain: optimism, rpcUrl: 'https://mainnet.optimism.io', fast: true, bridgeKitChain: 'Optimism' },
+      { key: 'Arbitrum', chainId: 42161, domain: 3, usdc: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', viemChain: arbitrum, rpcUrl: 'https://arb1.arbitrum.io/rpc', fast: true, bridgeKitChain: 'Arbitrum' },
+      { key: 'Base', chainId: 8453, domain: 6, usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', viemChain: base, rpcUrl: BASE_RPC_URL, fast: true, bridgeKitChain: 'Base' },
+      { key: 'Polygon', chainId: 137, domain: 7, usdc: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', viemChain: polygon, rpcUrl: 'https://polygon.drpc.org', fast: false, bridgeKitChain: 'Polygon' },
     ],
+    bridgeKitChain: 'Arc',
     // Optimism's own name for its chain is OP Mainnet.
     chainLabels: { Arc: 'Arc', Ethereum: 'Ethereum', Avalanche: 'Avalanche', Optimism: 'OP Mainnet', Arbitrum: 'Arbitrum', Base: 'Base', Polygon: 'Polygon' },
   },
@@ -106,9 +114,10 @@ export const NETWORKS: Record<ArcNetwork, NetworkConfig> = {
     modularChainPath: '/arcTestnet',
     // Only the two source chains whose USDC was checked on-chain. Public RPCs as viem lists them.
     cctpChains: [
-      { key: 'Ethereum', chainId: sepolia.id, domain: 0, usdc: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', viemChain: sepolia, rpcUrl: sepolia.rpcUrls.default.http[0], fast: true },
-      { key: 'Base', chainId: baseSepolia.id, domain: 6, usdc: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', viemChain: baseSepolia, rpcUrl: baseSepolia.rpcUrls.default.http[0], fast: true },
+      { key: 'Ethereum', chainId: sepolia.id, domain: 0, usdc: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', viemChain: sepolia, rpcUrl: sepolia.rpcUrls.default.http[0], fast: true, bridgeKitChain: 'Ethereum_Sepolia' },
+      { key: 'Base', chainId: baseSepolia.id, domain: 6, usdc: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', viemChain: baseSepolia, rpcUrl: baseSepolia.rpcUrls.default.http[0], fast: true, bridgeKitChain: 'Base_Sepolia' },
     ],
+    bridgeKitChain: 'Arc_Testnet',
     chainLabels: {
       Arc: 'Arc Testnet',
       Ethereum: 'Ethereum Sepolia',
@@ -123,6 +132,20 @@ export const NETWORKS: Record<ArcNetwork, NetworkConfig> = {
 
 // The network this build runs on (VITE_ARC_NETWORK, mainnet by default).
 export const NETWORK: NetworkConfig = NETWORKS[parseArcNetwork(env.VITE_ARC_NETWORK)]
+
+// Backstop for the build guard in deployConfig.ts: a testnet bundle never runs on fundit.fun.
+if (typeof window !== 'undefined' && testnetRefusedOn(NETWORK.name, window.location.hostname)) {
+  throw new Error('This is a test network build. It must not run on fundit.fun.')
+}
+
+// The order the source chains are named in copy.
+const NAME_ORDER: readonly CctpChainKey[] = ['Ethereum', 'Base', 'Arbitrum', 'Optimism', 'Polygon', 'Avalanche']
+
+// "Ethereum, Base, ... or Avalanche": the source chains a network offers, by the names people know.
+export function cctpChainNames(n: NetworkConfig): string {
+  const keys = new Set(n.cctpChains.map((c) => c.key))
+  return orList(NAME_ORDER.filter((k) => keys.has(k)).map((k) => n.chainLabels[k]))
+}
 
 export const ARC_CHAIN: Chain = NETWORK.chain
 export const ARC_CHAIN_ID: number = NETWORK.chain.id
@@ -145,6 +168,7 @@ export const ARC_RPC_FALLBACKS: readonly string[] = NETWORK.chain.rpcUrls.defaul
 
 export const CCTP_CHAINS: readonly CctpChain[] = NETWORK.cctpChains
 export const CHAIN_LABELS: Record<'Arc' | CctpChainKey, string> = NETWORK.chainLabels
+export const CHAIN_NAMES: string = cctpChainNames(NETWORK)
 
 // Basenames, read on Base. The L1 lookup through ENSIP-19 reverts today, so the app asks Base directly.
 // ENS L2ReverseRegistrar on Base: the primary name an address has set.

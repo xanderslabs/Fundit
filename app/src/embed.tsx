@@ -1,5 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { TestnetBanner } from './components/TestnetBanner'
+import { NETWORK } from './config'
 import { Embed } from './pages/Embed'
 import './styles/tokens.css'
 import './styles/embed.css'
@@ -10,6 +12,7 @@ const match = /^\/embed\/c\/([^/]+)\/?$/.exec(window.location.pathname)
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
+    <TestnetBanner network={NETWORK.name} />
     <Embed address={match?.[1] ?? ''} origin={window.location.origin} />
   </StrictMode>,
 )

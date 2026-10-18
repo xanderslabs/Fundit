@@ -1,5 +1,5 @@
 import { type Address, type Chain, createPublicClient, type EIP1193Provider, getAddress, type Hex, http, isAddress, isHex, parseUnits, UserRejectedRequestError } from 'viem'
-import { ARC_CHAIN_ID, ARC_DOMAIN, ARC_RPC_URL, CCTP_CHAINS, CHAIN_LABELS, type CctpChain, type CctpChainKey } from '../config'
+import { ARC_CHAIN_ID, ARC_DOMAIN, ARC_RPC_URL, NETWORK, CCTP_CHAINS, CHAIN_LABELS, type CctpChain, type CctpChainKey } from '../config'
 import { isUserRejection } from './errors'
 
 // One localStorage key holds everything that must survive a reload: cross-chain transfers on their way
@@ -316,9 +316,9 @@ async function setup(p: CrossChainParams) {
   if (p.fast && !chain.fast) throw new Error(`Fast transfers are not available from ${CHAIN_LABELS[chain.key]}.`)
   const [kit, { adapter, watcher }] = await Promise.all([loadBridgeKit(), cachedAdapter(p.provider, p.account)])
   const params = {
-    from: { adapter, chain: chain.key },
+    from: { adapter, chain: chain.bridgeKitChain },
     // The forwarder mints straight to the campaign contract on Arc. No donate() call follows.
-    to: { chain: 'Arc' as const, recipientAddress: getAddress(p.campaign), useForwarder: true as const },
+    to: { chain: NETWORK.bridgeKitChain, recipientAddress: getAddress(p.campaign), useForwarder: true as const },
     amount: p.amount,
     config: { transferSpeed: p.fast ? ('FAST' as const) : ('SLOW' as const) },
   }

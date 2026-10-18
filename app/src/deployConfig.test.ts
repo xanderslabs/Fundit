@@ -1,7 +1,7 @@
 import { zeroAddress } from 'viem'
 import { describe, expect, it } from 'vitest'
 import headers from '../public/_headers?raw'
-import { checkBuildEnv, loadConfig, parseArcNetwork } from './deployConfig'
+import { checkBuildEnv, loadConfig, parseArcNetwork, testnetRefusedOn } from './deployConfig'
 
 const FACTORY = '0x1111111111111111111111111111111111111111'
 const prodEnv = { PROD: true, VITE_FACTORY_ADDRESS: FACTORY, VITE_FACTORY_DEPLOY_BLOCK: '26280000', VITE_REOWN_PROJECT_ID: 'abc123' }
@@ -110,5 +110,32 @@ describe('checkBuildEnv network guard', () => {
 
   it('fails any build on an unknown network name', () => {
     expect(() => checkBuildEnv({ PROD: false, VITE_ARC_NETWORK: 'devnet' }, headers)).toThrow(/VITE_ARC_NETWORK/)
+  })
+})
+
+// A leftover VITE_ARC_RPC_URL from the other network would read the wrong chain's state with no error.
+describe('checkBuildEnv Arc RPC network', () => {
+  it('refuses a mainnet Arc RPC on a testnet build, and a testnet RPC on a mainnet build', () => {
+    expect(() => checkBuildEnv({ PROD: false, VITE_ARC_NETWORK: 'testnet', VITE_ARC_RPC_URL: 'https://rpc.mainnet.arc.io' }, headers)).toThrow(/VITE_ARC_RPC_URL/)
+    expect(() => checkBuildEnv({ PROD: false, VITE_ARC_RPC_URL: 'https://rpc.testnet.arc.io' }, headers)).toThrow(/VITE_ARC_RPC_URL/)
+  })
+
+  it("accepts the network's own RPC and a local fork", () => {
+    expect(() => checkBuildEnv({ PROD: false, VITE_ARC_NETWORK: 'testnet', VITE_ARC_RPC_URL: 'https://rpc.testnet.arc.io' }, headers)).not.toThrow()
+    expect(() => checkBuildEnv({ PROD: false, VITE_ARC_RPC_URL: 'http://127.0.0.1:8545' }, headers)).not.toThrow()
+  })
+})
+
+// Runtime backstop for the build guard: a testnet bundle must never run on the real site.
+describe('testnetRefusedOn', () => {
+  it('refuses testnet on fundit.fun and www.fundit.fun', () => {
+    expect(testnetRefusedOn('testnet', 'fundit.fun')).toBe(true)
+    expect(testnetRefusedOn('testnet', 'www.fundit.fun')).toBe(true)
+  })
+
+  it('allows testnet elsewhere, and mainnet everywhere', () => {
+    expect(testnetRefusedOn('testnet', 'localhost')).toBe(false)
+    expect(testnetRefusedOn('testnet', 'testnet.fundit.fun')).toBe(false)
+    expect(testnetRefusedOn('mainnet', 'fundit.fun')).toBe(false)
   })
 })

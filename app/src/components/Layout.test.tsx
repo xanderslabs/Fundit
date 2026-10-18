@@ -1,7 +1,8 @@
 import { cleanup, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Layout, TestnetBanner } from './Layout'
+import { Layout } from './Layout'
+import { TestnetBanner } from './TestnetBanner'
 
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: () => {} }) }))
 vi.mock('wagmi', () => ({ useDisconnect: () => ({ mutate: () => {} }) }))

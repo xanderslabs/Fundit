@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router'
 import { SignInButton } from '../components/AccountMenu'
 import { CampaignCard } from '../components/CampaignCard'
 import { CampaignGrid, LoadError } from '../components/CampaignGrid'
-import { CROSSCHAIN_ENABLED, PASSKEYS_ENABLED } from '../config'
+import { CHAIN_NAMES, CROSSCHAIN_ENABLED, PASSKEYS_ENABLED } from '../config'
 import { useCampaigns, useFeatured } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
 
@@ -97,8 +97,8 @@ function faqs(): Faq[] {
       q: 'How does withdrawing work?',
       a: (
         <p>
-          The organiser picks an amount and where it goes. They can withdraw on Arc at any time, or have USDC sent to
-          Ethereum, Base, Arbitrum, OP Mainnet, Polygon or Avalanche. EURC Fundits pay out on Arc only.
+          The organiser picks an amount and where it goes. They can withdraw on Arc at any time, or have USDC sent to{' '}
+          {CHAIN_NAMES}. EURC Fundits pay out on Arc only.
         </p>
       ),
     },

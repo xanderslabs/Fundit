@@ -1,7 +1,7 @@
 import { BaseError, decodeErrorResult, type Hex, UserRejectedRequestError } from 'viem'
 import { campaignAbi } from '../abi/campaign'
 import { factoryAbi } from '../abi/factory'
-import { CCTP_CHAINS, CHAIN_LABELS, type CctpChainKey } from '../config'
+import { CCTP_CHAINS, CHAIN_LABELS, NETWORK } from '../config'
 
 // Plain text for every custom error in Campaign and CampaignFactory. errors.test.ts checks none is missing.
 const ERROR_TEXT: Record<string, string> = {
@@ -62,14 +62,16 @@ function isKitRpcError(x: unknown): boolean {
   return type === 'RPC' || (typeof name === 'string' && name.startsWith('RPC_'))
 }
 
-// Bridge Kit chain names match our CCTP chain keys. Its messages fall back to 'token' and 'native token'.
+// Bridge Kit chain names (Base, or Base_Sepolia on testnet). Its messages fall back to 'token' and 'native token'.
 function nativeSymbol(chainName: string): string {
-  return CCTP_CHAINS.find((c) => c.key === chainName)?.viemChain.nativeCurrency.symbol ?? 'native token'
+  return CCTP_CHAINS.find((c) => c.bridgeKitChain === chainName)?.viemChain.nativeCurrency.symbol ?? 'native token'
 }
 
-// The name people know, for a Bridge Kit chain name (OP Mainnet for Optimism).
+// The name people know, for a Bridge Kit chain name (OP Mainnet for Optimism, Base Sepolia for Base_Sepolia).
 function chainLabel(chainName: string): string {
-  return CHAIN_LABELS[chainName as CctpChainKey] ?? chainName
+  if (chainName === NETWORK.bridgeKitChain) return CHAIN_LABELS.Arc
+  const chain = CCTP_CHAINS.find((c) => c.bridgeKitChain === chainName)
+  return chain ? CHAIN_LABELS[chain.key] : chainName
 }
 
 // Plain text for Circle Bridge Kit errors, by KitError name. The messages name the token and chain.

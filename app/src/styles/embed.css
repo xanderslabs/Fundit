@@ -197,3 +197,14 @@ body {
     min-width: 0;
   }
 }
+
+/* Testnet builds only: one line above the card. */
+.testnet-banner {
+  margin: 0;
+  padding: 2px 8px;
+  background: var(--accent);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: var(--weight-medium);
+  text-align: center;
+}
