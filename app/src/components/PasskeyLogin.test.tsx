@@ -171,6 +171,8 @@ describe('Sign in', () => {
     await user.click(screen.getByRole('link', { name: 'Recover it now' }))
     expect(screen.getByText('Recover page')).toBeTruthy()
     expect(screen.queryByRole('dialog')).toBeNull()
+    // Keyboard users land on a control they can see, not on the page body.
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Sign in' }))
   })
 
   // The name is stored with the passkey, so stray spaces and empty or very long names are stopped here.
@@ -313,6 +315,39 @@ describe('Backup prompt after sign-up', () => {
     expect(dismissBackupPrompt).not.toHaveBeenCalled()
     confirm.mockReturnValue(true)
     await user.click(screen.getByRole('button', { name: 'Close' }))
+    expect(dismissBackupPrompt).toHaveBeenCalledTimes(1)
+  })
+
+  // BackupDialog must hand its leave question to Dialog's canClose. Without that wiring, Escape, a backdrop
+  // click or Close would drop recovery words the person may not have written down yet.
+  it('lets every way out close freely before the words show, then asks on each one until the person agrees', async () => {
+    state.session = { address: PASSKEY, credentialId: 'cred-1' }
+    prompt.value = true
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    renderControl()
+    const user = userEvent.setup()
+    const dialog = screen.getByRole('dialog', { name: 'Add a recovery key' })
+
+    // No words yet: nothing to lose, so no question.
+    await user.keyboard('{Escape}')
+    await user.click(dialog)
+    await user.click(within(dialog).getByRole('button', { name: 'Close' }))
+    expect(confirm).not.toHaveBeenCalled()
+    expect(dismissBackupPrompt).toHaveBeenCalledTimes(3)
+    dismissBackupPrompt.mockClear()
+
+    await user.click(await within(dialog).findByRole('button', { name: 'Show my recovery key' }))
+    await within(dialog).findByText('twelve')
+    await user.keyboard('{Escape}')
+    // A click on the backdrop lands on the dialog element itself.
+    await user.click(dialog)
+    await user.click(within(dialog).getByRole('button', { name: 'Close' }))
+    expect(confirm).toHaveBeenCalledTimes(3)
+    expect(dismissBackupPrompt).not.toHaveBeenCalled()
+
+    confirm.mockReturnValue(true)
+    await user.click(dialog)
+    expect(confirm).toHaveBeenCalledTimes(4)
     expect(dismissBackupPrompt).toHaveBeenCalledTimes(1)
   })
 

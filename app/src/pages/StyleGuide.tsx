@@ -70,7 +70,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 
 export function StyleGuide() {
   const [tab, setTab] = useState('fundits')
-  const [dialogOpen, setDialogOpen] = useState(false)
+  const [dialogOpen, setDialogOpen] = useState<'sm' | 'md' | null>(null)
   const [amount, setAmount] = useState('25')
   const focused = useRef<HTMLButtonElement>(null)
 
@@ -295,16 +295,23 @@ export function StyleGuide() {
       </Section>
 
       <Section title="Dialog">
-        <Row label="open">
-          <Button variant="secondary" onClick={() => setDialogOpen(true)}>
-            Open the dialog
+        <Row label="sizes">
+          <Button variant="secondary" onClick={() => setDialogOpen('sm')}>
+            Open the small dialog
+          </Button>
+          <Button variant="secondary" onClick={() => setDialogOpen('md')}>
+            Open the medium dialog
           </Button>
         </Row>
-        <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} title="Sign in">
+        <Dialog open={dialogOpen === 'sm'} size="sm" onClose={() => setDialogOpen(null)} title="Sign in">
           <Field id="sg-dialog-username" label="Username">
             <input />
           </Field>
           <Button block>Sign in with a passkey</Button>
+        </Dialog>
+        <Dialog open={dialogOpen === 'md'} size="md" onClose={() => setDialogOpen(null)} title="Add a recovery key">
+          <p>A recovery key is 12 words you write down and keep safe.</p>
+          <Button>Show my recovery key</Button>
         </Dialog>
       </Section>
     </div>

@@ -82,6 +82,9 @@
   --page-narrow: 640px;
   --page: 960px;
   --page-wide: 1200px;
+  /* Dialog widths: sm for sign-in, md for longer content. */
+  --dialog-sm: 440px;
+  --dialog-md: 560px;
   --gutter: 16px;
   /* The smallest size of an icon-only button, such as Close. */
   --hit-target: 40px;

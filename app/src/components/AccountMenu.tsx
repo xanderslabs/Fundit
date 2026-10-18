@@ -63,7 +63,7 @@ export function SignInButton({ className = 'btn', label = 'Sign in', onPasskeyDo
       <button ref={setTrigger} type="button" className={className} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
         {label}
       </button>
-      <Dialog open={open} labelledBy={headingId} onClose={dismiss}>
+      <Dialog open={open} size="sm" labelledBy={headingId} onClose={dismiss}>
         <PasskeyLogin
           headingId={headingId}
           onLeave={() => setOpen(false)}
@@ -86,7 +86,7 @@ function BackupDialog({ stored }: { stored: StoredPasskey }) {
     guard.current = message
   }, [])
   return (
-    <Dialog open labelledBy={headingId} onClose={dismissBackupPrompt} canClose={() => !guard.current || window.confirm(guard.current)}>
+    <Dialog open size="md" labelledBy={headingId} onClose={dismissBackupPrompt} canClose={() => !guard.current || window.confirm(guard.current)}>
       <AddBackupPasskey
         stored={stored}
         headingId={headingId}
@@ -121,7 +121,7 @@ export function AccountControl() {
   }, [focusSignIn, session])
 
   if (!session) {
-    return <SignInButton buttonRef={signIn} onPasskeyDone={() => navigate(ADD_MONEY_PATH)} />
+    return <SignInButton className="ui-btn ui-btn-primary" buttonRef={signIn} onPasskeyDone={() => navigate(ADD_MONEY_PATH)} />
   }
   return (
     <>

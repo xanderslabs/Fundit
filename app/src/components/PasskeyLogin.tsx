@@ -69,7 +69,7 @@ export function PasskeyLogin({ onDone, onLeave, headingId }: { onDone?: () => vo
 
   return (
     <div className="passkey-login">
-      <h2 id={headingId} className="passkey-title">
+      <h2 id={headingId} className="ui-dialog-title">
         {view === 'signin' ? 'Sign in' : 'Create your account'}
       </h2>
       {view === 'signin' ? (

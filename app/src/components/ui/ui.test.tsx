@@ -246,6 +246,42 @@ describe('ui components', () => {
     expect(screen.getAllByRole('heading')).toHaveLength(1)
   })
 
+  // Sign-in holds one button and two links, so it needs a narrow box. The recovery key words need room for
+  // three columns. Both widths are tokens, so no dialog picks its own width.
+  it('Dialog has two sizes, sm and md (the default), each from a token', () => {
+    const { unmount } = render(
+      <Dialog open size="sm" onClose={() => {}} title="Sign in">
+        <p>Body</p>
+      </Dialog>,
+    )
+    expect(screen.getByRole('dialog').classList.contains('ui-dialog-sm')).toBe(true)
+    unmount()
+    render(
+      <Dialog open onClose={() => {}} title="Add a recovery key">
+        <p>Body</p>
+      </Dialog>,
+    )
+    expect(screen.getByRole('dialog').classList.contains('ui-dialog-md')).toBe(true)
+
+    const rules = parse(css('Dialog.css')).rules
+    const width = (selector: string) => rules.find((r) => r.selector === selector)?.body
+    expect(width('.ui-dialog-sm')).toMatch(/width\s*:\s*min\(var\(--dialog-sm\),/)
+    expect(width('.ui-dialog-md')).toMatch(/width\s*:\s*min\(var\(--dialog-md\),/)
+    expect(width('.ui-dialog')).not.toMatch(/(^|;|\s)width\s*:/)
+    const tokens = readFileSync('src/styles/tokens.css', 'utf8')
+    expect(tokens).toMatch(/--dialog-sm:\s*440px;/)
+    expect(tokens).toMatch(/--dialog-md:\s*560px;/)
+  })
+
+  // Two dialogs side by side must not show two heading sizes. Every dialog title is a card heading (--text-lg),
+  // whether the dialog renders it or a child heading takes the ui-dialog-title class.
+  it('every dialog title uses --text-lg, and no dialog child sets its own heading size', () => {
+    const title = parse(css('Dialog.css')).rules.find((r) => r.selector === '.ui-dialog-title')?.body
+    expect(title).toMatch(/font-size\s*:\s*var\(--text-lg\)/)
+    expect(title).toMatch(/line-height\s*:\s*var\(--text-lg-line\)/)
+    expect(readFileSync('src/components/PasskeyLogin.css', 'utf8')).not.toMatch(/passkey-title|h2/)
+  })
+
   // A field that cannot be changed must look different, not only refuse input.
   it('Field shows a disabled control as disabled', () => {
     const rule = parse(css('Field.css')).rules.find((r) => r.selector.includes(':disabled'))
