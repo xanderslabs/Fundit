@@ -186,12 +186,16 @@ export const CIRCLE_MULTISIG_PLUGIN: Address = '0x0000000C984AFf541D6cE86Bb697e6
 // account keeps this much free. It is also the least a Fundit account ever keeps back (see passkeyReserve).
 export const PASSKEY_GAS_BUFFER = 50_000n
 // A Fundit account pays for a user operation by moving its prefund (all its gas limits times the max fee) into
-// the EntryPoint before the calls run, so it keeps back more than the fee itself. passkeyReserve estimates it.
-// When it cannot, it keeps these. Measured on Arc testnet on 2026-10-18 at Circle's fee (about 800 gwei):
-// prefunds of 0.22 to 0.37 USDC for a send or gift from a deployed account, 0.65 USDC to create a Fundit, and
-// 1.27 USDC for the first operation, which also deploys the account.
-export const RESERVE_FALLBACK = 500_000n
-export const RESERVE_FALLBACK_NEW_ACCOUNT = 1_500_000n
+// the EntryPoint before the calls run, so it keeps back more than the fee itself. passkeySender checks the
+// exact prefund before every send. When an operation cannot be estimated, these gas units stand in, times
+// Circle's fee at the time. Measured on Arc testnet on 2026-10-18 (all limits as sent): 254k to 425k for a
+// send, gift or withdrawal from a deployed account, 795k to create a Fundit, and 1.53M for the first operation,
+// which also deploys the account.
+export const FALLBACK_GAS_DEPLOYED = 450_000n
+export const FALLBACK_GAS_NEW_ACCOUNT = 1_600_000n
+// Only when Circle's fee cannot be read either: the highest max fee seen from Circle on Arc testnet (about 900
+// gwei, in native wei per gas). With FALLBACK_GAS_NEW_ACCOUNT and the margin that is 1.80 USDC.
+export const WORST_SEEN_FEE = 900_000_000_000n
 // ERC-4337 EntryPoint v0.7, used by Circle Modular Wallets. Same address on every chain. It holds each
 // account's deposit: prefund left over from earlier operations, which pays for the next one first.
 export const ENTRY_POINT: Address = '0x0000000071727De22E5E9d8BAf0edAc6f37da032'

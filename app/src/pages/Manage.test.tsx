@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { campaignAbi } from '../abi/campaign'
 import { TOKENS } from '../config'
 import type { CampaignView } from '../lib/campaigns'
+import { NeedsNetworkFee } from '../lib/errors'
 import type { Call, Sender, TxResult } from '../lib/sender'
 import { Manage } from './Manage'
 
@@ -144,6 +145,20 @@ describe('Manage', () => {
     await waitFor(() => expect(send).toHaveBeenCalledTimes(1))
     const [calls] = send.mock.calls[0]!
     expect(decode(calls[0]!.data).args).toEqual([50_000000n, 26, pad(CREATOR, { size: 32 }), 0n, 0, '0x'])
+  })
+
+  // A withdrawal moves no USDC out of the account but pays the prefund. The sender's refusal shows plainly.
+  it("shows the sender's network fee refusal on a withdrawal, with an Add money link", async () => {
+    state.view = view()
+    const send = fakeSender('passkey')
+    send.mockRejectedValueOnce(new NeedsNetworkFee(250_000n))
+    renderPage()
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText('Amount'), '50')
+    await user.click(button('Withdraw'))
+    expect(await screen.findByText(/Your Fundit account needs at least 0.25 USDC for the network fee\. Add money and try again\./)).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/add-money')
+    expect((send.mock.calls[0] as unknown[])[1]).toMatchObject({ label: 'Withdraw' })
   })
 
   // A cross-chain payout pads the recipient without checking it, so a typo would mint to the wrong address.

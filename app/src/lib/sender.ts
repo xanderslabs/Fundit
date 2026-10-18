@@ -19,7 +19,8 @@ export type TxResult =
 // onHash runs as soon as a hash for calls[index] is known, before its receipt, so a caller can save it and a
 // reload during the wait still knows it went out. A passkey sender reports its one user operation hash for the
 // last call.
-export type SendOptions = { label: string; onHash?: (hash: Hex, index: number) => void }
+// usdcOut is the USDC these calls move out of the sender. A passkey sender keeps the network fee on top of it.
+export type SendOptions = { label: string; onHash?: (hash: Hex, index: number) => void; usdcOut?: bigint }
 
 // The single write path. Every action builds Calls and hands them to a Sender.
 // send() resolves to a TxResult. It throws only for a failure before anything is sent (for example a

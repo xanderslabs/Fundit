@@ -1,7 +1,8 @@
 import { act, renderHook } from '@testing-library/react'
 import { type Address, decodeFunctionData, erc20Abi, getAddress, type Hex, type TransactionReceipt } from 'viem'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { CIRCLE_MULTISIG_PLUGIN, ENTRY_POINT, RESERVE_FALLBACK, RESERVE_FALLBACK_NEW_ACCOUNT, TX_TIMEOUT_MS } from '../config'
+import { CIRCLE_MULTISIG_PLUGIN, ENTRY_POINT, TX_TIMEOUT_MS } from '../config'
+import { explainError, NeedsNetworkFee } from './errors'
 import { useSender } from '../hooks/useSender'
 import {
   addBackupPasskey,
@@ -87,6 +88,11 @@ vi.mock('./passkeyKit', async () =>
 const balance = vi.hoisted(() => ({ value: 1_000_000n }))
 // The account's EntryPoint deposit, in native wei.
 const deposit = vi.hoisted(() => ({ value: 0n }))
+// Circle's answer to circle_getUserOperationGasPrice with every tier at this max fee (wei per gas).
+function tiers(maxFee: bigint) {
+  const tier = { maxFeePerGas: maxFee.toString(), maxPriorityFeePerGas: (maxFee - 40_000_000_000n).toString() }
+  return { low: tier, medium: tier, high: tier }
+}
 // Deployed code per address (lower case), for picking the live account when a key maps to several.
 const code = vi.hoisted(() => new Map<string, string>())
 // The account's owners in Circle's multisig plugin: owner ids only, the rest of ownershipInfoOf is not read.
@@ -447,11 +453,40 @@ describe('addBackupPasskey', () => {
   })
 
   // The gas comes out of the account's USDC, and the EntryPoint takes the whole prefund first. Short of it the
-  // bundler would refuse with a code nobody can read. GAS at 1,000 gwei with the margins is 0.31 USDC.
+  // bundler would refuse with a code nobody can read. GAS at 1,000 gwei, with the call gas margin as sent, is
+  // 0.245003 USDC, up to 0.25.
   it('refuses with a plain message when the account cannot pay the prefund', async () => {
     balance.value = 300_000n
-    await expect(addBackupPasskey(stored, PHRASE)).rejects.toThrow('Add at least 0.31 USDC')
+    balance.value = 200_000n
+    await expect(addBackupPasskey(stored, PHRASE)).rejects.toThrow(
+      'Your Fundit account needs at least 0.25 USDC for the network fee. Add money and try again.',
+    )
     expect(kit.registerRecoveryAddress).not.toHaveBeenCalled()
+  })
+
+  // Fee checked is fee sent: the operation carries the fee the check used, so it cannot cost more than checked.
+  it('sends the backup with the fee it checked', async () => {
+    await addBackupPasskey(stored, PHRASE)
+    expect(kit.registerRecoveryAddress.mock.calls[0]![0]).toMatchObject({ maxFeePerGas: 1_000_000_000_000n, maxPriorityFeePerGas: 960_000_000_000n })
+  })
+
+  // A short account fails the estimate itself with AA21. Below the stand-in reserve, the person reads the number.
+  it('turns AA21 into the plain message with the stand-in reserve when the account is short', async () => {
+    kit.estimateRegisterRecoveryAddressGas.mockRejectedValue(new Error("UserOperation reverted during simulation with reason: AA21 didn't pay prefund"))
+    balance.value = 100_000n
+    // A new account: 1,600,000 x 1,000 gwei x 1.25 = 2.00.
+    await expect(addBackupPasskey(stored, PHRASE)).rejects.toThrow(
+      'Your Fundit account needs at least 2.00 USDC for the network fee. Add money and try again.',
+    )
+    expect(kit.registerRecoveryAddress).not.toHaveBeenCalled()
+  })
+
+  it('keeps the AA21 error when the balance is above the stand-in reserve, and says it plainly', async () => {
+    kit.estimateRegisterRecoveryAddressGas.mockRejectedValue(new Error("UserOperation reverted during simulation with reason: AA21 didn't pay prefund"))
+    balance.value = 5_000_000n
+    const err = await addBackupPasskey(stored, PHRASE).catch((e: unknown) => e)
+    expect(err).not.toBeInstanceOf(NeedsNetworkFee)
+    expect(explainError(err)).toBe('Your Fundit account does not have enough USDC for the network fee. Add money and try again.')
   })
 
   it('fails when the user operation reverts, and marks nothing saved', async () => {
@@ -707,8 +742,9 @@ describe('recoverWithPhrase', () => {
     expect(err).toBeInstanceOf(RecoveryNeedsFunds)
     expect((err as RecoveryNeedsFunds).account).toBe(RECOVERED)
     // No passkey for this account on this page, so the deployed-account fallback, shown as the real number.
-    expect((err as RecoveryNeedsFunds).reserve).toBe(RESERVE_FALLBACK)
-    expect((err as Error).message).toBe('Recovery needs a small network fee. Send at least 0.50 USDC on Arc to your account address first.')
+    // 450,000 gas x Circle's 1,000 gwei x 1.25 = 0.5625 USDC, up to 0.57.
+    expect((err as RecoveryNeedsFunds).reserve).toBe(570_000n)
+    expect((err as Error).message).toBe('Recovery needs a small network fee. Send at least 0.57 USDC on Arc to your account address first.')
     expect(kit.sdk.toWebAuthnCredential).not.toHaveBeenCalled()
     expect(kit.executeRecovery).not.toHaveBeenCalled()
   })
@@ -902,14 +938,29 @@ describe('passkeyReserve', () => {
     expect(args).toEqual(['0x000000000000000000000000000000000000dEaD', 1n])
   })
 
-  it('keeps the deployed-account fallback with no signer on this page', async () => {
+  // The fallback follows Circle's fee now: measured gas units times the low tier, with the margin.
+  it('sizes the deployed-account fallback from Circle\'s fee, with no signer on this page', async () => {
     code.set(ADDRESS.toLowerCase(), '0x6001')
-    expect(await passkeyReserve(ADDRESS, [SEND])).toBe(RESERVE_FALLBACK)
+    // 450,000 x 1,000 gwei x 1.25 = 0.5625, up to 0.57.
+    expect(await passkeyReserve(ADDRESS, [SEND])).toBe(570_000n)
     expect(kit.bundler.estimateUserOperationGas).not.toHaveBeenCalled()
   })
 
   it('keeps more before the account is deployed, since its first operation deploys it', async () => {
-    expect(await passkeyReserve(ADDRESS)).toBe(RESERVE_FALLBACK_NEW_ACCOUNT)
+    // 1,600,000 x 1,000 gwei x 1.25 = 2.00.
+    expect(await passkeyReserve(ADDRESS)).toBe(2_000_000n)
+  })
+
+  it('grows with the fee: above the old fixed 1.50, at 950 gwei on a new account', async () => {
+    kit.sdk.getUserOperationGasPrice.mockResolvedValueOnce(tiers(950_000_000_000n))
+    // 1,600,000 x 950 gwei x 1.25 = 1.90.
+    expect(await passkeyReserve(ADDRESS)).toBe(1_900_000n)
+  })
+
+  it('uses the highest fee seen when Circle\'s fee cannot be read either', async () => {
+    kit.sdk.getUserOperationGasPrice.mockRejectedValueOnce(new Error('rpc down'))
+    // 1,600,000 x 900 gwei x 1.25 = 1.80, which covers the 1.53M-gas first operation measured at 900 gwei.
+    expect(await passkeyReserve(ADDRESS)).toBe(1_800_000n)
   })
 
   it('falls back when the estimate fails, less the deposit', async () => {
@@ -917,7 +968,8 @@ describe('passkeyReserve', () => {
     code.set(ADDRESS.toLowerCase(), '0x6001')
     kit.bundler.estimateUserOperationGas.mockRejectedValue(new Error("AA21 didn't pay prefund"))
     deposit.value = 100_000n * 10n ** 12n
-    expect(await passkeyReserve(ADDRESS, [SEND])).toBe(RESERVE_FALLBACK - 100_000n)
+    // 0.5625 less 0.10 deposited, up to 0.47.
+    expect(await passkeyReserve(ADDRESS, [SEND])).toBe(470_000n)
   })
 })
 
@@ -938,5 +990,104 @@ describe('user operation fees', () => {
       .map((c) => (c as unknown as [{ userOperation?: { estimateFeesPerGas?: () => Promise<unknown> } }])[0])
       .find((o) => o.userOperation?.estimateFeesPerGas)!
     expect(await sending.userOperation!.estimateFeesPerGas!()).toEqual({ maxFeePerGas: 723_580_000_000n, maxPriorityFeePerGas: 683_580_000_000n })
+  })
+})
+
+// The last check before anything is sent lives in the sender, after the signer is ready, so it always runs on a
+// fresh estimate and Circle's fee now, and the operation carries that same fee.
+describe('the reserve check before a send', () => {
+  const stored = { address: getAddress('0x00000000000000000000000000000000000000cc') as Address, credentialId: 'cred-live' }
+  const SEND: Call = { to: '0x3600000000000000000000000000000000000000', data: '0xa9059cbb' }
+  // The first operation also deploys the account: about 1.32M verification gas, as measured on Arc testnet.
+  const NEW_ACCOUNT_GAS = { callGasLimit: 60_000n, preVerificationGas: 70_000n, verificationGasLimit: 1_320_000n }
+
+  beforeEach(() => {
+    deposit.value = 0n
+    kit.bundler.estimateUserOperationGas.mockReset()
+    kit.bundler.estimateUserOperationGas.mockResolvedValue(GAS)
+    kit.bundler.sendUserOperation.mockReset()
+    kit.bundler.sendUserOperation.mockResolvedValue(OP_HASH)
+    kit.bundler.waitForUserOperationReceipt.mockReset()
+    kit.bundler.waitForUserOperationReceipt.mockResolvedValue(receipt(true))
+    kit.sdk.toWebAuthnCredential.mockClear()
+  })
+  afterEach(() => {
+    code.clear()
+    balance.value = 1_000_000n
+    kit.sdk.getUserOperationGasPrice.mockResolvedValue(tiers(1_000_000_000_000n))
+  })
+
+  // After a reload there is no signer. The form's Max kept the old fixed 1.50 USDC, but at 1,100 gwei the first
+  // operation's prefund is (75,000 + 1,320,000 + 70,000) x 1,100 gwei = 1.6115 USDC: 1.62 at the cent.
+  it('refuses a Max on a new account after a reload, before anything is sent', async () => {
+    kit.sdk.getUserOperationGasPrice.mockResolvedValue(tiers(1_100_000_000_000n))
+    kit.bundler.estimateUserOperationGas.mockResolvedValue(NEW_ACCOUNT_GAS)
+    balance.value = 3_000_000n
+    const err = await storedPasskeySender(stored)
+      .send([SEND], { label: 'Send money out', usdcOut: 3_000_000n - 1_500_000n })
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(NeedsNetworkFee)
+    expect((err as NeedsNetworkFee).reserve).toBe(1_620_000n)
+    expect((err as Error).message).toBe('Your Fundit account needs at least 1.62 USDC for the network fee. Add money and try again.')
+    expect(kit.bundler.sendUserOperation).not.toHaveBeenCalled()
+    // The passkey signer was made first, so the estimate is for this account now.
+    expect(kit.sdk.toWebAuthnCredential.mock.invocationCallOrder[0]!).toBeLessThan(kit.bundler.estimateUserOperationGas.mock.invocationCallOrder[0]!)
+  })
+
+  // The old deployed fallback was a fixed 0.50 USDC. At 2,500 gwei the prefund is 0.6125, so 0.62.
+  it('refuses when the fee is above what the old fixed fallback covered', async () => {
+    kit.sdk.getUserOperationGasPrice.mockResolvedValueOnce(tiers(2_500_000_000_000n))
+    code.set(stored.address.toLowerCase(), '0x6001')
+    balance.value = 1_000_000n
+    const err = await storedPasskeySender(stored).send([SEND], { label: 'Send money out', usdcOut: 500_000n }).catch((e: unknown) => e)
+    expect((err as NeedsNetworkFee).reserve).toBe(620_000n)
+    expect(kit.bundler.sendUserOperation).not.toHaveBeenCalled()
+  })
+
+  it('sends with the fee it checked when the account holds the amount and the prefund', async () => {
+    balance.value = 1_000_000n
+    // 0.75 out + 0.25 prefund = 1.00, exactly the balance.
+    const res = await storedPasskeySender(stored).send([SEND], { label: 'Send money out', usdcOut: 750_000n })
+    expect(res.status).toBe('success')
+    expect(kit.bundler.sendUserOperation.mock.calls[0]![0]).toMatchObject({
+      callGasLimit: 125_003n,
+      maxFeePerGas: 1_000_000_000_000n,
+      maxPriorityFeePerGas: 960_000_000_000n,
+    })
+  })
+
+  it('counts the EntryPoint deposit, which pays first', async () => {
+    deposit.value = 200_000n * 10n ** 12n
+    balance.value = 1_000_000n
+    // 0.245003 less 0.20 deposited: 0.05.
+    const res = await storedPasskeySender(stored).send([SEND], { label: 'Send money out', usdcOut: 950_000n })
+    expect(res.status).toBe('success')
+  })
+
+  // Create, Manage and the backup spend no USDC in their calls, but still pay the prefund.
+  it('checks the prefund for an action that moves no USDC, like creating a Fundit', async () => {
+    balance.value = 200_000n
+    await expect(storedPasskeySender(stored).send([SEND], { label: 'Create fundraiser' })).rejects.toThrow(
+      'Your Fundit account needs at least 0.25 USDC for the network fee.',
+    )
+  })
+
+  it.each([
+    ['AA21', "UserOperation reverted during simulation with reason: AA21 didn't pay prefund"],
+    ['Missing or invalid parameters', 'An error occurred while executing user operation: Missing or invalid parameters.'],
+  ])('names the stand-in reserve when the estimate fails with %s and the account is short', async (_name, text) => {
+    kit.bundler.estimateUserOperationGas.mockRejectedValue(new Error(text))
+    code.set(stored.address.toLowerCase(), '0x6001')
+    balance.value = 156_000n
+    const err = await storedPasskeySender(stored).send([SEND], { label: 'Create fundraiser' }).catch((e: unknown) => e)
+    expect((err as NeedsNetworkFee).reserve).toBe(570_000n)
+  })
+
+  it('keeps an unrelated "Missing or invalid parameters" error when the account is not short', async () => {
+    kit.bundler.estimateUserOperationGas.mockRejectedValue(new Error('Missing or invalid parameters.'))
+    code.set(stored.address.toLowerCase(), '0x6001')
+    balance.value = 5_000_000n
+    const err = await storedPasskeySender(stored).send([SEND], { label: 'Create fundraiser' }).catch((e: unknown) => e)
+    expect(err).not.toBeInstanceOf(NeedsNetworkFee)
   })
 })

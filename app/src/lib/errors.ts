@@ -2,6 +2,7 @@ import { BaseError, decodeErrorResult, type Hex, UserRejectedRequestError } from
 import { campaignAbi } from '../abi/campaign'
 import { factoryAbi } from '../abi/factory'
 import { CCTP_CHAINS, CHAIN_LABELS, NETWORK } from '../config'
+import { formatAmount } from './format'
 
 // Plain text for every custom error in Campaign and CampaignFactory. errors.test.ts checks none is missing.
 const ERROR_TEXT: Record<string, string> = {
@@ -117,13 +118,43 @@ export function isUserRejection(e: unknown): boolean {
 // contain only alphanumeric and _@.:+- characters.", which viem shows as "An unknown RPC error occurred."
 export const USERNAME_PATTERN = /^[A-Za-z0-9_@.:+-]{5,50}$/
 export const USERNAME_RULE = 'Use 5 to 50 letters, numbers or _ @ . : + - (no spaces).'
-const INVALID_USERNAME_CODE = -32025
 
-export function isInvalidUsername(e: unknown): boolean {
-  return chain(e).some((x) => {
-    const { code, message, details } = x as { code?: unknown; message?: unknown; details?: unknown }
-    return code === INVALID_USERNAME_CODE || [message, details].some((t) => typeof t === 'string' && /username is invalid/i.test(t))
+// The text of every link in the chain: message, details and viem's shortMessage.
+function texts(e: unknown): string[] {
+  return chain(e).flatMap((x) => {
+    const { message, details, shortMessage } = x as { message?: unknown; details?: unknown; shortMessage?: unknown }
+    return [message, details, shortMessage].filter((t): t is string => typeof t === 'string')
   })
+}
+
+// Matched on Circle's text, not on -32025 alone: that code is not known to mean only a bad username.
+export function isInvalidUsername(e: unknown): boolean {
+  return texts(e).some((t) => /username is invalid/i.test(t))
+}
+
+// A Fundit account pays its own gas, so the EntryPoint takes the prefund from its USDC first. The person sees the
+// real number (passkeySender works it out) and a way to add money.
+export class NeedsNetworkFee extends PlainError {
+  constructor(readonly reserve: bigint) {
+    super(`Your Fundit account needs at least ${formatAmount(reserve, 'USDC')} for the network fee. Add money and try again.`)
+  }
+}
+const NO_NETWORK_FEE = 'Your Fundit account does not have enough USDC for the network fee. Add money and try again.'
+
+// AA21 is the EntryPoint's "didn't pay prefund": the account could not cover the operation's gas.
+export function isPrefundError(e: unknown): boolean {
+  return texts(e).some((t) => /\bAA21\b|didn't pay prefund/i.test(t))
+}
+
+// Circle's bundler answered "Missing or invalid parameters" when a short account tried to create a Fundit on
+// Arc testnet. The text is not specific to gas, so callers check the balance before reading it that way.
+export function isMissingParams(e: unknown): boolean {
+  return texts(e).some((t) => /Missing or invalid parameters/i.test(t))
+}
+
+// True when the fix is to add money, so the page can link to Add money.
+export function needsAddMoney(e: unknown): boolean {
+  return chain(e).some((x) => x instanceof NeedsNetworkFee) || isPrefundError(e)
 }
 
 function revertName(e: unknown): string | null {
@@ -156,6 +187,7 @@ export function explainError(e: unknown, generic = GENERIC): string {
   if (isUserRejection(e)) return 'You cancelled the request.'
   if (e instanceof PlainError) return e.message
   if (isInvalidUsername(e)) return USERNAME_RULE
+  if (isPrefundError(e)) return NO_NETWORK_FEE
   const kit = kitText(e)
   if (kit) return kit
   const name = revertName(e)

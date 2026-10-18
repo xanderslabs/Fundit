@@ -6,6 +6,7 @@ import { type Address, decodeFunctionData, getAddress, type Hex, pad, parseAbi, 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { erc20Abi } from '../abi/erc20'
 import { FORWARD_HOOK_DATA, TOKEN_MESSENGER_V2, TOKENS } from '../config'
+import { NeedsNetworkFee } from '../lib/errors'
 import type { Sender, TxResult } from '../lib/sender'
 import { AccountWithdraw } from './AccountWithdraw'
 
@@ -33,11 +34,9 @@ vi.mock('../lib/iris', async (importOriginal) => ({
   fetchTransferStatus: async () => 'pending',
 }))
 vi.mock('../lib/clients', () => ({ arcClient: {} }))
-// What the account keeps for the network fee: the form's estimate, and the exact prefund checked at send time.
-const reserve = vi.hoisted(() => ({ form: 300_000n, send: 300_000n }))
-const passkeyReserve = vi.hoisted(() =>
-  vi.fn(async (_address: unknown, _calls?: unknown, opts?: { feeMargin?: boolean }) => (opts?.feeMargin === false ? reserve.send : reserve.form)),
-)
+// What the account keeps for the network fee, as the form estimates it. The sender checks again before it sends.
+const reserve = vi.hoisted(() => ({ form: 300_000n }))
+const passkeyReserve = vi.hoisted(() => vi.fn(async (_address: unknown, _calls?: unknown) => reserve.form))
 vi.mock('../lib/passkey', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/passkey')>()),
   passkeyReserve,
@@ -56,7 +55,6 @@ afterEach(() => {
   balances.usdc = 0n
   balances.eurc = 0n
   reserve.form = 300_000n
-  reserve.send = 300_000n
   localStorage.clear()
 })
 
@@ -110,38 +108,33 @@ describe('AccountWithdraw', () => {
     expect((submitButton() as HTMLButtonElement).disabled).toBe(false)
   })
 
-  // The form's balance can be up to 15 seconds old, or spent from another tab. The send must check a fresh one.
-  it('refuses at send time when the fresh balance no longer leaves the gas reserve', async () => {
+  // The last check is in the sender, which estimates the real calls once the passkey is ready. The form hands
+  // it the USDC the send moves out, and shows its refusal with the real number and a way to add money.
+  it('hands the amount to the sender and shows its network fee refusal with an Add money link', async () => {
     balances.usdc = 1_000000n
-    renderForm()
-    await screen.findByText(/You have 1.00 USDC/)
-    await fill('0.6', FRIEND)
-    expect((submitButton() as HTMLButtonElement).disabled).toBe(false)
-    balances.usdc = 800000n
-    await userEvent.click(submitButton())
-    expect((await screen.findAllByText('Leave at least 0.30 USDC in your Fundit account for the network fee.')).length).toBeGreaterThan(0)
-    expect(send).not.toHaveBeenCalled()
-  })
-
-  // The prefund for the real calls at the fee now decides, and the message gives that number.
-  it('checks the exact prefund for the calls it will send, right before sending', async () => {
-    balances.usdc = 1_000000n
+    send.mockRejectedValueOnce(new NeedsNetworkFee(350_000n))
     renderForm()
     await screen.findByText(/You have 1.00 USDC/)
     await userEvent.click(screen.getByRole('button', { name: 'Max' }))
     await userEvent.type(screen.getByLabelText('Recipient'), FRIEND)
-    reserve.send = 350_000n
     await userEvent.click(submitButton())
-    expect((await screen.findAllByText('Leave at least 0.35 USDC in your Fundit account for the network fee.')).length).toBeGreaterThan(0)
-    expect(send).not.toHaveBeenCalled()
-    const [, calls, opts] = passkeyReserve.mock.calls.at(-1)!
-    expect(opts).toEqual({ feeMargin: false })
-    expect(decodeFunctionData({ abi: erc20Abi, data: (calls as { data: Hex }[])[0]!.data }).args).toEqual([FRIEND, 700_000n])
+    expect(await screen.findByText(/Your Fundit account needs at least 0.35 USDC for the network fee\. Add money and try again\./)).toBeTruthy()
+    expect(screen.getAllByRole('link', { name: 'Add money' }).some((a) => a.getAttribute('href') === '/add-money')).toBe(true)
+    const [calls, opts] = send.mock.calls[0]!
+    expect(opts).toMatchObject({ usdcOut: 700_000n })
+    expect(decodeFunctionData({ abi: erc20Abi, data: calls[0]!.data }).args).toEqual([FRIEND, 700_000n])
+  })
 
-    // At the estimate it goes.
-    reserve.send = 300_000n
+  it('hands no USDC amount to the sender for an EURC send, which still pays the fee in USDC', async () => {
+    balances.usdc = 1_000000n
+    balances.eurc = 5_000000n
+    renderForm()
+    await userEvent.selectOptions(screen.getByLabelText('Currency'), 'EURC')
+    await screen.findByText(/You have 5.00 EURC/)
+    await fill('5', FRIEND)
     await userEvent.click(submitButton())
     await screen.findByText('Your money was sent.')
+    expect(send.mock.calls[0]![1]).toMatchObject({ usdcOut: 0n })
   })
 
   // EURC has no gas reserve of its own, but the network fee is still paid in USDC.

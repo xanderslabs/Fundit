@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { campaignAbi } from '../abi/campaign'
 import { erc20Abi } from '../abi/erc20'
 import { TOKENS, type TokenSymbol } from '../config'
+import { NeedsNetworkFee } from '../lib/errors'
 import type { CampaignView } from '../lib/campaigns'
 import type { Call, Sender, SendOptions, TxResult } from '../lib/sender'
 import { DonatePanel } from './DonatePanel'
@@ -35,10 +36,10 @@ vi.mock('../lib/sender', async (importOriginal) => ({
   waitForResult: () => recheck.next(),
 }))
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open }) }))
-// What the Fundit account keeps for the network fee: the form's estimate, and the exact prefund at send time.
-const reserve = vi.hoisted(() => ({ form: 300_000n, send: 300_000n }))
+// What the Fundit account keeps for the network fee, as the form estimates it. The sender checks again.
+const reserve = vi.hoisted(() => ({ form: 300_000n }))
 const passkeyReserve = vi.hoisted(() =>
-  vi.fn(async (_address: unknown, _calls?: unknown, opts?: { feeMargin?: boolean }) => (opts?.feeMargin === false ? reserve.send : reserve.form)),
+  vi.fn(async (_address: unknown, _calls?: unknown) => reserve.form),
 )
 vi.mock('../lib/passkey', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/passkey')>()),
@@ -109,7 +110,6 @@ const donateButton = () => screen.getByRole('button', { name: 'Give' }) as HTMLB
 afterEach(() => {
   cleanup()
   reserve.form = 300_000n
-  reserve.send = 300_000n
   state.sender = null
   state.balance = 0n
   state.usdc = undefined
@@ -697,18 +697,19 @@ describe('DonatePanel', () => {
       await waitFor(() => expect(donateButton().disabled).toBe(false))
     })
 
-    // The prefund for the real calls (approve and donate) at the fee now decides, before anything is sent.
-    it('checks the exact prefund for the gift right before sending', async () => {
+    // The sender makes the last check with the real calls (approve and donate) and the fee it sends. The panel
+    // hands it what the gift moves out, and shows its refusal with the number and a way to add money.
+    it('hands amount plus tip to the sender and shows its network fee refusal', async () => {
       const { send } = passkeySender()
+      send.mockRejectedValueOnce(new NeedsNetworkFee(400_000n))
       state.balance = 10_000000n
-      reserve.send = 400_000n
       renderPanel(view('USDC'))
       await fillAndDonate('9.7')
-      expect(await screen.findByText(/Keep about 0.40 USDC more for the network fee/)).toBeTruthy()
-      expect(send).not.toHaveBeenCalled()
-      const [, calls, opts] = passkeyReserve.mock.calls.at(-1)!
-      expect(opts).toEqual({ feeMargin: false })
+      expect(await screen.findByText(/Your Fundit account needs at least 0.40 USDC for the network fee\. Add money and try again\./)).toBeTruthy()
+      expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/add-money')
+      const [calls, opts] = send.mock.calls[0]! as unknown as [Call[], { usdcOut?: bigint }]
       expect(calls).toHaveLength(2)
+      expect(opts.usdcOut).toBe(9_700000n)
     })
 
     // Arc gas is paid in USDC. A Fundit account with EURC and no USDC would fail at gas estimation after the tap.

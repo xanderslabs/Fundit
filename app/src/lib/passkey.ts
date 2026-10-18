@@ -9,14 +9,15 @@ import {
   MODULAR_WALLETS_URL,
   NETWORK,
   PASSKEY_GAS_BUFFER,
-  RESERVE_FALLBACK,
-  RESERVE_FALLBACK_NEW_ACCOUNT,
+  FALLBACK_GAS_DEPLOYED,
+  FALLBACK_GAS_NEW_ACCOUNT,
   TOKENS,
   TX_TIMEOUT_MS,
+  WORST_SEEN_FEE,
 } from '../config'
 import { arcClient } from './clients'
 import { formatAmount } from './format'
-import { isUserRejection, PlainError } from './errors'
+import { isMissingParams, isPrefundError, isUserRejection, NeedsNetworkFee, PlainError } from './errors'
 import { type Call, REVERTED, type Sender, type TxResult, withGasMargin, withTimeout } from './sender'
 
 // Circle Modular Wallets. The SDK is large and only passkey users need it, so it loads with import() on
@@ -108,9 +109,20 @@ export type ReceiptBundler = {
   waitForUserOperationReceipt(args: { hash: Hex; timeout?: number }): Promise<UserOperationResult>
 }
 export type UserOperationGas = { callGasLimit: bigint; preVerificationGas: bigint; verificationGasLimit: bigint }
+export type UserOperationFees = { maxFeePerGas: bigint; maxPriorityFeePerGas: bigint }
 export type PasskeyBundler<A> = ReceiptBundler & {
   estimateUserOperationGas(args: { account: A; calls: Call[] }): Promise<UserOperationGas>
-  sendUserOperation(args: { account: A; calls: Call[] } & UserOperationGas): Promise<Hex>
+  sendUserOperation(args: { account: A; calls: Call[] } & UserOperationGas & Partial<UserOperationFees>): Promise<Hex>
+}
+
+// What passkeySender reads to check that the account can pay before it sends.
+export type PasskeyFunds = {
+  // Circle's fee now. The same fee goes into the user operation.
+  fees(): Promise<UserOperationFees>
+  usdc(): Promise<bigint>
+  depositWei(): Promise<bigint>
+  // The reserve to name when the bundler cannot estimate because the account is short (see fallbackReserve).
+  fallback(): Promise<bigint>
 }
 
 // Waits for a user operation, never longer than TX_TIMEOUT_MS, and maps it to a TxResult. Once mined, the
@@ -132,25 +144,44 @@ export async function userOperationResult(bundler: ReceiptBundler, hash: Hex): P
 
 // All calls go in one user operation, so they succeed or fail together. There is no paymaster: the account
 // pays its gas in USDC on Arc. completed is always 0 on failure, because nothing in the batch went through.
-export function passkeySender<A extends { address: Address }>(account: A, bundler: PasskeyBundler<A>): Sender {
+// With funds, nothing is sent unless the account holds opts.usdcOut plus the operation's prefund, worked out from
+// this estimate and the fee that goes into it. A send that left less would revert in its own calls and still
+// pay the fee. The refusal is a NeedsNetworkFee with the real number.
+export function passkeySender<A extends { address: Address }>(account: A, bundler: PasskeyBundler<A>, funds?: PasskeyFunds): Sender {
   return {
     kind: 'passkey',
     address: account.address,
     async send(calls, opts) {
       if (calls.length === 0) throw new Error('No calls to send')
       const ops = calls.map((c) => ({ to: c.to, data: c.data }))
+      const out = opts?.usdcOut ?? 0n
+      const refuseIfShort = async (reserve: bigint) => {
+        if ((await funds!.usdc()) < out + reserve) throw new NeedsNetworkFee(reserve)
+      }
       let hash: Hex
       try {
+        let gas: UserOperationGas
+        try {
+          gas = await bundler.estimateUserOperationGas({ account, calls: ops })
+        } catch (err) {
+          // A short account fails the estimate itself. Name the stand-in reserve instead of the bundler's code.
+          if (funds && (isPrefundError(err) || isMissingParams(err))) await refuseIfShort(await funds.fallback())
+          throw err
+        }
         // The call gas gets the same margin as wallet transactions (see withGasMargin). Passing all three limits
-        // stops viem from estimating a second time.
-        const gas = await bundler.estimateUserOperationGas({ account, calls: ops })
-        hash = await bundler.sendUserOperation({
-          account,
-          calls: ops,
+        // and the fee stops viem from estimating again, so the fee checked is the fee sent.
+        const limits = {
           callGasLimit: withGasMargin(gas.callGasLimit),
           preVerificationGas: gas.preVerificationGas,
           verificationGasLimit: gas.verificationGasLimit,
-        })
+        }
+        let fees: UserOperationFees | undefined
+        if (funds) {
+          const [now, depositWei] = await Promise.all([funds.fees(), funds.depositWei()])
+          await refuseIfShort(reserveFor(gas, now.maxFeePerGas, depositWei, false))
+          fees = now
+        }
+        hash = await bundler.sendUserOperation({ account, calls: ops, ...limits, ...fees })
       } catch (err) {
         if (isUserRejection(err)) return { status: 'rejected', completed: 0 }
         throw err
@@ -297,8 +328,9 @@ export function storedPasskeySender(stored: StoredPasskey): Sender {
     kind: 'passkey',
     address: stored.address,
     async send(calls, opts) {
+      // The signer first, so the check below always runs on a fresh estimate, even right after a reload.
       const { account, bundler } = await ensureLive(stored)
-      return passkeySender(account, bundler).send(calls, opts)
+      return passkeySender(account, bundler, liveFunds(stored.address)).send(calls, opts)
     },
     // Reading a receipt needs no signature, so this never asks for the passkey.
     recheck: async (hash) => userOperationResult(await readBundler(), hash),
@@ -455,9 +487,8 @@ export async function newRecoveryPhrase(): Promise<string> {
 // takes the prefund: every gas limit times the max fee, less what the account already has deposited there. A
 // send that leaves less than that reverts in its own calls ("transfer amount exceeds balance") and still pays
 // the fee. The total gas is what passkeySender sends (call gas with withGasMargin). For a form, withGasMargin
-// on top covers the fee moving before the send. Right before a send, exact: false checks the prefund at the
-// fee now, so a Max worked out a moment earlier is not refused. Rounded up to the cent, never below
-// PASSKEY_GAS_BUFFER.
+// on top covers the fee moving before the send. passkeySender checks with feeMargin false, since it sends the
+// very fee it checked. Rounded up to the cent, never below PASSKEY_GAS_BUFFER.
 const WEI_PER_UNIT = 10n ** 12n
 const CENT = 10_000n
 export function reserveFor(gas: UserOperationGas, maxFeePerGas: bigint, depositWei: bigint, feeMargin = true): bigint {
@@ -483,7 +514,9 @@ async function readDeposit(address: Address): Promise<bigint> {
   }
 }
 
-// When the operation cannot be estimated. A new account pays for its own deployment in its first operation.
+// When the operation cannot be estimated: measured gas units (FALLBACK_GAS_*) times Circle's low fee now, with
+// the fee margin. A new account pays for its own deployment in its first operation. If Circle's fee cannot be
+// read either, the highest fee seen stands in.
 async function fallbackReserve(address: Address, depositWei: bigint): Promise<bigint> {
   let deployed = false
   try {
@@ -491,7 +524,29 @@ async function fallbackReserve(address: Address, depositWei: bigint): Promise<bi
   } catch {
     // Unknown: keep the larger amount.
   }
-  return roundReserve((deployed ? RESERVE_FALLBACK : RESERVE_FALLBACK_NEW_ACCOUNT) * WEI_PER_UNIT - depositWei)
+  let fee = WORST_SEEN_FEE
+  try {
+    fee = (await circleFees()).maxFeePerGas
+  } catch {
+    // Keep the highest fee seen.
+  }
+  const prefundWei = withGasMargin((deployed ? FALLBACK_GAS_DEPLOYED : FALLBACK_GAS_NEW_ACCOUNT) * fee)
+  return roundReserve(prefundWei > depositWei ? prefundWei - depositWei : 0n)
+}
+
+// Circle's fee with no signer: the gas price RPC needs only the client key.
+async function circleFees(): Promise<UserOperationFees> {
+  const lib = await loadSdk()
+  return userOperationFees(lib.sdk, clients(lib, clientKey()).client)
+}
+
+function liveFunds(address: Address): PasskeyFunds {
+  return {
+    fees: circleFees,
+    usdc: () => usdcOf(address),
+    depositWei: () => readDeposit(address),
+    fallback: async () => fallbackReserve(address, await readDeposit(address)),
+  }
 }
 
 // The stand-in operation when the caller has none: a real USDC transfer, 1 unit to another address. A zero
@@ -502,10 +557,11 @@ export function standInCalls(): Call[] {
   return [{ to: TOKENS.USDC.address, data: encodeFunctionData({ abi: erc20Abi, functionName: 'transfer', args: [STAND_IN_RECIPIENT, 1n] }) }]
 }
 
-// The reserve for these calls (or a stand-in) from this account. It estimates with the signer of this page load
-// and Circle's fee, so it never asks for the passkey. With no signer yet (after a reload), or when the estimate
-// fails, it keeps RESERVE_FALLBACK, or RESERVE_FALLBACK_NEW_ACCOUNT before the account is deployed.
-export async function passkeyReserve(address: Address, calls?: readonly Call[], opts: { feeMargin?: boolean } = {}): Promise<bigint> {
+// The reserve for these calls (or a stand-in) from this account, for forms: Max and the overdraw checks. It
+// estimates with the signer of this page load and Circle's fee, so it never asks for the passkey. With no signer
+// yet (after a reload), or when the estimate fails, it uses fallbackReserve. passkeySender checks again with a
+// fresh estimate before it sends.
+export async function passkeyReserve(address: Address, calls?: readonly Call[]): Promise<bigint> {
   const depositWei = await readDeposit(address)
   const signer = live
   if (signer && signer.account.address.toLowerCase() === address.toLowerCase()) {
@@ -517,7 +573,7 @@ export async function passkeyReserve(address: Address, calls?: readonly Call[], 
         signer.bundler.estimateUserOperationGas({ account: signer.account, calls: ops }),
         userOperationFees(lib.sdk, client),
       ])
-      return reserveFor(gas, fees.maxFeePerGas, depositWei, opts.feeMargin ?? true)
+      return reserveFor(gas, fees.maxFeePerGas, depositWei)
     } catch {
       // Fall back below.
     }
@@ -575,6 +631,7 @@ export async function addBackupPasskey(stored: StoredPasskey, recoveryPhrase: st
     throw new PlainError('Your last backup is still confirming. Check it before you start a new one.')
   }
   const { account, bundler } = await ensureLive(stored)
+  const funds = liveFunds(stored.address)
   const kit = await import('./passkeyKit')
   const recoveryAddress = kit.mnemonicToAccount(recoveryPhrase).address
   type Client = Parameters<typeof kit.sdk.recoveryActions>[0]
@@ -588,23 +645,21 @@ export async function addBackupPasskey(stored: StoredPasskey, recoveryPhrase: st
     try {
       gas = await actions.estimateRegisterRecoveryAddressGas({ account: owner, recoveryAddress } as Params)
     } catch (err) {
-      // An account that cannot pay the prefund fails the estimate with AA21, a code nobody can read.
-      if (/AA21/.test(String((err as { message?: unknown })?.message ?? err))) {
-        await refuseShortOfReserve(stored.address, () => fallbackReserve(stored.address, 0n))
-      }
+      // An account that cannot pay the prefund fails the estimate with a code nobody can read.
+      if (isPrefundError(err) || isMissingParams(err)) await refuseShortOfReserve(stored.address, await funds.fallback())
       throw err
     }
-    await refuseShortOfReserve(stored.address, async () => {
-      const lib = await loadSdk()
-      const [fees, depositWei] = await Promise.all([userOperationFees(lib.sdk, clients(lib, clientKey()).client), readDeposit(stored.address)])
-      return reserveFor(gas, fees.maxFeePerGas, depositWei)
-    })
+    // The same check as passkeySender: the prefund at the fee that goes into the operation.
+    const [fees, depositWei] = await Promise.all([funds.fees(), funds.depositWei()])
+    await refuseShortOfReserve(stored.address, reserveFor(gas, fees.maxFeePerGas, depositWei, false))
     hash = await actions.registerRecoveryAddress({
       account: owner,
       recoveryAddress,
       callGasLimit: withGasMargin(gas.callGasLimit),
       preVerificationGas: gas.preVerificationGas,
       verificationGasLimit: gas.verificationGasLimit,
+      maxFeePerGas: fees.maxFeePerGas,
+      maxPriorityFeePerGas: fees.maxPriorityFeePerGas,
     } as Params)
   } catch (err) {
     if (isAlreadyOwner(err, recoveryAddress)) {
@@ -618,10 +673,9 @@ export async function addBackupPasskey(stored: StoredPasskey, recoveryPhrase: st
   return settleBackup(stored.address, await userOperationResult(bundler, hash))
 }
 
-// Throws the plain "Add at least" message when the account holds less USDC than the reserve.
-async function refuseShortOfReserve(address: Address, reserve: () => Promise<bigint>) {
-  const [usdc, needed] = await Promise.all([usdcOf(address), reserve()])
-  if (usdc < needed) throw new PlainError(addAtLeast(needed, 'It pays the network fee for the backup.'))
+// Throws NeedsNetworkFee, with the real number, when the account holds less USDC than the reserve.
+async function refuseShortOfReserve(address: Address, reserve: bigint) {
+  if ((await usdcOf(address)) < reserve) throw new NeedsNetworkFee(reserve)
 }
 
 function settleBackup(address: Address, res: TxResult): BackupStatus {
@@ -656,7 +710,7 @@ export type RecoveryResult = { status: 'recovered'; session: StoredPasskey } | {
 export class RecoveryNeedsFunds extends PlainError {
   constructor(
     readonly account: Address,
-    readonly reserve: bigint = RESERVE_FALLBACK,
+    readonly reserve: bigint,
   ) {
     super(`Recovery needs a small network fee. Send at least ${formatAmount(reserve, 'USDC')} on Arc to your account address first.`)
   }

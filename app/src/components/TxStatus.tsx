@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react'
+import { Link } from 'react-router'
 import type { Hex } from 'viem'
 import { EXPLORER_URL, TX_TIMEOUT_MS } from '../config'
-import { explainError, PlainError } from '../lib/errors'
+import { explainError, needsAddMoney, PlainError } from '../lib/errors'
 import { arcReceipts, type Call, type Sender, type TxResult, waitForResult } from '../lib/sender'
 
 
@@ -13,7 +14,8 @@ export type TxPhase =
   // The outcome is unknown. note explains a re-check that failed to answer. userop marks a passkey user
   // operation hash, which the explorer cannot show.
   | { kind: 'timeout'; hash: Hex; userop?: boolean; note?: string }
-  | { kind: 'error'; message: string; hash?: Hex }
+  // addMoney: the account is short of USDC for the network fee, so the box links to Add money.
+  | { kind: 'error'; message: string; hash?: Hex; addMoney?: boolean }
 
 export const PASSKEY_PROCESSING = 'Your passkey transaction is still processing.'
 export const PASSKEY_LOGIN_TO_CHECK = 'Log in with your passkey to check this transaction.'
@@ -26,6 +28,10 @@ export function recheckResult(sender: Sender | null, hash: Hex, userop: boolean)
     return sender.recheck(hash)
   }
   return waitForResult(arcReceipts, hash, TX_TIMEOUT_MS)
+}
+
+export function AddMoneyLink() {
+  return <Link to="/add-money">Add money</Link>
 }
 
 export function ExplorerLink({ hash }: { hash: Hex }) {
@@ -67,7 +73,8 @@ export function useTx(onSuccess: (hash: Hex) => void) {
   // build runs inside the guard, so a quote it fetches or a check it makes cannot overlap a second click.
   // Several calls go to the sender in one send. A passkey sender makes them one user operation, so they
   // succeed or fail together. A wallet sender would send them one by one, so run refuses that.
-  async function run(sender: Sender, build: () => Call | Call[] | Promise<Call | Call[]>, label: string) {
+  // usdcOut is the USDC the calls move out of the account; a passkey sender keeps the network fee on top.
+  async function run(sender: Sender, build: () => Call | Call[] | Promise<Call | Call[]>, label: string, usdcOut?: bigint) {
     if (inFlight.current) return
     inFlight.current = true
     setPhase({ kind: 'sending' })
@@ -77,9 +84,9 @@ export function useTx(onSuccess: (hash: Hex) => void) {
       if (Array.isArray(built) && built.length > 1 && sender.kind !== 'passkey') {
         throw new Error('useTx: several calls need a passkey sender, which sends them as one user operation.')
       }
-      handle(await sender.send(Array.isArray(built) ? built : [built], { label }))
+      handle(await sender.send(Array.isArray(built) ? built : [built], { label, usdcOut }))
     } catch (err) {
-      setPhase({ kind: 'error', message: explainError(err) })
+      setPhase({ kind: 'error', message: explainError(err), addMoney: needsAddMoney(err) })
     } finally {
       inFlight.current = false
     }
@@ -153,7 +160,15 @@ export function TxStatus({
       )}
       {phase.kind === 'error' && (
         <div className="status-box status-error">
-          <p>{phase.message}</p>
+          <p>
+            {phase.message}
+            {phase.addMoney && (
+              <>
+                {' '}
+                <AddMoneyLink />
+              </>
+            )}
+          </p>
           {phase.hash && (
             <p>
               <ExplorerLink hash={phase.hash} />

@@ -8,7 +8,7 @@ import {
 import { describe, expect, it, vi } from 'vitest'
 import { campaignAbi } from '../abi/campaign'
 import { factoryAbi } from '../abi/factory'
-import { explainAfterApproval, explainError } from './errors'
+import { explainAfterApproval, explainError, NeedsNetworkFee, needsAddMoney } from './errors'
 
 const GENERIC = 'Something went wrong. Nothing was sent.'
 
@@ -175,5 +175,28 @@ describe('Bridge Kit errors on testnet', () => {
       vi.unstubAllEnvs()
       vi.resetModules()
     }
+  })
+})
+
+describe('network fee and username errors', () => {
+  // -32025 is not known to mean only a bad username, so only Circle's own text maps to the rule.
+  it('maps only the username text to the username rule, not any -32025', () => {
+    const other = Object.assign(new Error('The request is invalid.'), { code: -32025 })
+    expect(explainError(other)).not.toContain('Use 5 to 50 letters')
+    const username = Object.assign(new Error('The username is invalid. It should be 5 to 50 characters.'), { code: -32025 })
+    expect(explainError(username)).toBe('Use 5 to 50 letters, numbers or _ @ . : + - (no spaces).')
+  })
+
+  it("says AA21 (didn't pay prefund) plainly and asks to add money", () => {
+    const err = new Error("UserOperation reverted during simulation with reason: AA21 didn't pay prefund")
+    expect(explainError(err)).toBe('Your Fundit account does not have enough USDC for the network fee. Add money and try again.')
+    expect(needsAddMoney(err)).toBe(true)
+  })
+
+  it('gives the real number when the sender knows it', () => {
+    const err = new NeedsNetworkFee(1_620_000n)
+    expect(explainError(err)).toBe('Your Fundit account needs at least 1.62 USDC for the network fee. Add money and try again.')
+    expect(needsAddMoney(err)).toBe(true)
+    expect(needsAddMoney(new Error('network down'))).toBe(false)
   })
 })

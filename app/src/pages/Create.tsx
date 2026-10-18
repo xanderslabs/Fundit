@@ -6,11 +6,11 @@ import { factoryAbi } from '../abi/factory'
 import { SignInButton } from '../components/AccountMenu'
 import { CampaignImage } from '../components/CampaignImage'
 import { SharePanel } from '../components/SharePanel'
-import { PASSKEY_PROCESSING, recheckResult } from '../components/TxStatus'
+import { AddMoneyLink, PASSKEY_PROCESSING, recheckResult } from '../components/TxStatus'
 import { EXPLORER_URL, FACTORY_ADDRESS, type TokenSymbol } from '../config'
 import { useFactoryFees } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
-import { explainError } from '../lib/errors'
+import { explainError, needsAddMoney } from '../lib/errors'
 import { bpsToPercent } from '../lib/format'
 import type { Sender, TxResult } from '../lib/sender'
 import { byteLength, MAX_DESCRIPTION, MAX_LINKS, MAX_TITLE, validateCampaign } from '../lib/validate'
@@ -23,7 +23,8 @@ type Phase =
   // userop marks a passkey user operation hash: no explorer link, and only the passkey bundler can check it.
   // note explains a re-check that failed to answer. The outcome is still unknown.
   | { kind: 'timeout'; hash: Hex; userop?: boolean; note?: string }
-  | { kind: 'error'; message: string; hash?: Hex }
+  // addMoney: the account is short of USDC for the network fee, so the box links to Add money.
+  | { kind: 'error'; message: string; hash?: Hex; addMoney?: boolean }
   // The new Fundit exists. The page shows its link and share options.
   | { kind: 'created'; address: Address; title: string }
 
@@ -136,7 +137,7 @@ export function Create() {
       })
       handle(await sender.send([{ to: FACTORY_ADDRESS, data }], { label: 'Create fundraiser' }))
     } catch (err) {
-      setPhase({ kind: 'error', message: explainError(err) })
+      setPhase({ kind: 'error', message: explainError(err), addMoney: needsAddMoney(err) })
     } finally {
       inFlight.current = false
     }
@@ -406,7 +407,15 @@ export function Create() {
           )}
           {phase.kind === 'error' && (
             <div className="status-box status-error">
-              <p>{phase.message}</p>
+              <p>
+                {phase.message}
+                {phase.addMoney && (
+                  <>
+                    {' '}
+                    <AddMoneyLink />
+                  </>
+                )}
+              </p>
               {phase.hash && (
                 <p>
                   <ExplorerLink hash={phase.hash} />

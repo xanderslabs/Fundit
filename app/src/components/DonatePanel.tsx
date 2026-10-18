@@ -18,13 +18,13 @@ import type { CampaignView } from '../lib/campaigns'
 import { arcClient } from '../lib/clients'
 import { BALANCES_KEY, balancesKey, fetchAccountBalances } from '../lib/deposit'
 import { buildDonateCalls, donationBreakdown, fetchDonorFunds } from '../lib/donate'
-import { explainError } from '../lib/errors'
+import { explainError, needsAddMoney } from '../lib/errors'
 import { bpsToPercent, formatAmount, formatExact, parseAmount } from '../lib/format'
-import { addAtLeast, passkeyReserve } from '../lib/passkey'
+import { addAtLeast } from '../lib/passkey'
 import type { TxResult } from '../lib/sender'
 import { byteLength } from '../lib/validate'
 import { SignInButton } from './AccountMenu'
-import { PASSKEY_LOGIN_TO_CHECK, PASSKEY_PROCESSING, recheckResult } from './TxStatus'
+import { AddMoneyLink, PASSKEY_LOGIN_TO_CHECK, PASSKEY_PROCESSING, recheckResult } from './TxStatus'
 
 const QUICK_AMOUNTS = ['10', '25', '50', '100'] as const
 const TIP_PERCENTS = [0, 5, 10, 15] as const
@@ -43,7 +43,7 @@ type Phase =
   | { kind: 'timeout'; hash: Hex; approve: boolean; userop?: boolean; note?: string }
   // The approval is mined but the donation was not sent (cancelled or failed).
   | { kind: 'partial'; error?: string }
-  | { kind: 'error'; message: string; hash?: Hex }
+  | { kind: 'error'; message: string; hash?: Hex; addMoney?: boolean }
 
 function arcTimeout(saved: PendingArc): Phase {
   const note = Date.now() - saved.createdAt > DAY_MS ? 'This was more than a day ago. Check the explorer before giving again.' : undefined
@@ -118,7 +118,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   const reserve = usePasskeyReserve(sender, {
     key: `donate-${campaign.toLowerCase()}`,
     calls: buildDonateCalls({ campaign, token, amount: 1n, tip: 0n, message: '', allowance: 0n }),
-  })
+  }, amountText !== '')
   const gasBuffer = sender?.kind === 'passkey' && symbol === 'USDC' ? (reserve ?? 0n) : 0n
   // An EURC gift from a Fundit account still pays the network fee in USDC, so it needs the buffer in USDC.
   const needsGasUsdc = sender?.kind === 'passkey' && symbol !== 'USDC'
@@ -197,25 +197,16 @@ export function DonatePanel({ view }: { view: CampaignView }) {
       // Read the balance and allowance again right before building, so a finished approval is not repeated.
       const fresh = await fetchDonorFunds(arcClient, token, sender.address, campaign)
       queryClient.setQueryData(fundsKey, fresh)
-      const calls = buildDonateCalls({ campaign, token, amount, tip, message: anonymous ? markAnonymous(message) : message, allowance: fresh.allowance })
-      // The prefund for these exact calls at the fee now, so a gift that would revert in its own calls is never sent.
-      const needed = sender.kind === 'passkey' ? await passkeyReserve(sender.address, calls, { feeMargin: false }) : 0n
-      const keep = symbol === 'USDC' ? needed : 0n
-      if (fresh.balance < amount + tip + keep) {
-        setPhase({ kind: 'error', message: notEnough(fresh.balance, keep) })
+      if (fresh.balance < amount + tip) {
+        setPhase({ kind: 'error', message: notEnough(fresh.balance, 0n) })
         return
       }
-      if (needsGasUsdc) {
-        const gas = await fetchAccountBalances(arcClient, sender.address)
-        queryClient.setQueryData(balancesKey(sender.address), gas)
-        if (gas.usdc < needed) {
-          setPhase({ kind: 'error', message: addAtLeast(needed) })
-          return
-        }
-      }
+      const calls = buildDonateCalls({ campaign, token, amount, tip, message: anonymous ? markAnonymous(message) : message, allowance: fresh.allowance })
       const donateIndex = calls.length - 1
       const res = await sender.send(calls, {
         label: 'Donate',
+        // A passkey sender refuses unless the account also holds the network fee for these calls on top.
+        usdcOut: symbol === 'USDC' ? amount + tip : 0n,
         // Saved as soon as the donation has a hash, so a reload before the receipt still blocks a second one.
         // The approval alone moves nothing to the campaign, so its hash is not saved.
         onHash: (hash, index) => {
@@ -226,7 +217,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
       })
       handle(res, calls.length > 1)
     } catch (err) {
-      setPhase({ kind: 'error', message: explainError(err) })
+      setPhase({ kind: 'error', message: explainError(err), addMoney: needsAddMoney(err) })
     } finally {
       inFlight.current = false
     }
@@ -441,7 +432,15 @@ export function DonatePanel({ view }: { view: CampaignView }) {
           )}
           {phase.kind === 'error' && (
             <div className="status-box status-error">
-              <p>{phase.message}</p>
+              <p>
+                {phase.message}
+                {phase.addMoney && (
+                  <>
+                    {' '}
+                    <AddMoneyLink />
+                  </>
+                )}
+              </p>
               {phase.hash && (
                 <p>
                   <ExplorerLink hash={phase.hash} />

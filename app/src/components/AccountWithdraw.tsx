@@ -11,7 +11,7 @@ import { BALANCES_KEY, balancesKey, fetchAccountBalances } from '../lib/deposit'
 import { PlainError } from '../lib/errors'
 import { formatAmount, parseAmount } from '../lib/format'
 import { fetchForwardFee } from '../lib/iris'
-import { addAtLeast, passkeyReserve } from '../lib/passkey'
+import { addAtLeast } from '../lib/passkey'
 import { destDomain, type PayoutDest } from '../lib/payout'
 import type { Sender } from '../lib/sender'
 import { ADDRESS_TYPO, parseTypedAddress } from '../lib/validate'
@@ -32,6 +32,19 @@ const QUOTE_DEBOUNCE_MS = 400
 // transactions, and a failed burn would leave an open approval behind.
 export function AccountWithdraw({ sender }: { sender: Sender }) {
   return sender.kind === 'passkey' ? <SendOutForm sender={sender} /> : null
+}
+
+// An approve and a burn of 1 USDC to another chain, to estimate the reserve. Not sent.
+function burnShape(dest: PayoutDest, account: Address) {
+  return buildAccountSendCalls({
+    token: TOKENS.USDC.address,
+    amount: 1_000_000n,
+    dest,
+    recipient: '0x000000000000000000000000000000000000dEaD',
+    maxFee: 500_000n,
+    fast: false,
+    account,
+  })
 }
 
 function SendOutForm({ sender }: { sender: Sender }) {
@@ -68,7 +81,12 @@ function SendOutForm({ sender }: { sender: Sender }) {
     queryFn: () => fetchAccountBalances(arcClient, account),
     staleTime: 15_000,
   })
-  const reserve = usePasskeyReserve(sender)
+  // A send to another chain is an approve and a burn, so its reserve is estimated in that shape.
+  const reserve = usePasskeyReserve(
+    sender,
+    dest === 'Arc' ? undefined : { key: `burn-${dest}`, calls: burnShape(dest, account) },
+    amountText !== '',
+  )
   const usdc = balances.data?.usdc
   const held = balances.data ? (symbol === 'USDC' ? balances.data.usdc : balances.data.eurc) : undefined
   // Arc gas is paid in USDC, so only USDC keeps the reserve back. EURC can all go, but needs USDC for the fee.
@@ -154,15 +172,12 @@ function SendOutForm({ sender }: { sender: Sender }) {
           queryClient.setQueryData(['account-send-fee', dest, fast, amount.toString()], fresh)
           throw new PlainError(fresh.maxFee >= amount ? TOO_SMALL : FEE_CHANGED)
         }
-        const calls = buildAccountSendCalls({ token: TOKENS[symbol].address, amount, dest, recipient, maxFee: fresh?.maxFee, fast, account })
-        // The prefund for these exact calls at the fee now, so a send that would revert in its own calls is never sent.
-        const needed = await passkeyReserve(account, calls, { feeMargin: false })
-        if (now.usdc < needed) throw new PlainError(addAtLeast(needed))
-        if (symbol === 'USDC' && amount > maxAccountSend(now.usdc, needed)) throw new PlainError(keepGas(needed))
         if (fresh) sending.current = { dest, fast, net: amount - fresh.maxFee }
-        return calls
+        return buildAccountSendCalls({ token: TOKENS[symbol].address, amount, dest, recipient, maxFee: fresh?.maxFee, fast, account })
       },
       'Send money out',
+      // The sender refuses unless the account also holds the network fee for these calls on top.
+      symbol === 'USDC' ? amount : 0n,
     )
   }
 

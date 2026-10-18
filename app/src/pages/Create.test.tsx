@@ -13,6 +13,7 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { factoryAbi } from '../abi/factory'
 import { FACTORY_ADDRESS, TOKENS } from '../config'
+import { NeedsNetworkFee } from '../lib/errors'
 import type { Sender, TxResult } from '../lib/sender'
 import { Create } from './Create'
 
@@ -184,6 +185,20 @@ describe('Create', () => {
   })
 
   // A dropped or slow transaction must never look like success.
+  // Creating spends no USDC in its calls but still pays the prefund. The passkey sender refuses a short account
+  // before anything is sent (passkey.test.ts), and the page shows that with the number and a way to add money.
+  it("shows the sender's network fee refusal with an Add money link", async () => {
+    const send = vi.fn(async () => {
+      throw new NeedsNetworkFee(1_620_000n)
+    })
+    state.sender = { kind: 'passkey', address: ME, send }
+    renderCreate()
+    const user = await fillValid()
+    await user.click(submitButton())
+    expect(await screen.findByText(/Your Fundit account needs at least 1.62 USDC for the network fee\. Add money and try again\./)).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/add-money')
+  })
+
   it('shows not confirmed yet with an explorer link on timeout', async () => {
     fakeSender({ status: 'timeout', hash: HASH, completed: 0 })
     renderCreate()
