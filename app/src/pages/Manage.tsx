@@ -3,10 +3,11 @@ import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router'
 import { type Address, encodeFunctionData, formatUnits, isAddress, isAddressEqual, zeroAddress } from 'viem'
 import { campaignAbi } from '../abi/campaign'
+import { erc20Abi } from '../abi/erc20'
 import { SignInButton } from '../components/AccountMenu'
 import { PendingBridgeTracker } from '../components/PendingBridgeTracker'
 import { TxStatus, useTx } from '../components/TxStatus'
-import { ARC_DOMAIN, CHAIN_LABELS } from '../config'
+import { ARC_DOMAIN, CHAIN_LABELS, TOKENS } from '../config'
 import { useCampaign } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
 import { chainByKey, savePendingPayout } from '../lib/bridge'
@@ -387,6 +388,88 @@ function WithdrawSection({ view, sender }: { view: CampaignView; sender: Sender 
   )
 }
 
+// sweep() returns a token the Fundit does not take. The app knows one: EURC on a USDC Fundit, USDC on a EURC Fundit.
+function RescueSection({ view, sender }: { view: CampaignView; sender: Sender }) {
+  const { address: campaign, symbol } = view
+  const other = TOKENS[symbol === 'USDC' ? 'EURC' : 'USDC']
+  const refresh = useRefresh(campaign)
+  // The text for the last rescue, set at send time, since the balance reads 0 once it is done.
+  const [sentText, setSentText] = useState('')
+  // Under ['campaign', campaign], so refresh() reads it again.
+  const balance = useQuery({
+    queryKey: ['campaign', campaign.toLowerCase(), 'stray', other.symbol],
+    queryFn: () => arcClient.readContract({ address: other.address, abi: erc20Abi, functionName: 'balanceOf', args: [campaign] }),
+  })
+  // The money may go to the Fundit account, so its balance is read again too.
+  const tx = useTx(() => refresh(true))
+  // null until the person types, so the organiser's Fundit account is the default.
+  const [recipientText, setRecipientText] = useState<string | null>(null)
+
+  const amount = balance.data ?? 0n
+  // Stays up after a rescue, so the result and its explorer link stay visible.
+  if (amount === 0n && tx.phase.kind === 'idle') return null
+
+  const shown = formatAmount(amount, other.symbol)
+  const typed = parseTypedAddress((recipientText ?? sender.address).trim())
+  let recipientError: string | undefined
+  if (!typed.ok) recipientError = typed.error === 'typo' ? ADDRESS_TYPO : 'Enter a valid address (0x and 40 characters).'
+  else if (isAddressEqual(typed.address, zeroAddress)) recipientError = 'Enter a recipient address.'
+  else if (isAddressEqual(typed.address, campaign)) recipientError = 'Choose a different recipient.'
+  const recipient: Address | null = typed.ok && !recipientError ? typed.address : null
+  const canSubmit = amount > 0n && recipient !== null && !tx.locked
+
+  function submit(e: FormEvent) {
+    e.preventDefault()
+    if (!canSubmit || recipient === null) return
+    setSentText(`Sent ${shown}.`)
+    void tx.run(
+      sender,
+      () => ({ to: campaign, data: encodeFunctionData({ abi: campaignAbi, functionName: 'sweep', args: [other.address, recipient] }) }),
+      'Rescue',
+    )
+  }
+
+  return (
+    <section className="panel manage-section" aria-labelledby="rescue-heading">
+      <h2 id="rescue-heading">Rescue tokens sent by mistake</h2>
+      {amount > 0n && (
+        <form className="create-form" onSubmit={submit} noValidate>
+          <p>
+            Someone sent {shown} to this Fundit. It only accepts {symbol}, so this money is not part of what was raised. You can
+            send it to any address on Arc.
+          </p>
+          <fieldset className="manage-fields" disabled={tx.locked}>
+            <div className="form-field">
+              <label htmlFor="rescue-recipient">Send to</label>
+              <input
+                id="rescue-recipient"
+                autoComplete="off"
+                spellCheck={false}
+                value={recipientText ?? sender.address}
+                onChange={(e) => setRecipientText(e.target.value)}
+                aria-invalid={recipientError ? true : undefined}
+                aria-describedby="rescue-recipient-error"
+              />
+              <FieldError id="rescue-recipient-error" message={recipientError} />
+            </div>
+          </fieldset>
+          {tx.phase.kind !== 'timeout' && (
+            <button type="submit" className="btn" disabled={!canSubmit}>
+              {tx.busy ? 'Sending...' : `Rescue ${shown}`}
+            </button>
+          )}
+        </form>
+      )}
+      <TxStatus
+        tx={tx}
+        noun="transaction"
+        successText={sentText}
+        startOverWarning="The earlier rescue may still go through. Start over anyway?"
+      />
+    </section>
+  )
+}
+
 function CloseSection({ view, sender }: { view: CampaignView; sender: Sender }) {
   const refresh = useRefresh(view.address)
   const tx = useTx(() => refresh())
@@ -564,6 +647,7 @@ export function Manage() {
         </p>
       </header>
       <WithdrawSection view={view} sender={sender} />
+      <RescueSection view={view} sender={sender} />
       <EditSection view={view} sender={sender} />
       <BackupSection view={view} sender={sender} />
       <CloseSection view={view} sender={sender} />

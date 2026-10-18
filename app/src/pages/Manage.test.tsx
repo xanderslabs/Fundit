@@ -16,9 +16,11 @@ const CREATOR = getAddress('0x1111111111111111111111111111111111111111') as Addr
 const STRANGER = getAddress('0x3333333333333333333333333333333333333333') as Address
 const HASH = `0x${'ab'.repeat(32)}` as Hex
 
-const state: { view: CampaignView | undefined; sender: Sender | null } = {
+const state: { view: CampaignView | undefined; sender: Sender | null; stray: bigint } = {
   view: undefined,
   sender: null,
+  // The Fundit's balance of the other known token (EURC on a USDC Fundit, USDC on a EURC Fundit).
+  stray: 0n,
 }
 
 vi.mock('../hooks/useCampaigns', () => ({
@@ -26,7 +28,15 @@ vi.mock('../hooks/useCampaigns', () => ({
 }))
 vi.mock('../hooks/useSender', () => ({ useSender: () => state.sender }))
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: () => {} }) }))
-vi.mock('../lib/clients', () => ({ arcClient: { readContract: async () => true } }))
+const reads: { functionName: string; address: Address; args?: readonly unknown[] }[] = []
+vi.mock('../lib/clients', () => ({
+  arcClient: {
+    readContract: async (p: { functionName: string; address: Address; args?: readonly unknown[] }) => {
+      reads.push(p)
+      return p.functionName === 'balanceOf' ? state.stray : true
+    },
+  },
+}))
 
 function view(over: Partial<CampaignView['summary']> = {}): CampaignView {
   return {
@@ -96,6 +106,8 @@ afterEach(() => {
   cleanup()
   state.view = undefined
   state.sender = null
+  state.stray = 0n
+  reads.length = 0
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   localStorage.clear()
@@ -421,5 +433,131 @@ describe('Manage', () => {
     await user.type(screen.getByLabelText('New backup address'), CREATOR)
     expect(screen.getByText('Use a different address from your Fundit account.')).toBeTruthy()
     expect(button('Save backup').disabled).toBe(true)
+  })
+  describe('rescue tokens sent by mistake', () => {
+    const OTHER = getAddress('0x4444444444444444444444444444444444444444')
+    const rescue = () => screen.queryByRole('heading', { name: 'Rescue tokens sent by mistake' })
+    const sendTo = () => screen.getByRole('textbox', { name: 'Send to' })
+
+    // Nothing to rescue means nothing to show, so organisers are not asked about a balance they do not have.
+    it('is hidden when the Fundit holds none of the other token', async () => {
+      state.view = view()
+      fakeSender('passkey')
+      renderPage()
+      await waitFor(() => expect(reads.some((r) => r.functionName === 'balanceOf')).toBe(true))
+      expect(rescue()).toBeNull()
+    })
+
+    // A USDC Fundit can only be sent EURC by mistake, and the line must name what is really there.
+    it('shows EURC sent to a USDC Fundit, with the amount and symbol', async () => {
+      state.view = view()
+      state.stray = 100000n
+      fakeSender('passkey')
+      renderPage()
+      expect(await screen.findByRole('heading', { name: 'Rescue tokens sent by mistake' })).toBeTruthy()
+      const read = reads.find((r) => r.functionName === 'balanceOf')!
+      expect(read.address).toBe(TOKENS.EURC.address)
+      expect(read.args).toEqual([CAMPAIGN])
+      expect(
+        screen.getByText(
+          'Someone sent 0.10 EURC to this Fundit. It only accepts USDC, so this money is not part of what was raised. You can send it to any address on Arc.',
+        ),
+      ).toBeTruthy()
+      expect(button('Rescue 0.10 EURC')).toBeTruthy()
+    })
+
+    it('shows USDC sent to a EURC Fundit, with the amount and symbol', async () => {
+      state.view = { ...view({ token: TOKENS.EURC.address }), symbol: 'EURC' }
+      state.stray = 2_500000n
+      fakeSender('passkey')
+      renderPage()
+      expect(await screen.findByText(/^Someone sent 2.50 USDC to this Fundit\. It only accepts EURC,/)).toBeTruthy()
+      expect(reads.find((r) => r.functionName === 'balanceOf')!.address).toBe(TOKENS.USDC.address)
+      expect(button('Rescue 2.50 USDC')).toBeTruthy()
+    })
+
+    // sweep(other, to) moves the whole balance of other. A wrong token or recipient sends money astray.
+    it('sends sweep(other token, recipient), to the organiser by default', async () => {
+      state.view = view()
+      state.stray = 100000n
+      const send = fakeSender('passkey')
+      renderPage()
+      const user = userEvent.setup()
+      await screen.findByRole('heading', { name: 'Rescue tokens sent by mistake' })
+      expect((sendTo() as HTMLInputElement).value).toBe(CREATOR)
+      await user.click(button('Rescue 0.10 EURC'))
+      await waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+      const [calls, opts] = send.mock.calls[0]! as unknown as [Call[], { label: string }]
+      expect(calls[0]!.to).toBe(CAMPAIGN)
+      expect(decode(calls[0]!.data)).toMatchObject({ functionName: 'sweep', args: [TOKENS.EURC.address, CREATOR] })
+      expect(opts.label).toBe('Rescue')
+
+      // Another recipient is sent as typed.
+      cleanup()
+      const send2 = fakeSender('passkey')
+      renderPage()
+      await screen.findByRole('heading', { name: 'Rescue tokens sent by mistake' })
+      await user.clear(sendTo())
+      await user.type(sendTo(), OTHER)
+      await user.click(button('Rescue 0.10 EURC'))
+      await waitFor(() => expect(send2).toHaveBeenCalledTimes(1))
+      expect(decode(send2.mock.calls[0]![0][0]!.data).args).toEqual([TOKENS.EURC.address, OTHER])
+    })
+
+    // sweep(other, 0x0) reverts, and a typo would send the money to an address nobody holds.
+    it('refuses a bad, mistyped or zero recipient', async () => {
+      state.view = view()
+      state.stray = 100000n
+      const send = fakeSender('passkey')
+      renderPage()
+      const user = userEvent.setup()
+      await screen.findByRole('heading', { name: 'Rescue tokens sent by mistake' })
+      await user.clear(sendTo())
+      await user.type(sendTo(), '0x1234')
+      expect(screen.getByText('Enter a valid address (0x and 40 characters).')).toBeTruthy()
+      expect(button('Rescue 0.10 EURC').disabled).toBe(true)
+
+      await user.clear(sendTo())
+      await user.type(sendTo(), '0xaBcdEFABcdEFabcdEfAbCdefabcdeFABcDEFabCD')
+      expect(screen.getByText('This address has a typo. Check it and paste it again.')).toBeTruthy()
+      expect(button('Rescue 0.10 EURC').disabled).toBe(true)
+
+      await user.clear(sendTo())
+      await user.type(sendTo(), '0x0000000000000000000000000000000000000000')
+      expect(screen.getByText('Enter a recipient address.')).toBeTruthy()
+      expect(button('Rescue 0.10 EURC').disabled).toBe(true)
+      await user.click(button('Rescue 0.10 EURC'))
+      expect(send).not.toHaveBeenCalled()
+    })
+
+    // After the sweep the balance is 0, so a fresh read must drop the form instead of offering a second rescue.
+    it('says what was sent and reads the balance again after success', async () => {
+      state.view = view()
+      state.stray = 100000n
+      fakeSender('passkey')
+      renderPage()
+      const user = userEvent.setup()
+      await screen.findByRole('heading', { name: 'Rescue tokens sent by mistake' })
+      const before = reads.filter((r) => r.functionName === 'balanceOf').length
+      state.stray = 0n
+      await user.click(button('Rescue 0.10 EURC'))
+      expect(await screen.findByText('Sent 0.10 EURC.')).toBeTruthy()
+      expect(screen.getByRole('link', { name: 'View it on the Arc explorer' }).getAttribute('href')).toContain(HASH)
+      await waitFor(() => expect(reads.filter((r) => r.functionName === 'balanceOf').length).toBeGreaterThan(before))
+      await waitFor(() => expect(screen.queryByRole('button', { name: /^Rescue/ })).toBeNull())
+      expect(screen.queryByText(/^Someone sent/)).toBeNull()
+    })
+
+    // A rescue sends from the Fundit account, so the sender's network fee refusal must show here too.
+    it("shows the sender's network fee refusal on a rescue", async () => {
+      state.view = view()
+      state.stray = 100000n
+      const send = fakeSender('passkey')
+      send.mockRejectedValueOnce(new NeedsNetworkFee(250_000n))
+      renderPage()
+      await screen.findByRole('heading', { name: 'Rescue tokens sent by mistake' })
+      await userEvent.setup().click(button('Rescue 0.10 EURC'))
+      expect(await screen.findByText(/Your Fundit account needs at least 0.25 USDC for the network fee\./)).toBeTruthy()
+    })
   })
 })
