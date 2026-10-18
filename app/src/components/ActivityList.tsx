@@ -79,8 +79,9 @@ function Line({ item, symbol }: { item: ActivityItem; symbol: TokenSymbol }) {
   }
 }
 
-// Money minted to the campaign by CCTP or Gateway counts in raised() at once, but the list shows it only after
-// settle() books it as a cross-chain donation. Anyone may call settle(), so any connected wallet can do it here.
+// Money that reaches the campaign without donate() (a CCTP mint, for example) counts in raised() at once, but the
+// list shows it only after settle() books it as a cross-chain donation. Anyone may call settle(), so any signed-in
+// Fundit account can do it here.
 function Unaccounted({ campaign, symbol }: { campaign: Address; symbol: TokenSymbol }) {
   const sender = useSender()
   const queryClient = useQueryClient()

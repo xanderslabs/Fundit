@@ -132,7 +132,7 @@ describe('pending store', () => {
 })
 
 // A payout burns on Arc and mints to the organiser's address on another chain. It is tracked like a
-// cross-chain donation but is money leaving the campaign, so it must never block a donation.
+// transfer into Arc but is money leaving the campaign, so it must never block a donation.
 describe('pending payouts', () => {
   afterEach(() => localStorage.clear())
 

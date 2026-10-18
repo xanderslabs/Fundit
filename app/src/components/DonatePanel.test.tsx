@@ -10,6 +10,7 @@ import { TOKENS, type TokenSymbol } from '../config'
 import type { CampaignView } from '../lib/campaigns'
 import type { Call, Sender, SendOptions, TxResult } from '../lib/sender'
 import { DonatePanel } from './DonatePanel'
+import { PASSKEY_PROCESSING } from './TxStatus'
 
 const ME = '0x1111111111111111111111111111111111111111' as Address
 const CAMPAIGN = getAddress('0x00000000000000000000000000000000000000a1')
@@ -70,9 +71,16 @@ function view(symbol: TokenSymbol, closed = false): CampaignView {
 
 const success: TxResult = { status: 'success', hash: HASH, receipt: { status: 'success' } as TransactionReceipt }
 
+// A Fundit account, the only sender useSender returns. Its re-check of a user operation goes through the same
+// planned answer as a transaction re-check. Results without hashKind stand for a transaction hash: the panel is
+// typed on Sender and still handles that shape.
+function passkeyShaped(send: Sender['send']): Sender {
+  return { kind: 'passkey', address: ME, send, recheck: () => recheck.next() }
+}
+
 function fakeSender(...results: TxResult[]) {
   const send = vi.fn(async (_calls: Call[]) => results.shift() ?? success)
-  state.sender = { kind: 'eoa', address: ME, send }
+  state.sender = passkeyShaped(send)
   return send
 }
 
@@ -117,6 +125,10 @@ function expectBlocked() {
   expect(screen.queryByRole('button', { name: 'Give' })).toBeNull()
   expect(screen.queryByRole('button', { name: 'Finish donation' })).toBeNull()
   expect(screen.getByLabelText('Amount').matches(':disabled')).toBe(true)
+}
+
+// A timed-out transaction hash can be looked up on the explorer.
+function expectExplorerLink() {
   expect(screen.getByRole('link', { name: /explorer/i }).getAttribute('href')).toBe(`https://explorer.arc.io/tx/${HASH}`)
 }
 
@@ -129,7 +141,7 @@ describe('DonatePanel', () => {
     const user = userEvent.setup()
     await user.type(screen.getByLabelText('Amount'), '100')
     await user.click(screen.getByLabelText('5%'))
-    expect(await screen.findByText(/not enough USDC/)).toBeTruthy()
+    expect(await screen.findByText(/Your balance is 104.00 USDC\. Keep about 0.05 USDC more/)).toBeTruthy()
     expect(donateButton().disabled).toBe(true)
 
     await user.click(screen.getByLabelText('No tip'))
@@ -192,7 +204,7 @@ describe('DonatePanel', () => {
     state.balance = 5_000000n
     renderPanel(view('USDC'))
     await userEvent.setup().type(screen.getByLabelText('Amount'), '10')
-    expect(await screen.findByText(/not enough USDC/)).toBeTruthy()
+    expect(await screen.findByText(/Your balance is 5.00 USDC/)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/add-money')
     expect(donateButton().disabled).toBe(true)
   })
@@ -256,7 +268,7 @@ describe('DonatePanel', () => {
       opts?.onHash?.(HASH, calls.length - 1)
       return new Promise<TxResult>(() => {})
     })
-    state.sender = { kind: 'eoa', address: ME, send }
+    state.sender = passkeyShaped(send)
     state.balance = 1000_000000n
     renderPanel(view('USDC'))
     await fillAndDonate()
@@ -265,6 +277,9 @@ describe('DonatePanel', () => {
     cleanup()
     renderPanel(view('USDC'))
     expect(screen.getByText(/donation is not confirmed yet/)).toBeTruthy()
+    // A user operation hash is not on the explorer. The passkey sender checks it.
+    expect(screen.getByText(PASSKEY_PROCESSING)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Check again' })).toBeTruthy()
     expectBlocked()
   })
 
@@ -278,7 +293,7 @@ describe('DonatePanel', () => {
       saved.push(JSON.parse(localStorage.getItem('fundit.pendingBridges') ?? '[]'))
       return success
     })
-    state.sender = { kind: 'eoa', address: ME, send }
+    state.sender = passkeyShaped(send)
     state.balance = 1000_000000n
     renderPanel(view('USDC'))
     await fillAndDonate()
@@ -313,7 +328,9 @@ describe('DonatePanel', () => {
     expect(calls[0]!.to).toBe(TOKENS.EURC.address)
     expect(decodeFunctionData({ abi: erc20Abi, data: calls[0]!.data }).args).toEqual([CAMPAIGN, 10_000000n])
     expect(calls[1]!.to).toBe(CAMPAIGN)
-    for (const r of reads) expect(r.address).toBe(TOKENS.EURC.address)
+    // The donor's funds are read in EURC. The only USDC read is the Fundit account's gas money.
+    for (const r of reads.filter((r) => r.functionName === 'allowance')) expect(r.address).toBe(TOKENS.EURC.address)
+    expect(reads.some((r) => r.functionName === 'balanceOf' && r.address === TOKENS.EURC.address)).toBe(true)
     expect(reads.some((r) => r.functionName === 'allowance' && r.args[1] === CAMPAIGN)).toBe(true)
   })
 
@@ -387,6 +404,7 @@ describe('DonatePanel', () => {
     await fillAndDonate()
     expect(await screen.findByText(/donation is not confirmed yet/)).toBeTruthy()
     expectBlocked()
+    expectExplorerLink()
   })
 
   it('blocks a new donation after the approval times out', async () => {
@@ -396,6 +414,7 @@ describe('DonatePanel', () => {
     await fillAndDonate()
     expect(await screen.findByText(/approval is not confirmed yet/)).toBeTruthy()
     expectBlocked()
+    expectExplorerLink()
   })
 
   it('stays blocked when Check again still cannot confirm', async () => {
@@ -407,6 +426,7 @@ describe('DonatePanel', () => {
     await user.click(await screen.findByRole('button', { name: 'Check again' }))
     expect(await screen.findByRole('button', { name: 'Check again' })).toBeTruthy()
     expectBlocked()
+    expectExplorerLink()
   })
 
   // A failed check is not an answer. It must never leave the panel stuck in "Checking" or unblock it.
@@ -422,6 +442,7 @@ describe('DonatePanel', () => {
     expect(await screen.findByText(/We could not check it/)).toBeTruthy()
     expect(screen.queryByText(/Checking the transaction again/)).toBeNull()
     expectBlocked()
+    expectExplorerLink()
   })
 
   // A reverted transaction moved nothing, so donating again is safe.
@@ -456,6 +477,7 @@ describe('DonatePanel', () => {
     await user.click(await screen.findByRole('button', { name: 'Start over' }))
     expect(confirm.mock.calls[0]![0]).toMatch(/may still go through/)
     expectBlocked()
+    expectExplorerLink()
     await user.click(screen.getByRole('button', { name: 'Start over' }))
     expect(donateButton()).toBeTruthy()
     expect((screen.getByLabelText('Amount') as HTMLInputElement).value).toBe('')
@@ -473,6 +495,7 @@ describe('DonatePanel', () => {
     renderPanel(view('USDC'))
     expect(screen.getByText(/donation is not confirmed yet/)).toBeTruthy()
     expectBlocked()
+    expectExplorerLink()
   })
 
   // A day-old unknown transaction is probably settled one way or the other. Say so, and keep Start over open.
@@ -485,6 +508,7 @@ describe('DonatePanel', () => {
     renderPanel(view('USDC'))
     expect(screen.getByText('This was more than a day ago. Check the explorer before giving again.')).toBeTruthy()
     expectBlocked()
+    expectExplorerLink()
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     await userEvent.setup().click(screen.getByRole('button', { name: 'Start over' }))
     expect(donateButton()).toBeTruthy()
@@ -589,6 +613,17 @@ describe('DonatePanel', () => {
       expect(screen.queryByText(/9.9 USDC/)).toBeNull()
       await fillAndDonate()
     })
+
+    // Gifts no longer arrive from other chains. A transfer saved by an older build, keyed by this Fundit, is not a
+    // gift that could land twice, so it must not disable Give with no reason shown.
+    it('ignores a transfer from another chain left in the store', async () => {
+      store({ kind: 'bridge', burnTx: BURN, srcDomain: 6, amount: '25' }, { kind: 'submitted', id: 's-1', srcDomain: 6, amount: '25' })
+      const send = fakeSender()
+      state.balance = 1000_000000n
+      renderPanel(view('USDC'))
+      await fillAndDonate()
+      await waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+    })
   })
 
   describe('passkey wallet', () => {
@@ -678,7 +713,6 @@ describe('DonatePanel', () => {
         'fundit.pendingBridges',
         JSON.stringify([{ kind: 'arc', campaign: CAMPAIGN, hash: HASH, approve: false, hashKind: 'userop', createdAt: Date.now() }]),
       )
-      fakeSender()
       renderPanel(view('USDC'))
       expect(screen.getByText('Log in with your passkey to check this transaction.')).toBeTruthy()
       expect(screen.queryByRole('button', { name: 'Check again' })).toBeNull()

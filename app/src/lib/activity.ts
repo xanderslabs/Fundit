@@ -180,8 +180,8 @@ async function onlyCampaigns(client: DonationClient, addresses: Address[]): Prom
 }
 
 // Donated logs from any address, filtered by the indexed donor topic, newest first. Anyone can deploy a
-// contract that emits Donated, so only logs from factory campaigns are kept. Donations made from other
-// chains arrive through CCTP or Gateway and do not name the donor on Arc, so they cannot appear here.
+// contract that emits Donated, so only logs from factory campaigns are kept. Money that reaches a campaign
+// without donate() does not name the donor on Arc, so it cannot appear here.
 export async function recentDonationsBy(
   client: DonationClient,
   donor: Address,

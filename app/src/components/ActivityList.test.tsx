@@ -43,7 +43,7 @@ function renderList() {
   )
 }
 
-// USDC minted to the campaign by CCTP or Gateway counts in raised() at once, but the activity list only shows it
+// USDC that reaches the campaign without donate() counts in raised() at once, but the activity list only shows it
 // after settle() books it. Without this row the money looks missing from the list.
 describe('ActivityList cross-chain inflows not counted yet', () => {
   it('shows the amount and a Count it now button that sends settle() through the sender', async () => {

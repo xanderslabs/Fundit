@@ -135,14 +135,7 @@
   gap: 8px;
 }
 
-/* Pay with sits above both the Arc form and the cross-chain form. */
-.donate-source {
-  margin: 0 0 20px;
-  padding: 0;
-  border: 0;
-}
-
-/* Cross-chain donations still on their way to this campaign. */
+/* Transfers on their way to a Fundit account, and payouts on their way to another chain. */
 .bridge-tracker {
   display: flex;
   flex-direction: column;

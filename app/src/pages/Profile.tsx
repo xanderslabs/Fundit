@@ -7,7 +7,7 @@ import { AddBackupPasskey } from '../components/AddBackupPasskey'
 import { CampaignGrid, LoadError } from '../components/CampaignGrid'
 import { Name } from '../components/Name'
 import { ShareDialog } from '../components/SharePanel'
-import { CROSSCHAIN_ENABLED, EXPLORER_URL } from '../config'
+import { EXPLORER_URL } from '../config'
 import { blockTimes } from '../hooks/useActivity'
 import { useCampaign } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
@@ -140,7 +140,6 @@ function MyDonations({ address }: { address: Address }) {
           Older donations: view on explorer
         </a>
       </p>
-      {CROSSCHAIN_ENABLED && <p className="muted">Donations made from other chains appear on the Fundit as cross-chain donations.</p>}
     </section>
   )
 }

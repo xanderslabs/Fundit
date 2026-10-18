@@ -103,7 +103,7 @@ export function pendingBridges(): PendingBridge[] {
 const isBurn = (e: Entry, burnTx: Hex): e is PendingBridge | PendingPayout =>
   (e.kind === 'bridge' || e.kind === 'payout') && same(e.burnTx, burnTx)
 
-// Clears a cross-chain donation or a payout by its burn hash.
+// Clears a transfer to a Fundit account or a payout by its burn hash.
 export function clearBridge(burnTx: Hex) {
   writeAll(readAll().filter((e) => !isBurn(e, burnTx)))
 }

@@ -9,8 +9,8 @@ vi.mock('@reown/appkit-adapter-wagmi', () => ({
 }))
 
 describe('createAppKit options', () => {
-  // Coinbase Smart Wallet and Base Account are smart contract wallets, and Arc Memo reverts for a caller with
-  // code. The donate panel falls back to a direct call for such an address, but these connectors stay off.
+  // Coinbase Smart Wallet and Base Account are smart contract wallets. A wallet connects only to add money on
+  // Arc, and these connectors stay off until one is checked there.
   it('turns off the Coinbase and Base Account connectors', async () => {
     await import('./wagmi')
     expect(appkit.createAppKit).toHaveBeenCalledTimes(1)

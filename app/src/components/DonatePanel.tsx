@@ -5,8 +5,6 @@ import type { Hex } from 'viem'
 import { EXPLORER_URL, PASSKEY_GAS_BUFFER } from '../config'
 import { useSender } from '../hooks/useSender'
 import {
-  type BlockingEntry,
-  blockingEntry,
   clearPendingArc,
   notifyPending,
   type PendingArc,
@@ -70,14 +68,12 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   const [tipPercent, setTipPercent] = useState<(typeof TIP_PERCENTS)[number]>(0)
   const [message, setMessage] = useState('')
   const [anonymous, setAnonymous] = useState(false)
-  // The unconfirmed donation to this campaign, read from the shared pending store. While there is one, a new
-  // donation is blocked.
-  const [blocker, setBlocker] = useState<BlockingEntry | null>(() => blockingEntry(campaign))
-  // Re-read on every change, from this tab or another. An Arc donation another tab left unconfirmed also
-  // puts this form into its not-confirmed state, unless this tab is sending or checking its own.
+  // Re-read the shared pending store on every change, from this tab or another. A donation another tab left
+  // unconfirmed puts this form into its not-confirmed state, unless this tab is sending or checking its own.
+  // Only donations block: gifts come from the Fundit account on Arc, so a transfer from another chain saved
+  // by an older build is not a gift that could land twice.
   useEffect(() => {
     const reload = () => {
-      setBlocker(blockingEntry(campaign))
       const saved = pendingArc(campaign)
       if (saved) setPhase((p) => (p.kind === 'sending' || p.kind === 'checking' || p.kind === 'timeout' ? p : arcTimeout(saved)))
     }
@@ -145,8 +141,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
     balance !== undefined &&
     !overBalance &&
     (!needsGasUsdc || (gasFunds.data !== undefined && !noGas)) &&
-    !locked &&
-    (blocker === null || blocker.kind === 'arc')
+    !locked
 
   function refreshAfterDonation() {
     void queryClient.invalidateQueries({ queryKey: ['campaign', campaign.toLowerCase()] })
@@ -184,7 +179,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
     if (inFlight.current || !canSubmit || !sender || amount === null) return
     // Another tab may have started a donation to this campaign since this form loaded. Read the store again
     // before anything is sent; the listeners then show that donation's blocked state.
-    if (blockingEntry(campaign)) {
+    if (pendingArc(campaign)) {
       notifyPending()
       return
     }

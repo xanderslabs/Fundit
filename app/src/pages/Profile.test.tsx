@@ -8,6 +8,15 @@ import type { CampaignView } from '../lib/campaigns'
 import type { Sender } from '../lib/sender'
 import { Profile } from './Profile'
 
+// VITE_CROSSCHAIN now means Add money from another chain. Gifts never come from another chain.
+const flags = vi.hoisted(() => ({ crosschain: false }))
+vi.mock('../config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../config')>()),
+  get CROSSCHAIN_ENABLED() {
+    return flags.crosschain
+  },
+}))
+
 const state: { sender: Sender | null; mine: Promise<CampaignView[]> | null; gifts: unknown[] | null } = { sender: null, mine: null, gifts: null }
 vi.mock('../hooks/useSender', () => ({ useSender: () => state.sender }))
 // AppKit is mocked only to prove My page never opens it. It opens only inside Add money.
@@ -44,6 +53,7 @@ afterEach(() => {
   state.mine = null
   state.gifts = null
   backup.needed = false
+  flags.crosschain = false
 })
 
 function renderProfile() {
@@ -98,6 +108,15 @@ describe('Profile', () => {
     renderProfile()
     expect(screen.getByText(/This list covers about the last day on Arc\./)).toBeTruthy()
     expect(screen.queryByText(/200,000 blocks/)).toBeNull()
+  })
+
+  // Gifts come only from the Fundit account on Arc, so My page must not say they can come from other chains.
+  it('does not say gifts can come from other chains, even with cross-chain Add money on', () => {
+    flags.crosschain = true
+    state.sender = { kind: 'passkey', address: '0x1111111111111111111111111111111111111111', send: vi.fn() }
+    renderProfile()
+    expect(screen.getByText(/This list covers about the last day on Arc\./)).toBeTruthy()
+    expect(screen.queryByText(/other chains/)).toBeNull()
   })
 
   // The organiser shares from My page too, so each of their Fundits has its own Share button, outside the
