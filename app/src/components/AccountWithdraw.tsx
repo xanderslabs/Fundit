@@ -20,7 +20,7 @@ const FEE_CHANGED = 'The transfer fee changed. Check the new amount and confirm 
 const OVER_HELD = 'That is more than your Fundit account holds.'
 const KEEP_GAS = `Leave at least ${formatAmount(PASSKEY_GAS_BUFFER, 'USDC')} in your Fundit account for the network fee.`
 const ONE_AT_A_TIME =
-  'Your last transfer to another chain is still on its way. You can send another once it arrives. If it is taking longer than expected, you can dismiss it below.'
+  'Your last transfer to another chain is still on its way. You can send another once it arrives. If it takes much longer than expected, a Dismiss button appears below.'
 const NO_GAS = `Add at least ${formatAmount(PASSKEY_GAS_BUFFER, 'USDC')} to your Fundit account first. It pays the network fee.`
 const QUOTE_DEBOUNCE_MS = 400
 

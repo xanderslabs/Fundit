@@ -14,7 +14,7 @@ const FRIEND = '0x1111111111111111111111111111111111111111'
 const HASH = `0x${'1'.repeat(64)}` as Hex
 const PENDING_KEY = 'fundit.pendingBridges'
 const BLOCKED =
-  'Your last transfer to another chain is still on its way. You can send another once it arrives. If it is taking longer than expected, you can dismiss it below.'
+  'Your last transfer to another chain is still on its way. You can send another once it arrives. If it takes much longer than expected, a Dismiss button appears below.'
 
 const balances = vi.hoisted(() => ({ usdc: 0n, eurc: 0n }))
 const fetchAccountBalances = vi.hoisted(() => vi.fn(async () => ({ ...balances })))
