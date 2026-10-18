@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { type Address, decodeFunctionData, getAddress, type Hex, type TransactionReceipt } from 'viem'
+import { type Address, decodeFunctionData, getAddress, type Hex, toHex, type TransactionReceipt } from 'viem'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { campaignAbi } from '../abi/campaign'
 import { erc20Abi } from '../abi/erc20'
 import { memoAbi } from '../abi/memo'
 import { MEMO_ADDRESS, TOKENS, type TokenSymbol } from '../config'
@@ -219,6 +220,78 @@ describe('DonatePanel', () => {
     const calls = send.mock.calls[0]![0]
     expect(calls[0]!.to).toBe(TOKENS.USDC.address)
     expect(calls[1]!.to).toBe(CAMPAIGN)
+  })
+
+  describe('Give anonymously', () => {
+    const HELP = "Your name won't show on Fundit. The gift is still recorded on the public blockchain from your wallet address."
+
+    it('has an unticked checkbox with the help text', () => {
+      fakeSender()
+      renderPanel(view('USDC'))
+      expect((screen.getByLabelText('Give anonymously') as HTMLInputElement).checked).toBe(false)
+      expect(screen.getByText(HELP)).toBeTruthy()
+    })
+
+    it('sends the marked message in the donate call and the Memo data (EOA)', async () => {
+      const send = fakeSender()
+      state.balance = 1000_000000n
+      renderPanel(view('USDC'))
+      const user = userEvent.setup()
+      await user.click(screen.getByLabelText('Give anonymously'))
+      await user.type(screen.getByLabelText('Message (optional)'), '0123456789')
+      await user.type(screen.getByLabelText('Amount'), '10')
+      await waitFor(() => expect(donateButton().disabled).toBe(false))
+      await user.click(donateButton())
+      await waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+      const memo = decodeFunctionData({ abi: memoAbi, data: send.mock.calls[0]![0].at(-1)!.data })
+      expect(memo.args![3]).toBe(toHex('[anon]0123456789'))
+      const inner = decodeFunctionData({ abi: campaignAbi, data: memo.args![1] as Hex })
+      expect(inner.args![2]).toBe('[anon]0123456789')
+    })
+
+    it('sends the marked message in the direct donate call (address with code)', async () => {
+      const send = fakeSender()
+      state.balance = 1000_000000n
+      state.code = `0xef0100${'5a'.repeat(20)}`
+      renderPanel(view('USDC'))
+      const user = userEvent.setup()
+      await user.click(screen.getByLabelText('Give anonymously'))
+      await user.type(screen.getByLabelText('Message (optional)'), 'hello')
+      await user.type(screen.getByLabelText('Amount'), '10')
+      await waitFor(() => expect(donateButton().disabled).toBe(false))
+      await user.click(donateButton())
+      await waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+      const donate = decodeFunctionData({ abi: campaignAbi, data: send.mock.calls[0]![0][1]!.data })
+      expect(donate.args![2]).toBe('[anon]hello')
+    })
+
+    it('sends no marker when the box is unticked', async () => {
+      const send = fakeSender()
+      state.balance = 1000_000000n
+      state.code = `0xef0100${'5a'.repeat(20)}`
+      renderPanel(view('USDC'))
+      const user = userEvent.setup()
+      await user.type(screen.getByLabelText('Message (optional)'), 'hello')
+      await user.type(screen.getByLabelText('Amount'), '10')
+      await waitFor(() => expect(donateButton().disabled).toBe(false))
+      await user.click(donateButton())
+      await waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+      expect(decodeFunctionData({ abi: campaignAbi, data: send.mock.calls[0]![0][1]!.data }).args![2]).toBe('hello')
+    })
+
+    // 275 bytes plus the 6 byte marker is 281, which the contract would revert after the donor paid for approval.
+    it('rejects a 275-byte message when anonymous', async () => {
+      fakeSender()
+      state.balance = 1000_000000n
+      renderPanel(view('USDC'))
+      const user = userEvent.setup()
+      fireEvent.change(screen.getByLabelText('Message (optional)'), { target: { value: 'a'.repeat(275) } })
+      await user.type(screen.getByLabelText('Amount'), '10')
+      await waitFor(() => expect(donateButton().disabled).toBe(false))
+      await user.click(screen.getByLabelText('Give anonymously'))
+      await waitFor(() => expect(donateButton().disabled).toBe(true))
+      expect(screen.getByText('275 of 274 bytes')).toBeTruthy()
+    })
   })
 
   // A reload while the wallet waits for the receipt must not reopen the form: the donation is already out.

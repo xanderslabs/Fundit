@@ -11,6 +11,7 @@ import { blockTimes } from '../hooks/useActivity'
 import { useCampaign } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
 import { type DonationItem, recentDonationsBy } from '../lib/activity'
+import { readMessage } from '../lib/anon'
 import { myCampaigns } from '../lib/campaigns'
 import { arcClient } from '../lib/clients'
 import { formatAmount } from '../lib/format'
@@ -21,6 +22,7 @@ function DonationRow({ item, time }: { item: DonationItem; time: bigint | undefi
   // Only factory campaigns reach this list, and their token never changes, so the symbol is safe to read here.
   const campaign = useCampaign(item.campaign)
   const view = campaign.data && campaign.data !== 'not-a-campaign' ? campaign.data : null
+  const { anonymous, text } = readMessage(item.data.message as string)
   return (
     <li>
       <p>
@@ -33,7 +35,8 @@ function DonationRow({ item, time }: { item: DonationItem; time: bigint | undefi
           <Link to={`/c/${item.campaign}`}>A donation you made</Link>
         )}
       </p>
-      {(item.data.message as string) !== '' && <p className="activity-message">{item.data.message as string}</p>}
+      {anonymous && <p className="muted">Given anonymously</p>}
+      {text !== '' && <p className="activity-message">{text}</p>}
       <a className="muted activity-time" href={`${EXPLORER_URL}/tx/${item.txHash}`} target="_blank" rel="noopener noreferrer">
         {time === undefined ? `Block ${item.blockNumber}` : new Date(Number(time) * 1000).toLocaleString()}
       </a>

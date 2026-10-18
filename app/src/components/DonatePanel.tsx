@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useRef, useState } from 'react'
 import type { Hex } from 'viem'
 import { arc } from 'viem/chains'
 import { useConnection } from 'wagmi'
-import { CROSSCHAIN_ENABLED, MAX_MESSAGE_BYTES } from '../config'
+import { CROSSCHAIN_ENABLED } from '../config'
 import { useSender } from '../hooks/useSender'
 import {
   type BlockingEntry,
@@ -17,6 +17,7 @@ import {
   savePendingArc,
   subscribePending,
 } from '../lib/bridge'
+import { markAnonymous, messageLimit } from '../lib/anon'
 import type { CampaignView } from '../lib/campaigns'
 import { arcClient } from '../lib/clients'
 import { buildDonateCalls, donationBreakdown, fetchDonorFunds } from '../lib/donate'
@@ -105,6 +106,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   const [amountText, setAmountText] = useState('')
   const [tipPercent, setTipPercent] = useState<(typeof TIP_PERCENTS)[number]>(0)
   const [message, setMessage] = useState('')
+  const [anonymous, setAnonymous] = useState(false)
   const [source, setSource] = useState<PaySourceId>('arc')
   // The unconfirmed donation to this campaign, from any source, read from the shared pending store. While
   // there is one, every source is blocked and only its own status shows.
@@ -167,7 +169,8 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   const tip = amount === null ? 0n : (amount * BigInt(tipPercent)) / 100n
   const breakdown = amount === null ? null : donationBreakdown(amount, tip, summary.donationFeeBps)
   const messageBytes = byteLength(message)
-  const messageTooLong = messageBytes > MAX_MESSAGE_BYTES
+  const limit = messageLimit(anonymous)
+  const messageTooLong = messageBytes > limit
   const balance = funds.data?.balance
   // Only a USDC balance pays the passkey wallet's gas. An EURC balance is not touched by it.
   const gasBuffer = sender?.kind === 'passkey' && symbol === 'USDC' ? PASSKEY_GAS_BUFFER : 0n
@@ -244,7 +247,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
         setPhase({ kind: 'error', message: notEnough(fresh.balance) })
         return
       }
-      const calls = buildDonateCalls({ sender, campaign, token, amount, tip, message, allowance: fresh.allowance, senderCode })
+      const calls = buildDonateCalls({ sender, campaign, token, amount, tip, message: anonymous ? markAnonymous(message) : message, allowance: fresh.allowance, senderCode })
       const donateIndex = calls.length - 1
       const res = await sender.send(calls, {
         label: 'Donate',
@@ -431,9 +434,16 @@ export function DonatePanel({ view }: { view: CampaignView }) {
                 aria-describedby="donate-message-count"
               />
               <span id="donate-message-count" className={messageTooLong ? 'counter counter-over' : 'counter'}>
-                {messageBytes} of {MAX_MESSAGE_BYTES} bytes
+                {messageBytes} of {limit} bytes
               </span>
               <p className="hint">Your message is public and stays on chain.</p>
+              <label className="check">
+                <input type="checkbox" checked={anonymous} onChange={(e) => setAnonymous(e.target.checked)} />
+                <span>Give anonymously</span>
+              </label>
+              <p className="hint">
+                Your name won't show on Fundit. The gift is still recorded on the public blockchain from your wallet address.
+              </p>
             </div>
 
           </fieldset>

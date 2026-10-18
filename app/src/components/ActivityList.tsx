@@ -6,6 +6,7 @@ import type { TokenSymbol } from '../config'
 import { useActivity } from '../hooks/useActivity'
 import { useSender } from '../hooks/useSender'
 import type { ActivityItem } from '../lib/activity'
+import { readMessage } from '../lib/anon'
 import { arcClient } from '../lib/clients'
 import { formatAmount } from '../lib/format'
 import { Name } from './Name'
@@ -23,16 +24,18 @@ function Line({ item, symbol }: { item: ActivityItem; symbol: TokenSymbol }) {
   const d = item.data
   const amount = (v: unknown) => formatAmount(v as bigint, symbol)
   switch (item.kind) {
-    case 'donation':
+    case 'donation': {
+      const { anonymous, text } = readMessage(d.message as string)
       return (
         <>
           <p>
-            <Who address={d.donor as Address} /> gave <strong>{amount(d.amount)}</strong>
+            {anonymous ? <span className="name-text">Anonymous</span> : <Who address={d.donor as Address} />} gave <strong>{amount(d.amount)}</strong>
             {(d.tip as bigint) > 0n && <span className="muted"> and tipped Fundit {amount(d.tip)}</span>}
           </p>
-          {(d.message as string) !== '' && <p className="activity-message">{d.message as string}</p>}
+          {text !== '' && <p className="activity-message">{text}</p>}
         </>
       )
+    }
     case 'external':
       return (
         <p>

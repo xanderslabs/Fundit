@@ -8,25 +8,27 @@ import type { CampaignView } from '../lib/campaigns'
 import type { Sender } from '../lib/sender'
 import { Profile } from './Profile'
 
-const state: { sender: Sender | null; mine: Promise<CampaignView[]> | null } = { sender: null, mine: null }
+const state: { sender: Sender | null; mine: Promise<CampaignView[]> | null; gifts: unknown[] | null } = { sender: null, mine: null, gifts: null }
 vi.mock('../hooks/useSender', () => ({ useSender: () => state.sender }))
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: () => {} }) }))
 // The lists load from Arc; lib/activity.test.ts and lib/campaigns.test.ts cover the reads.
 vi.mock('../lib/clients', () => ({ arcClient: {} }))
 vi.mock('../lib/activity', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/activity')>()),
-  recentDonationsBy: () => new Promise(() => {}),
+  recentDonationsBy: () => (state.gifts ? Promise.resolve(state.gifts) : new Promise(() => {})),
 }))
 vi.mock('../lib/campaigns', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/campaigns')>()),
   myCampaigns: () => state.mine ?? new Promise(() => {}),
 }))
+vi.mock('../hooks/useActivity', () => ({ blockTimes: async () => new Map() }))
 vi.mock('../hooks/useName', () => ({ useName: () => ({ data: undefined }) }))
 
 afterEach(() => {
   cleanup()
   state.sender = null
   state.mine = null
+  state.gifts = null
 })
 
 function renderProfile() {
@@ -97,5 +99,23 @@ describe('Profile', () => {
     await userEvent.click(share)
     const dialog = screen.getByRole('dialog', { name: 'Share this Fundit' })
     expect(within(dialog).getByText(/^I started a Fundit for Clean water\. Every gift helps: /)).toBeTruthy()
+  })
+
+  it('labels the signed-in donor\'s own anonymous gift as Given anonymously, without the marker', async () => {
+    state.sender = { kind: 'eoa', address: '0x1111111111111111111111111111111111111111', send: vi.fn() }
+    state.gifts = [
+      {
+        kind: 'donation',
+        campaign: '0x00000000000000000000000000000000000000a1',
+        blockNumber: 1n,
+        txHash: `0x${'ab'.repeat(32)}`,
+        logIndex: 0,
+        data: { donor: state.sender.address, amount: 5_000000n, tip: 0n, message: '[anon]good luck' },
+      },
+    ]
+    renderProfile()
+    expect(await screen.findByText('Given anonymously')).toBeTruthy()
+    expect(screen.getByText('good luck')).toBeTruthy()
+    expect(document.body.textContent).not.toContain('[anon]')
   })
 })

@@ -11,11 +11,11 @@ const CAMPAIGN = getAddress('0x00000000000000000000000000000000000000a1')
 const ME = '0x1111111111111111111111111111111111111111' as Address
 const HASH = `0x${'ab'.repeat(32)}` as Hex
 
-const state: { sender: Sender | null; unaccounted: bigint } = { sender: null, unaccounted: 0n }
+const state: { sender: Sender | null; unaccounted: bigint; items: unknown[] } = { sender: null, unaccounted: 0n, items: [] }
 
 vi.mock('../hooks/useSender', () => ({ useSender: () => state.sender }))
 vi.mock('../hooks/useActivity', () => ({
-  useActivity: () => ({ isPending: false, isError: false, isSuccess: true, hasNextPage: false, data: { pages: [] } }),
+  useActivity: () => ({ isPending: false, isError: false, isSuccess: true, hasNextPage: false, data: { pages: [{ items: state.items, times: new Map() }] } }),
 }))
 vi.mock('../lib/clients', () => ({
   arcClient: {
@@ -30,6 +30,7 @@ afterEach(() => {
   cleanup()
   state.sender = null
   state.unaccounted = 0n
+  state.items = []
 })
 
 const success: TxResult = { status: 'success', hash: HASH, receipt: { status: 'success' } as TransactionReceipt }
@@ -76,5 +77,37 @@ describe('ActivityList cross-chain inflows not counted yet', () => {
     expect(await screen.findByText('5.00 USDC from other chains, not counted yet')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Count it now' })).toBeNull()
     expect(screen.getByText('Sign in with any wallet to count it.')).toBeTruthy()
+  })
+})
+
+const DONOR = '0x3333333333333333333333333333333333333333'
+function donation(message: string) {
+  return { kind: 'donation', blockNumber: 1n, txHash: HASH, logIndex: 0, data: { donor: DONOR, amount: 5_000000n, tip: 0n, message } }
+}
+
+describe('ActivityList anonymous gifts', () => {
+  it('shows Anonymous, no name or address, and the message without the marker', async () => {
+    state.items = [donation('[anon]good luck')]
+    renderList()
+    expect(await screen.findByText('Anonymous')).toBeTruthy()
+    expect(screen.getByText('good luck')).toBeTruthy()
+    expect(screen.queryByText(/0x3333/)).toBeNull()
+    expect(document.body.innerHTML).not.toContain(DONOR.slice(2, 8))
+  })
+
+  // The marker is the record, so a donor who typed it by hand is anonymous too. The literal text never shows.
+  it('strips the marker and shows Anonymous for a typed prefix', async () => {
+    state.items = [donation('[anon]')]
+    renderList()
+    expect(await screen.findByText('Anonymous')).toBeTruthy()
+    expect(document.body.textContent).not.toContain('[anon]')
+    expect(document.querySelector('.activity-message')).toBeNull()
+  })
+
+  it('shows the donor as usual without the marker', async () => {
+    state.items = [donation('hi')]
+    renderList()
+    expect(await screen.findByText('hi')).toBeTruthy()
+    expect(screen.queryByText('Anonymous')).toBeNull()
   })
 })
