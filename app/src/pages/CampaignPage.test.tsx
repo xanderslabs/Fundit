@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
@@ -158,6 +159,25 @@ describe('CampaignPage', () => {
     expect(stat.querySelector('.ui-stat-value')!.textContent).toBe('250.00 USDC')
     expect(stat.querySelector('.ui-stat-label')!.textContent).toBe('raised of 1,000.00 USDC goal')
     expect(screen.getByText('Open').className).toBe('ui-badge ui-badge-success')
+  })
+
+  // jsdom does no layout, so this reads the wide-screen rules. The money facts and Give must start level with the
+  // image's top edge: an end alignment, a row offset or a top margin on the side column leaves a gap above them.
+  it('starts the sticky side column level with the image on wide screens', () => {
+    const css = readFileSync('src/pages/CampaignPage.css', 'utf8')
+    const wide = css.slice(0, css.indexOf('@media'))
+    const rule = (selector: string) => {
+      const m = new RegExp(`(?:^|\\n)${selector.replace('.', '\\.')} \\{([^}]*)\\}`).exec(wide)
+      expect(m, selector).not.toBeNull()
+      return m![1]!
+    }
+    const grid = rule('.campaign-grid')
+    expect(grid).toMatch(/align-items: start;/)
+    expect(grid).toMatch(/'hero side'\s*'body side'/)
+    const side = rule('.campaign-side')
+    expect(side).toMatch(/grid-area: side;/)
+    expect(side).toMatch(/position: sticky;/)
+    expect(side).not.toMatch(/align-self|margin|grid-row|padding-top/)
   })
 
   // A closed campaign reverts every donation, so the page must not offer one.

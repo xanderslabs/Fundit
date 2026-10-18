@@ -319,7 +319,8 @@ export function DonatePanel({ view }: { view: CampaignView }) {
                 {addAtLeast(reserve)} <Link to={ADD_MONEY_PATH}>Add money</Link>
               </p>
             )}
-            {balanceNote && (
+            {/* An amount error already states the balance, so the plain balance line would repeat it. */}
+            {balanceNote && !(parsed && !parsed.ok) && !overBalance && !noGas && (
               <p id="donate-balance" className="give-hint">
                 {balanceNote}
               </p>

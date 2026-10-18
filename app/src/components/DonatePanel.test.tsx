@@ -232,6 +232,22 @@ describe('DonatePanel', () => {
     expect(donateButton().disabled).toBe(true)
   })
 
+  // The low-balance error states the balance already. Saying it twice in a row reads as a glitch, so the plain
+  // balance line shows only while no amount error does.
+  it('shows the balance line only when the amount has no error', async () => {
+    fakeSender()
+    state.balance = 5_000000n
+    renderPanel(view('USDC'))
+    expect(await screen.findByText('Your balance: 5.00 USDC')).toBeTruthy()
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText('Amount'), '10')
+    expect(await screen.findByText(/Your balance is 5.00 USDC/)).toBeTruthy()
+    expect(screen.queryByText('Your balance: 5.00 USDC')).toBeNull()
+    await user.clear(screen.getByLabelText('Amount'))
+    await user.type(screen.getByLabelText('Amount'), '1')
+    expect(await screen.findByText('Your balance: 5.00 USDC')).toBeTruthy()
+  })
+
   // The owner cut the Give box down to the fields and the numbers. These lines must not come back.
   it('shows no explanation lines under the tip, the message or the switch', async () => {
     fakeSender()
