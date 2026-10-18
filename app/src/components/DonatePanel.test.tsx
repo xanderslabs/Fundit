@@ -110,6 +110,7 @@ const donateButton = () => screen.getByRole('button', { name: 'Give' }) as HTMLB
 afterEach(() => {
   cleanup()
   reserve.form = 300_000n
+  passkeyReserve.mockImplementation(async () => reserve.form)
   state.sender = null
   state.balance = 0n
   state.usdc = undefined
@@ -220,14 +221,76 @@ describe('DonatePanel', () => {
     expect(donateButton().disabled).toBe(true)
   })
 
-  describe('Give anonymously', () => {
-    const HELP = "Your name won't show on Fundit. The gift is still recorded on the public blockchain from your wallet address."
+  // The owner cut the Give box down to the fields and the numbers. These lines must not come back.
+  it('shows no explanation lines under the tip, the message or the switch', async () => {
+    fakeSender()
+    state.balance = 1000_000000n
+    renderPanel(view('USDC'))
+    await userEvent.setup().type(screen.getByLabelText('Amount'), '10')
+    const panel = screen.getByRole('region', { name: 'Give' })
+    for (const gone of [
+      'Your message is public and stays on chain.',
+      "Your name won't show on Fundit.",
+      'The tip goes to the Fundit team, not to this Fundit.',
+      'You also pay a small network fee in USDC.',
+      'wallet address',
+    ]) {
+      expect(panel.textContent).not.toContain(gone)
+    }
+  })
 
-    it('has an unticked checkbox with the help text', () => {
+  it('labels the tip "Tip Fundit (optional)"', () => {
+    fakeSender()
+    renderPanel(view('USDC'))
+    expect(screen.getByRole('group', { name: 'Tip Fundit (optional)' })).toBeTruthy()
+  })
+
+  // The network fee is paid from the same Fundit account, so the donor sees it next to the rest of the money.
+  describe('Network fee line', () => {
+    it("shows the sender's reserve estimate as its own line", async () => {
+      fakeSender()
+      state.balance = 1000_000000n
+      renderPanel(view('USDC'))
+      await userEvent.setup().type(screen.getByLabelText('Amount'), '10')
+      const breakdown = within(screen.getByLabelText('Breakdown'))
+      expect(breakdown.getByText('Network fee')).toBeTruthy()
+      expect(await breakdown.findByText('up to 0.30 USDC')).toBeTruthy()
+    })
+
+    it('says estimating while the estimate loads, without blocking the form', async () => {
+      passkeyReserve.mockImplementation(() => new Promise(() => {}))
+      fakeSender()
+      state.balance = 1000_000000n
+      renderPanel(view('USDC'))
+      await userEvent.setup().type(screen.getByLabelText('Amount'), '10')
+      const breakdown = within(screen.getByLabelText('Breakdown'))
+      expect(breakdown.getByText('Network fee')).toBeTruthy()
+      expect(breakdown.getByText('estimating')).toBeTruthy()
+      expect(screen.getByLabelText('Amount').matches(':disabled')).toBe(false)
+    })
+
+    it('is paid in USDC even for an EURC gift', async () => {
+      fakeSender()
+      state.balance = 1000_000000n
+      state.usdc = 10_000000n
+      renderPanel(view('EURC'))
+      await userEvent.setup().type(screen.getByLabelText('Amount'), '10')
+      expect(await within(screen.getByLabelText('Breakdown')).findByText('up to 0.30 USDC')).toBeTruthy()
+    })
+  })
+
+  describe('Hide my name', () => {
+    const toggle = () => screen.getByRole('switch', { name: 'Hide my name' }) as HTMLInputElement
+
+    it('is an unticked switch directly under the message box', () => {
       fakeSender()
       renderPanel(view('USDC'))
-      expect((screen.getByLabelText('Give anonymously') as HTMLInputElement).checked).toBe(false)
-      expect(screen.getByText(HELP)).toBeTruthy()
+      expect(toggle().checked).toBe(false)
+      expect(screen.queryByLabelText('Give anonymously')).toBeNull()
+      const box = screen.getByLabelText('Message (optional)')
+      const field = box.closest('.form-field')!
+      expect(field.contains(toggle())).toBe(true)
+      expect(box.compareDocumentPosition(toggle()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     })
 
     it('sends the marked message in the donate call', async () => {
@@ -235,7 +298,8 @@ describe('DonatePanel', () => {
       state.balance = 1000_000000n
       renderPanel(view('USDC'))
       const user = userEvent.setup()
-      await user.click(screen.getByLabelText('Give anonymously'))
+      await user.click(toggle())
+      expect(toggle().checked).toBe(true)
       await user.type(screen.getByLabelText('Message (optional)'), 'hello')
       await user.type(screen.getByLabelText('Amount'), '10')
       await waitFor(() => expect(donateButton().disabled).toBe(false))
@@ -245,7 +309,7 @@ describe('DonatePanel', () => {
       expect(donate.args![2]).toBe('[anon]hello')
     })
 
-    it('sends no marker when the box is unticked', async () => {
+    it('sends no marker when the switch is off', async () => {
       const send = fakeSender()
       state.balance = 1000_000000n
       renderPanel(view('USDC'))
@@ -267,7 +331,7 @@ describe('DonatePanel', () => {
       fireEvent.change(screen.getByLabelText('Message (optional)'), { target: { value: 'a'.repeat(275) } })
       await user.type(screen.getByLabelText('Amount'), '10')
       await waitFor(() => expect(donateButton().disabled).toBe(false))
-      await user.click(screen.getByLabelText('Give anonymously'))
+      await user.click(toggle())
       await waitFor(() => expect(donateButton().disabled).toBe(true))
       expect(screen.getByText('275 of 274 bytes')).toBeTruthy()
     })

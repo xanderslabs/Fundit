@@ -327,7 +327,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
           </div>
 
           <fieldset className="form-field">
-            <legend>Tip for Fundit (optional)</legend>
+            <legend>Tip Fundit (optional)</legend>
             <div className="donate-options">
               {TIP_PERCENTS.map((pct) => (
                 <label key={pct} className="donate-option">
@@ -336,7 +336,6 @@ export function DonatePanel({ view }: { view: CampaignView }) {
                 </label>
               ))}
             </div>
-            <p className="hint">The tip goes to the Fundit team, not to this Fundit.</p>
           </fieldset>
 
           <div className="form-field">
@@ -349,17 +348,16 @@ export function DonatePanel({ view }: { view: CampaignView }) {
               aria-invalid={messageTooLong ? true : undefined}
               aria-describedby="donate-message-count"
             />
-            <span id="donate-message-count" className={messageTooLong ? 'counter counter-over' : 'counter'}>
-              {messageBytes} of {limit} bytes
-            </span>
-            <p className="hint">Your message is public and stays on chain.</p>
-            <label className="check">
-              <input type="checkbox" checked={anonymous} onChange={(e) => setAnonymous(e.target.checked)} />
-              <span>Give anonymously</span>
-            </label>
-            <p className="hint">
-              Your name won't show on Fundit. The gift is still recorded on the public blockchain from your wallet address.
-            </p>
+            <div className="donate-message-meta">
+              <label className="switch">
+                <input type="checkbox" role="switch" checked={anonymous} onChange={(e) => setAnonymous(e.target.checked)} />
+                <span className="switch-track" aria-hidden="true" />
+                <span>Hide my name</span>
+              </label>
+              <span id="donate-message-count" className={messageTooLong ? 'counter counter-over' : 'counter'}>
+                {messageBytes} of {limit} bytes
+              </span>
+            </div>
           </div>
 
         </fieldset>
@@ -382,9 +380,15 @@ export function DonatePanel({ view }: { view: CampaignView }) {
               <dt>Total you pay</dt>
               <dd>{formatExact(breakdown.total, symbol)}</dd>
             </div>
+            {/* Paid in USDC from the same account, on top of the total. The reserve is the most it can take. */}
+            {sender?.kind === 'passkey' && (
+              <div>
+                <dt>Network fee</dt>
+                <dd>{reserve === undefined ? 'estimating' : `up to ${formatExact(reserve, 'USDC')}`}</dd>
+              </div>
+            )}
           </dl>
         )}
-        {breakdown && <p className="hint">You also pay a small network fee in USDC.</p>}
 
         <div className="donate-status" aria-live="polite">
           {phase.kind === 'sending' && <p>Confirm with your passkey, then wait for the network. This can take a few seconds.</p>}
