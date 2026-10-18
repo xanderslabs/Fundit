@@ -90,6 +90,19 @@ describe('AccountWithdraw', () => {
     expect((submitButton() as HTMLButtonElement).disabled).toBe(false)
   })
 
+  // The form's balance can be up to 15 seconds old, or spent from another tab. The send must check a fresh one.
+  it('refuses at send time when the fresh balance no longer leaves the gas reserve', async () => {
+    balances.usdc = 1_000000n
+    renderForm()
+    await screen.findByText(/You have 1.00 USDC/)
+    await fill('0.9', FRIEND)
+    expect((submitButton() as HTMLButtonElement).disabled).toBe(false)
+    balances.usdc = 900000n
+    await userEvent.click(submitButton())
+    expect((await screen.findAllByText('Leave at least 0.05 USDC in your Fundit account for the network fee.')).length).toBeGreaterThan(0)
+    expect(send).not.toHaveBeenCalled()
+  })
+
   // EURC has no gas reserve of its own, but the network fee is still paid in USDC.
   it('asks for USDC gas before sending EURC', async () => {
     balances.usdc = 10_000n

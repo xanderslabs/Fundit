@@ -3,7 +3,7 @@ import { explainError, isUserRejection } from '../lib/errors'
 import { loginPasskey, registerPasskey } from '../lib/passkey'
 
 export const PASSKEY_INTRO =
-  'A passkey lets you sign in with your fingerprint, face or device PIN, with no wallet app to install. It opens a Fundit wallet on Arc that you add USDC to before you give.'
+  'A passkey lets you sign in with your fingerprint, face or device PIN, with no wallet app to install. It opens a Fundit account on Arc that you add USDC to before you give.'
 
 export const MAX_USERNAME = 32
 

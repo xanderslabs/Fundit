@@ -67,4 +67,25 @@ describe('useTx with TxStatus', () => {
     expect(await screen.findByText('Saved.')).toBeTruthy()
     expect(waitForResult).toHaveBeenCalledWith(expect.anything(), TX_HASH, expect.any(Number))
   })
+
+  // A wallet sends a call list one call at a time, so a failed second call could leave an open approval.
+  it('refuses several calls for a wallet sender and sends nothing', async () => {
+    const send = vi.fn(async () => success)
+    const sender: Sender = { kind: 'eoa', address: '0x00000000000000000000000000000000000000cc', send }
+    function Many() {
+      const tx = useTx(() => {})
+      return (
+        <>
+          <button type="button" onClick={() => void tx.run(sender, () => [CALL, CALL], 'Test')}>
+            Go
+          </button>
+          <TxStatus tx={tx} noun="change" successText="Saved." startOverWarning="Start over?" />
+        </>
+      )
+    }
+    render(<Many />)
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Go' }))
+    expect(await screen.findByText(/useTx: several calls need a passkey sender/)).toBeTruthy()
+    expect(send).not.toHaveBeenCalled()
+  })
 })

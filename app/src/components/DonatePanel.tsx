@@ -1,6 +1,7 @@
 import { useAppKit } from '@reown/appkit/react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router'
 import type { Hex } from 'viem'
 import { arc } from 'viem/chains'
 import { useConnection } from 'wagmi'
@@ -20,6 +21,7 @@ import {
 import { markAnonymous, messageLimit } from '../lib/anon'
 import type { CampaignView } from '../lib/campaigns'
 import { arcClient } from '../lib/clients'
+import { BALANCES_KEY, balancesKey, fetchAccountBalances } from '../lib/deposit'
 import { buildDonateCalls, donationBreakdown, fetchDonorFunds } from '../lib/donate'
 import { explainError } from '../lib/errors'
 import { bpsToPercent, formatAmount, formatExact, parseAmount } from '../lib/format'
@@ -33,6 +35,7 @@ const EXPLORER_URL = arc.blockExplorers.default.url
 const QUICK_AMOUNTS = ['10', '25', '50', '100'] as const
 const TIP_PERCENTS = [0, 5, 10, 15] as const
 const DAY_MS = 24 * 60 * 60 * 1000
+const NO_GAS = `Add at least ${formatAmount(PASSKEY_GAS_BUFFER, 'USDC')} to your Fundit account first. It pays the network fee.`
 const START_OVER_WARNING =
   'The earlier transaction may still go through. If it does and you give again, you will give twice. Start a new donation anyway?'
 
@@ -170,8 +173,17 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   const limit = messageLimit(anonymous)
   const messageTooLong = messageBytes > limit
   const balance = funds.data?.balance
-  // Only a USDC balance pays the passkey wallet's gas. An EURC balance is not touched by it.
+  // Only a USDC balance pays the Fundit account's gas. An EURC balance is not touched by it.
   const gasBuffer = sender?.kind === 'passkey' && symbol === 'USDC' ? PASSKEY_GAS_BUFFER : 0n
+  // An EURC gift from a Fundit account still pays the network fee in USDC, so it needs the buffer in USDC.
+  const needsGasUsdc = sender?.kind === 'passkey' && symbol !== 'USDC'
+  const gasFunds = useQuery({
+    queryKey: balancesKey(sender?.address ?? null),
+    queryFn: () => fetchAccountBalances(arcClient, sender!.address),
+    enabled: needsGasUsdc && !closed,
+    staleTime: 15_000,
+  })
+  const noGas = needsGasUsdc && gasFunds.data !== undefined && gasFunds.data.usdc < PASSKEY_GAS_BUFFER
   const overBalance = breakdown !== null && balance !== undefined && breakdown.total + gasBuffer > balance
   const notEnough = (have: bigint) =>
     gasBuffer > 0n
@@ -189,6 +201,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
     !messageTooLong &&
     balance !== undefined &&
     !overBalance &&
+    (!needsGasUsdc || (gasFunds.data !== undefined && !noGas)) &&
     !locked &&
     (blocker === null || blocker.kind === 'arc')
 
@@ -196,6 +209,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
     void queryClient.invalidateQueries({ queryKey: ['campaign', campaign.toLowerCase()] })
     void queryClient.invalidateQueries({ queryKey: ['activity', campaign.toLowerCase()] })
     void queryClient.invalidateQueries({ queryKey: ['donor-funds'] })
+    void queryClient.invalidateQueries({ queryKey: [BALANCES_KEY] })
   }
 
   function handle(res: TxResult, hadApprove: boolean) {
@@ -244,6 +258,14 @@ export function DonatePanel({ view }: { view: CampaignView }) {
       if (fresh.balance < amount + tip + gasBuffer) {
         setPhase({ kind: 'error', message: notEnough(fresh.balance) })
         return
+      }
+      if (needsGasUsdc) {
+        const gas = await fetchAccountBalances(arcClient, sender.address)
+        queryClient.setQueryData(balancesKey(sender.address), gas)
+        if (gas.usdc < PASSKEY_GAS_BUFFER) {
+          setPhase({ kind: 'error', message: NO_GAS })
+          return
+        }
       }
       const calls = buildDonateCalls({ sender, campaign, token, amount, tip, message: anonymous ? markAnonymous(message) : message, allowance: fresh.allowance, senderCode })
       const donateIndex = calls.length - 1
@@ -399,6 +421,11 @@ export function DonatePanel({ view }: { view: CampaignView }) {
               {overBalance && balance !== undefined && (
                 <p className="field-error" role="alert">
                   {notEnough(balance)}
+                </p>
+              )}
+              {noGas && (
+                <p className="field-error" role="alert">
+                  {NO_GAS} <Link to="/add-money">Add money</Link>
                 </p>
               )}
               {balanceNote && (

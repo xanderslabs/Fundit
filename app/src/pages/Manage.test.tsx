@@ -347,6 +347,8 @@ describe('Manage', () => {
     expect(keys).toContain(JSON.stringify(['campaign', CAMPAIGN.toLowerCase()]))
     expect(keys).toContain(JSON.stringify(['activity', CAMPAIGN.toLowerCase()]))
     expect(keys).toContain(JSON.stringify(['donor-funds']))
+    // A payout into a Fundit account changes the balance My page and Send money out show.
+    expect(keys).toContain(JSON.stringify(['account-balances']))
   })
 
   // close() is one-way. A slip of the finger must not end the fundraiser.

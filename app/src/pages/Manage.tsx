@@ -10,6 +10,7 @@ import { ARC_DOMAIN, CHAIN_LABELS } from '../config'
 import { useCampaign } from '../hooks/useCampaigns'
 import { useSender, useWalletChoice } from '../hooks/useSender'
 import { chainByKey, savePendingPayout } from '../lib/bridge'
+import { BALANCES_KEY } from '../lib/deposit'
 import type { CampaignView } from '../lib/campaigns'
 import { arcClient } from '../lib/clients'
 import { PlainError } from '../lib/errors'
@@ -32,7 +33,10 @@ function useRefresh(campaign: Address) {
   return (balances = false) => {
     void queryClient.invalidateQueries({ queryKey: ['campaign', campaign.toLowerCase()] })
     void queryClient.invalidateQueries({ queryKey: ['activity', campaign.toLowerCase()] })
-    if (balances) void queryClient.invalidateQueries({ queryKey: ['donor-funds'] })
+    if (balances) {
+      void queryClient.invalidateQueries({ queryKey: ['donor-funds'] })
+      void queryClient.invalidateQueries({ queryKey: [BALANCES_KEY] })
+    }
   }
 }
 

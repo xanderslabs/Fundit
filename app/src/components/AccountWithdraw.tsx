@@ -16,6 +16,9 @@ import { ADDRESS_TYPO, parseTypedAddress } from '../lib/validate'
 import { TxStatus, useTx } from './TxStatus'
 
 const FEE_CHANGED = 'The transfer fee changed. Check the new amount and confirm again.'
+const OVER_HELD = 'That is more than your Fundit account holds.'
+const KEEP_GAS = `Leave at least ${formatAmount(PASSKEY_GAS_BUFFER, 'USDC')} in your Fundit account for the network fee.`
+const NO_GAS = `Add at least ${formatAmount(PASSKEY_GAS_BUFFER, 'USDC')} to your Fundit account first. It pays the network fee.`
 const QUOTE_DEBOUNCE_MS = 400
 
 // Sends USDC or EURC out of a Fundit account, on Arc or as USDC to another chain. The organiser's payout form
@@ -115,6 +118,13 @@ function SendOutForm({ sender }: { sender: Sender }) {
     void tx.run(
       sender,
       async () => {
+        // The form's balance may be stale (another tab, a gift just sent), so check the gas reserve on a fresh one.
+        const now = await fetchAccountBalances(arcClient, account)
+        queryClient.setQueryData(balancesKey(account), now)
+        const nowHeld = symbol === 'USDC' ? now.usdc : now.eurc
+        if (amount > nowHeld) throw new PlainError(OVER_HELD)
+        if (now.usdc < PASSKEY_GAS_BUFFER) throw new PlainError(NO_GAS)
+        if (symbol === 'USDC' && amount > maxAccountSend(now.usdc, PASSKEY_GAS_BUFFER)) throw new PlainError(KEEP_GAS)
         // A fresh quote at send time, so the fee cap matches what Circle charges now.
         const fresh = crossChain ? await fetchForwardFee(ARC_DOMAIN, destDomain(dest), amount, fast) : undefined
         if (fresh && quote && fresh.maxFee > quote.maxFee) {
@@ -176,17 +186,17 @@ function SendOutForm({ sender }: { sender: Sender }) {
             )}
             {overHeld && (
               <p className="field-error" role="alert">
-                That is more than your Fundit account holds.
+                {OVER_HELD}
               </p>
             )}
             {overMax && !noGas && (
               <p className="field-error" role="alert">
-                Leave at least {formatAmount(PASSKEY_GAS_BUFFER, 'USDC')} in your Fundit account for the network fee.
+                {KEEP_GAS}
               </p>
             )}
             {noGas && (
               <p className="field-error" role="alert">
-                Add at least {formatAmount(PASSKEY_GAS_BUFFER, 'USDC')} to your Fundit account first. It pays the network fee.{' '}
+                {NO_GAS}{' '}
                 <Link to="/add-money">Add money</Link>
               </p>
             )}

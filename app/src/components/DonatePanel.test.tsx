@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { type Address, decodeFunctionData, getAddress, type Hex, toHex, type TransactionReceipt } from 'viem'
+import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { campaignAbi } from '../abi/campaign'
 import { erc20Abi } from '../abi/erc20'
@@ -16,7 +17,8 @@ const CAMPAIGN = getAddress('0x00000000000000000000000000000000000000a1')
 const HASH = `0x${'ab'.repeat(32)}` as Hex
 
 // code is what getCode returns for the donor address: undefined for an EOA, bytes for a smart wallet.
-const state: { sender: Sender | null; balance: bigint; allowance: bigint; wallet: boolean; code: Hex | undefined } = {
+// usdc, when set, is the USDC balance for a campaign in another token (the Fundit account's gas money).
+const state: { sender: Sender | null; balance: bigint; usdc?: bigint; allowance: bigint; wallet: boolean; code: Hex | undefined } = {
   sender: null,
   balance: 0n,
   allowance: 0n,
@@ -65,7 +67,7 @@ vi.mock('../lib/clients', () => ({
   arcClient: {
     readContract: async (p: { address: Address; functionName: string; args: readonly unknown[] }) => {
       reads.push(p)
-      if (p.functionName === 'balanceOf') return state.balance
+      if (p.functionName === 'balanceOf') return p.address === TOKENS.USDC.address && state.usdc !== undefined ? state.usdc : state.balance
       if (p.functionName === 'allowance') return state.allowance
       throw new Error(`unexpected read ${p.functionName}`)
     },
@@ -110,7 +112,9 @@ function fakeSender(...results: TxResult[]) {
 function renderPanel(v: CampaignView, client = new QueryClient()) {
   render(
     <QueryClientProvider client={client}>
-      <DonatePanel view={v} />
+      <MemoryRouter>
+        <DonatePanel view={v} />
+      </MemoryRouter>
     </QueryClientProvider>,
   )
   return client
@@ -122,6 +126,7 @@ afterEach(() => {
   cleanup()
   state.sender = null
   state.balance = 0n
+  state.usdc = undefined
   state.allowance = 0n
   state.wallet = false
   state.code = undefined
@@ -383,6 +388,8 @@ describe('DonatePanel', () => {
     const keys = invalidate.mock.calls.map(([f]) => JSON.stringify(f?.queryKey))
     expect(keys).toContain(JSON.stringify(['campaign', CAMPAIGN.toLowerCase()]))
     expect(keys).toContain(JSON.stringify(['activity', CAMPAIGN.toLowerCase()]))
+    // My page, Add money and Send money out share this balance, so a gift from a Fundit account updates them too.
+    expect(keys).toContain(JSON.stringify(['account-balances']))
   })
 
   // Approve mined, donate was cancelled. Sending both again would ask for a second, useless approval.
@@ -844,6 +851,30 @@ describe('DonatePanel', () => {
       await user.type(screen.getByLabelText('Amount'), '9.95')
       await waitFor(() => expect(donateButton().disabled).toBe(false))
       expect(codeReads).toEqual([])
+    })
+
+    // Arc gas is paid in USDC. A Fundit account with EURC and no USDC would fail at gas estimation after the tap.
+    it('asks for USDC gas before an EURC gift', async () => {
+      const { send } = passkeySender()
+      state.balance = 100_000000n
+      state.usdc = 10_000n
+      renderPanel(view('EURC'))
+      const user = userEvent.setup()
+      await user.type(screen.getByLabelText('Amount'), '10')
+      expect(await screen.findByText(/Add at least 0.05 USDC to your Fundit account first. It pays the network fee./)).toBeTruthy()
+      expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/add-money')
+      expect(donateButton().disabled).toBe(true)
+      await user.click(donateButton())
+      expect(send).not.toHaveBeenCalled()
+    })
+
+    it('lets an EURC gift go when the account has USDC for gas', async () => {
+      const { send } = passkeySender()
+      state.balance = 100_000000n
+      state.usdc = 50_000n
+      renderPanel(view('EURC'))
+      await fillAndDonate()
+      await waitFor(() => expect(send).toHaveBeenCalledTimes(1))
     })
 
     // After a reload the saved entry must say which kind of hash it holds, or the wrong check runs.

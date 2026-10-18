@@ -68,7 +68,7 @@ export function useTx(onSuccess: (hash: Hex) => void) {
 
   // build runs inside the guard, so a quote it fetches or a check it makes cannot overlap a second click.
   // Several calls go to the sender in one send. A passkey sender makes them one user operation, so they
-  // succeed or fail together. A wallet sender sends them one by one, so only pass an array to a passkey.
+  // succeed or fail together. A wallet sender would send them one by one, so run refuses that.
   async function run(sender: Sender, build: () => Call | Call[] | Promise<Call | Call[]>, label: string) {
     if (inFlight.current) return
     inFlight.current = true
@@ -76,6 +76,9 @@ export function useTx(onSuccess: (hash: Hex) => void) {
     lastSender.current = sender
     try {
       const built = await build()
+      if (Array.isArray(built) && built.length > 1 && sender.kind !== 'passkey') {
+        throw new Error('useTx: several calls need a passkey sender, which sends them as one user operation.')
+      }
       handle(await sender.send(Array.isArray(built) ? built : [built], { label }))
     } catch (err) {
       setPhase({ kind: 'error', message: explainError(err) })
