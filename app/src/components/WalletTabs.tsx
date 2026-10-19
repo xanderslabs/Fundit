@@ -2,7 +2,7 @@ import { useAppKit } from '@reown/appkit/react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react'
 import { type Address, type EIP1193Provider, formatUnits } from 'viem'
-import { useConfig, useConnection, useDisconnect, WagmiProvider } from 'wagmi'
+import { useConfig, useConnection, useDisconnect, WagmiContext } from 'wagmi'
 import {
   ARC_DOMAIN,
   CCTP_CHAINS,
@@ -334,15 +334,12 @@ function WalletDepositForm({ account, bridging }: { account: Address; bridging: 
   )
 }
 
-// Each wallet tab has its own provider over the one shared config, so both see the same connection. It never
-// reconnects on mount: AppKit already reconnects a remembered wallet when ../wagmi creates it, which happens
-// only here, because the person opened a wallet tab.
+// Each wallet tab gives its forms the one shared config, so both see the same connection. Only the context, not
+// WagmiProvider: its Hydrate step runs on every render, and with reconnectOnMount={false} it cleared the
+// connections each time My page re-rendered (WalletTabs.rerender.test.tsx). AppKit already reconnects a
+// remembered wallet when ../wagmi creates it, which happens only here, because the person opened a wallet tab.
 function WalletScope({ children }: { children: ReactNode }) {
-  return (
-    <WagmiProvider config={wagmiConfig} reconnectOnMount={false}>
-      {children}
-    </WagmiProvider>
-  )
+  return <WagmiContext.Provider value={wagmiConfig}>{children}</WagmiContext.Provider>
 }
 
 export function WalletDeposit(props: { account: Address; bridging: boolean }) {

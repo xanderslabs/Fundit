@@ -49,7 +49,7 @@ const openWallet = vi.hoisted(() => vi.fn())
 const disconnect = vi.hoisted(() => vi.fn())
 // The Fundit account is signed in. state.external is a regular wallet connected here to add money from.
 vi.mock('wagmi', () => ({
-  WagmiProvider: ({ children }: { children: ReactNode }) => children,
+  WagmiContext: { Provider: ({ children }: { children: ReactNode }) => children },
   useConfig: () => ({}),
   useConnection: () =>
     state.external

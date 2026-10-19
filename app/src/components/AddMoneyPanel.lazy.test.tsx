@@ -13,11 +13,13 @@ vi.mock('../wagmi', () => {
   loads.walletSetup++
   return { wagmiConfig: { fake: 'config' } }
 })
-const provider = vi.hoisted(() => ({ props: [] as Record<string, unknown>[] }))
+const provider = vi.hoisted(() => ({ values: [] as unknown[] }))
 vi.mock('wagmi', () => ({
-  WagmiProvider: ({ children, ...props }: { children: ReactNode }) => {
-    provider.props.push(props)
-    return children
+  WagmiContext: {
+    Provider: ({ children, value }: { children: ReactNode; value: unknown }) => {
+      provider.values.push(value)
+      return children
+    },
   },
   useConfig: () => ({}),
   useConnection: () => ({ isConnected: false }),
@@ -31,7 +33,7 @@ const ACCOUNT = '0x00000000000000000000000000000000000000cc' as Address
 afterEach(cleanup)
 
 describe('AddMoneyPanel wallet loading', () => {
-  it('loads the wallet setup only when From a wallet opens, under a provider that does not reconnect on mount', async () => {
+  it('loads the wallet setup only when From a wallet opens, and gives the tab its config', async () => {
     render(
       <QueryClientProvider client={new QueryClient()}>
         <AddMoneyPanel account={ACCOUNT} />
@@ -39,12 +41,13 @@ describe('AddMoneyPanel wallet loading', () => {
     )
     expect(screen.getByRole('tabpanel', { name: 'Your address' })).toBeTruthy()
     expect(loads.walletSetup).toBe(0)
-    expect(provider.props).toEqual([])
+    expect(provider.values).toEqual([])
 
     await userEvent.setup().click(screen.getByRole('tab', { name: 'From a wallet' }))
     expect(await screen.findByRole('button', { name: 'Connect a wallet' }, { timeout: 5000 })).toBeTruthy()
     expect(loads.walletSetup).toBe(1)
+    // Only the context: WagmiProvider's own hydrate step wiped the connection on re-render (WalletTabs.rerender.test.tsx).
     // A wallet from an earlier visit reconnects when AppKit starts here, never on page load.
-    expect(provider.props.at(-1)).toEqual({ config: { fake: 'config' }, reconnectOnMount: false })
+    expect(provider.values.at(-1)).toEqual({ fake: 'config' })
   })
 })
