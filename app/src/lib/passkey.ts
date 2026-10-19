@@ -35,9 +35,7 @@ const ARC_CHAIN_HEX = numberToHex(ARC_CHAIN.id)
 // so every access is wrapped; without storage the person just logs in again.
 const KEY = storageKey('passkey')
 export const PASSKEY_EVENT = 'fundit:passkey'
-// Blocks where a recovery key became an owner, per account and key (see keyAddedAt). Ownership never moves back in
-// time, so an answer stays true.
-const keyAddedCache = new Map<string, bigint>()
+
 
 export type PasskeySession = { address: Address; username?: string }
 export type StoredPasskey = { address: Address; credentialId: string }
@@ -70,8 +68,6 @@ export function clearPasskeySession() {
   live = null
   liveSession = null
   newAccount = null
-  // Only saves reads within a visit; a new session searches again.
-  keyAddedCache.clear()
   try {
     localStorage.removeItem(KEY)
   } catch {
@@ -624,9 +620,6 @@ export function dismissBackupPrompt() {
 const ownershipAbi = parseAbi([
   'struct OwnerData { uint256 weight; uint8 credType; address addr; uint256 publicKeyX; uint256 publicKeyY; }',
   'function ownershipInfoOf(address account) view returns (bytes30[] ownerIds, OwnerData[] ownersData, uint256 thresholdWeight)',
-  // The plugin's event when owners are added. Not in Circle's SDK: from the plugin's verified source on the Arc
-  // testnet explorer (WeightedWebauthnMultisigPlugin at CIRCLE_MULTISIG_PLUGIN).
-  'event OwnersAdded(address indexed account, bytes30[] owners, OwnerData[] weights)',
 ])
 
 // The owner read gives up after this, so a hanging RPC cannot hold back the backup prompt or a recovery.
@@ -1110,57 +1103,21 @@ async function signedInOwner(account: Address, recoveryAddress: Address): Promis
 
 const SEVERAL_ACCOUNTS = 'We found more than one account for this recovery key. Contact hello@fundit.fun so we can help you safely.'
 
-// The recovery key's address is public on chain once it is registered, and anyone can add it as an owner of their own
-// account (addOwners needs no signature from the key) and map it at Circle. They can only do that after the real
-// account got the key, so of the deployed accounts that list the key as an owner on Arc, the one that got it at the
-// earliest block is the person's. Anything less than a clear answer (a failed read, a tie, no OwnersAdded event to
-// confirm the block) refuses: a guess could recover the person into someone else's account.
-async function firstToGetKey(wallets: Address[], key: Address): Promise<Address[]> {
-  let added: (bigint | null)[]
+// The recovery key's address is public on chain once it is registered, and a pending registration can be seen and
+// front-run. Anyone can add the key as an owner of their own account (addOwners needs no signature from the key),
+// even in an earlier block, and map it at Circle. Fundit never registers one key on two accounts, so of the deployed
+// accounts, more than one that lists the key as an owner on Arc only comes from an attack: refuse, never pick. A
+// failed read refuses too.
+async function ownedByKey(wallets: Address[], key: Address): Promise<Address[]> {
+  let owned: boolean[]
   try {
-    const owned = await Promise.all(wallets.map(async (w) => !!(await readOwners(w))?.ownersData.some((o) => same(o.addr, key))))
-    const candidates = wallets.filter((_, i) => owned[i])
-    if (candidates.length <= 1) return candidates
-    const head = await arcClient.getBlockNumber()
-    added = await Promise.all(candidates.map((w) => keyAddedAt(w, key, head)))
-    const blocks = added.filter((b): b is bigint => b !== null)
-    if (blocks.length !== candidates.length) throw new Error('order unknown')
-    const first = blocks.reduce((a, b) => (b < a ? b : a))
-    const winners = candidates.filter((_, i) => added[i] === first)
-    if (winners.length !== 1) throw new Error('same block')
-    return winners
+    owned = await Promise.all(wallets.map(async (w) => !!(await readOwners(w))?.ownersData.some((o) => same(o.addr, key))))
   } catch {
     throw new PlainError(SEVERAL_ACCOUNTS)
   }
-}
-
-
-// The block where key became an owner of account: a binary search over ownershipInfoOf at past blocks (Arc's RPC
-// serves past state; about 26 reads from multisigPluginFrom to the head), then the plugin's OwnersAdded event in that
-// one block must name the key. getLogs over a single block stays far inside Arc's 10,000-block limit. null when the
-// event does not confirm it. Assumes the key was never removed and added again; Fundit never removes it.
-async function keyAddedAt(account: Address, key: Address, head: bigint): Promise<bigint | null> {
-  const cacheKey = `${account.toLowerCase()}:${key.toLowerCase()}`
-  const cached = keyAddedCache.get(cacheKey)
-  if (cached !== undefined) return cached
-  const ownerAt = async (blockNumber: bigint) => {
-    const [, ownersData] = await arcClient.readContract({ address: CIRCLE_MULTISIG_PLUGIN, abi: ownershipAbi, functionName: 'ownershipInfoOf', args: [account], blockNumber })
-    return ownersData.some((o) => same(o.addr, key))
-  }
-  let lo = NETWORK.multisigPluginFrom - 1n
-  let hi = head
-  if (!(await ownerAt(hi))) return null
-  while (hi - lo > 1n) {
-    const mid = (lo + hi) / 2n
-    if (await ownerAt(mid)) hi = mid
-    else lo = mid
-  }
-  // The owner id of an address is bytes30(uint240(uint160(addr))) (see isAlreadyOwner).
-  const keyId = `0x${'00'.repeat(10)}${key.slice(2).toLowerCase()}`
-  const logs = await arcClient.getLogs({ address: CIRCLE_MULTISIG_PLUGIN, event: ownershipAbi[1], args: { account }, fromBlock: hi, toBlock: hi })
-  if (!logs.some((l) => (l.args.owners ?? []).some((id) => id.toLowerCase() === keyId))) return null
-  keyAddedCache.set(cacheKey, hi)
-  return hi
+  const candidates = wallets.filter((_, i) => owned[i])
+  if (candidates.length > 1) throw new PlainError(SEVERAL_ACCOUNTS)
+  return candidates
 }
 
 // Recovers a passkey account with its recovery key, as in Circle's passkey-recovery example:
@@ -1187,7 +1144,7 @@ export async function recoverWithPhrase(p: { phrase: string; username?: string }
     // Circle can also hold a wallet made for the key itself. The account that added the key is deployed on Arc.
     const deployed = await Promise.all(wallets.map(async (w) => ((await arcClient.getCode({ address: w })) ?? '0x') !== '0x'))
     wallets = wallets.filter((_, i) => deployed[i])
-    if (wallets.length > 1) wallets = await firstToGetKey(wallets, recovery.address)
+    if (wallets.length > 1) wallets = await ownedByKey(wallets, recovery.address)
     if (wallets.length !== 1) throw new PlainError('This recovery key belongs to more than one account, so Fundit cannot pick one. Sign in with a passkey for the account instead.')
   }
   const account = wallets[0]!
