@@ -148,10 +148,7 @@ export function Terms() {
       <h2>11. Changes to these terms</h2>
       <p>We may update these terms. We will post the new version on this page.</p>
 
-      <h2>12. Governing law</h2>
-      <p>These terms are governed by the laws of [to be set before launch], without regard to its conflict of law rules.</p>
-
-      <h2>13. Contact</h2>
+      <h2>12. Contact</h2>
       <p>
         Questions about these terms: hello@fundit.fun. See also our{' '}
         <Link to="/privacy">Privacy Policy</Link>.

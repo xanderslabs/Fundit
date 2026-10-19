@@ -50,11 +50,12 @@ describe.each(['terms', 'privacy'] as const)('%s page', (page) => {
   })
 
   // fundit.xyz is not our domain, so mail sent there would reach a stranger.
-  it('gives hello@fundit.fun as the contact and keeps the governing law placeholder', () => {
+  // The owner removed the governing law section rather than publish a placeholder.
+  it('gives hello@fundit.fun as the contact and shows no unset placeholder', () => {
     const t = text(page)
     expect(t).toMatch(/hello@fundit\.fun/)
     expect(t).not.toMatch(/fundit\.xyz/)
-    if (page === 'terms') expect(t).toMatch(/\[to be set before launch\]/)
+    expect(t).not.toMatch(/to be set before launch|Governing law/)
   })
 
   // The owner took the draft notice off for launch. The rest of the legal text is unchanged.
