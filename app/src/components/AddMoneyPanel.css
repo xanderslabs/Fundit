@@ -25,10 +25,6 @@
   flex: 1 1 260px;
 }
 
-.wallet-connect {
-  align-self: flex-start;
-}
-
 .wallet-connected {
   display: flex;
   flex-wrap: wrap;

@@ -1,6 +1,6 @@
 /* Terms and Privacy: long text at a comfortable line length. */
 .legal {
-  max-width: 72ch;
+  max-width: var(--page-narrow);
   margin: 0 auto;
   padding-bottom: var(--space-6);
   overflow-wrap: anywhere;

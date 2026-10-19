@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { explainError, isInvalidUsername, isUserRejection, USERNAME_PATTERN, USERNAME_RULE } from '../lib/errors'
 import { loginPasskey, registerPasskey } from '../lib/passkey'
 import { Button, Field } from './ui'
+import './Form.css'
 import './PasskeyLogin.css'
 
 export const MAX_USERNAME = 50
@@ -90,7 +91,7 @@ export function PasskeyLogin({ onDone, onLeave, headingId }: { onDone?: () => vo
               />
             </Field>
             {nameError && (
-              <p className="ui-field-error" role="alert">
+              <p className="form-error" role="alert">
                 {nameError}
               </p>
             )}
@@ -102,7 +103,7 @@ export function PasskeyLogin({ onDone, onLeave, headingId }: { onDone?: () => vo
       )}
       {busy && <p className="passkey-hint">Follow the steps your browser shows.</p>}
       {error && (
-        <p className="ui-field-error" role="alert">
+        <p className="form-error" role="alert">
           {error}
         </p>
       )}

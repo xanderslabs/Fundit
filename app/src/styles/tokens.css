@@ -27,6 +27,8 @@
   --danger-ink: #c0150b;
   --success-bg: #e8f7e9;
   --focus: #586283;
+  /* The soft ring around a focused text field. */
+  --focus-halo: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent);
   /* The page scrollbar. */
   --scrollbar-track: #f3f5f7;
   --scrollbar-thumb: #c3c9d3;

@@ -34,6 +34,7 @@ function ShareQr({ url }: { url: string }) {
   if (!qr) return <div className="share-qr share-qr-loading" aria-hidden="true" />
   return (
     <svg className="share-qr" viewBox={`0 0 ${qr.size} ${qr.size}`} role="img" aria-label="QR code for the link to this Fundit">
+      {/* Fixed dark on white, whatever the theme: QR scanners need that contrast. */}
       <rect width={qr.size} height={qr.size} fill="#fff" />
       <path d={qr.path} fill="#101928" />
     </svg>

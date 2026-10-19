@@ -8,7 +8,7 @@ import { Name } from '../components/Name'
 import { Progress } from '../components/Progress'
 import { SharePanel } from '../components/SharePanel'
 import { StatusBadge } from '../components/StatusBadge'
-import { Button, ButtonLink, Card, PageHeader, Stat } from '../components/ui'
+import { Button, ButtonLink, Card, EmptyState, PageHeader, Stat } from '../components/ui'
 import { EXPLORER_URL } from '../config'
 import { useCampaign } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
@@ -145,13 +145,18 @@ export function CampaignPage() {
   if (!valid || query.data === 'not-a-campaign') return <NotFound fundit />
   if (query.isError) {
     return (
-      <section className="campaign-notice">
-        <h1>Could not load this Fundit</h1>
-        <p>The Arc network did not answer. Check your connection and try again.</p>
-        <Button variant="secondary" onClick={() => query.refetch()}>
-          Try again
-        </Button>
-      </section>
+      <>
+        <PageHeader width="wide" title="Could not load this Fundit" />
+        <EmptyState
+          action={
+            <Button variant="secondary" onClick={() => query.refetch()}>
+              Try again
+            </Button>
+          }
+        >
+          <p>The Arc network did not answer. Check your connection and try again.</p>
+        </EmptyState>
+      </>
     )
   }
   if (query.isPending || !query.data) {

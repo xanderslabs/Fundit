@@ -261,7 +261,7 @@ function WalletDeposit({ account, bridging }: { account: Address; bridging: bool
   if (external === null) {
     if (!modal.available) return <p>{NO_WALLETS}</p>
     return (
-      <Button className="wallet-connect" onClick={() => void modal.connect()}>
+      <Button block onClick={() => void modal.connect()}>
         Connect a wallet
       </Button>
     )

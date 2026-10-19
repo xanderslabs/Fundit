@@ -3,6 +3,19 @@
     "stylelint-declaration-strict-value"
   ],
   "rules": {
+    "color-no-hex": true,
+    "color-named": "never",
+    "function-disallowed-list": [
+      "rgb",
+      "rgba",
+      "hsl",
+      "hsla",
+      "hwb",
+      "lab",
+      "lch",
+      "oklab",
+      "oklch"
+    ],
     "scale-unlimited/declaration-strict-value": [
       [
         "font-size",
@@ -41,5 +54,17 @@
         "message": "Use a token from tokens.css for \"${property}\" instead of \"${value}\"."
       }
     ]
-  }
+  },
+  "overrides": [
+    {
+      "files": [
+        "src/styles/tokens.css"
+      ],
+      "rules": {
+        "color-no-hex": null,
+        "color-named": null,
+        "function-disallowed-list": null
+      }
+    }
+  ]
 }

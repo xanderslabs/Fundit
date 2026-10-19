@@ -102,6 +102,10 @@ describe('design tokens', () => {
       ['--danger-ink', '--bg'],
       ['--text', '--attention-bg'],
       ['--text', '--success-bg'],
+      // Pairs the components use: the success Badge, the danger Button and the testnet banner.
+      ['--action-ink', '--success-bg'],
+      ['--text', '--danger'],
+      ['--text', '--attention'],
     ]
     for (const [fg, bg] of pairs) expect(contrast(fg, bg), `${fg} on ${bg}`).toBeGreaterThanOrEqual(4.5)
   })
@@ -113,7 +117,8 @@ describe('design tokens', () => {
 
   // A keyboard user must see the focus ring on every surface. WCAG 1.4.11 asks 3:1 for UI components.
   it('the focus ring meets 3:1 on every surface', () => {
-    for (const bg of ['--bg', '--surface', '--surface-raised']) {
+    // The tinted fills count too: a ring can sit inside a Banner or a success StatusBox.
+    for (const bg of ['--bg', '--surface', '--surface-raised', '--attention-bg', '--success-bg']) {
       expect(contrast('--focus', bg), `--focus on ${bg}`).toBeGreaterThanOrEqual(3)
     }
   })

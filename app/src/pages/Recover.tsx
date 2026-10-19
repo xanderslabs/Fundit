@@ -16,6 +16,7 @@ import {
   type StoredPasskey,
   usePasskeySession,
 } from '../lib/passkey'
+import '../components/Form.css'
 import './Recover.css'
 
 const WORDS = 12
@@ -203,14 +204,14 @@ export function Recover() {
                 </div>
               </StatusBox>
             )}
-            <Button type="submit" size="lg" disabled={busy}>
+            <Button type="submit" size="lg" block disabled={busy}>
               Recover my account
             </Button>
           </form>
         )}
         {busy && <p className="recover-hint">Follow the steps your browser shows.</p>}
         {error && (
-          <p className="ui-field-error" role="alert">
+          <p className="form-error" role="alert">
             {error}
           </p>
         )}

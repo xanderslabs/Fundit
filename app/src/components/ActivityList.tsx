@@ -10,7 +10,7 @@ import { arcClient } from '../lib/clients'
 import { formatAmount } from '../lib/format'
 import { Name } from './Name'
 import { TxStatus, useTx } from './TxStatus'
-import { Button, StatusBox } from './ui'
+import { Button, EmptyState, StatusBox } from './ui'
 import './ActivityList.css'
 
 function Who({ address }: { address: Address }) {
@@ -144,14 +144,21 @@ export function ActivityList({ campaign, createdAtBlock, symbol }: { campaign: A
       <Unaccounted campaign={campaign} symbol={symbol} />
       {query.isPending && <p className="activity-muted">Loading activity...</p>}
       {query.isError && items.length === 0 && (
-        <p className="activity-muted activity-retry">
-          Could not load activity.{' '}
-          <Button variant="secondary" onClick={() => query.refetch()}>
-            Try again
-          </Button>
-        </p>
+        <EmptyState
+          action={
+            <Button variant="secondary" onClick={() => query.refetch()}>
+              Try again
+            </Button>
+          }
+        >
+          <p>Could not load activity.</p>
+        </EmptyState>
       )}
-      {query.isSuccess && items.length === 0 && <p className="activity-muted">No activity yet.</p>}
+      {query.isSuccess && items.length === 0 && (
+        <EmptyState>
+          <p>No activity yet.</p>
+        </EmptyState>
+      )}
       {items.length > 0 && (
         <ol className="activity-list">
           {items.map(({ item, time }) => (

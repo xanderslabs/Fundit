@@ -145,12 +145,6 @@
   margin: 0;
 }
 
-.campaign-notice h1 {
-  font-size: var(--text-2xl);
-  line-height: var(--text-2xl-line);
-  letter-spacing: var(--tracking-heading);
-}
-
 .campaign-muted {
   color: var(--text-muted);
 }
@@ -172,8 +166,7 @@
 }
 
 @media (max-width: 480px) {
-  .campaign-body h2,
-  .campaign-notice h1 {
+  .campaign-body h2 {
     font-size: var(--text-lg);
     line-height: var(--text-lg-line);
   }

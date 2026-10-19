@@ -38,11 +38,6 @@
 }
 
 @media (max-width: 480px) {
-  .not-found h1 {
-    font-size: var(--text-xl);
-    line-height: var(--text-xl-line);
-  }
-
   .not-found-actions {
     align-self: stretch;
   }

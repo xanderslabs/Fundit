@@ -7,7 +7,7 @@ import { erc20Abi } from '../abi/erc20'
 import { SignInButton } from '../components/AccountMenu'
 import { PendingBridgeTracker } from '../components/PendingBridgeTracker'
 import { TxStatus, useTx } from '../components/TxStatus'
-import { AddressChip, AmountInput, Button, Field, PageHeader, Panel, StatusBox } from '../components/ui'
+import { AddressChip, AmountInput, Button, EmptyState, Field, PageHeader, Panel, StatusBox } from '../components/ui'
 import { ARC_DOMAIN, CHAIN_LABELS, TOKENS } from '../config'
 import { useCampaign } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
@@ -111,6 +111,8 @@ function EditSection({ view, sender }: { view: CampaignView; sender: Sender }) {
                       aria-label={`Link ${i + 1}`}
                       value={link}
                       onChange={(e) => setLinks((rows) => rows.map((r, j) => (j === i ? e.target.value : r)))}
+                      aria-invalid={errors[`link-${i}`] ? true : undefined}
+                      aria-describedby={errors[`link-${i}`] ? `edit-link-${i}-error` : undefined}
                     />
                     <Button
                       variant="secondary"
@@ -414,13 +416,20 @@ function RescueSection({ view, sender }: { view: CampaignView; sender: Sender })
   }
 
   return (
-    <Panel title="Rescue tokens sent by mistake" headingId="rescue-heading">
-      {amount > 0n && (
-        <form className="form" onSubmit={submit} noValidate>
+    <Panel
+      title="Rescue tokens sent by mistake"
+      headingId="rescue-heading"
+      description={
+        amount > 0n && (
           <p>
             Someone sent {shown} to this Fundit. It only accepts {symbol}, so this money is not part of what was raised. You can
             send it to any address on Arc.
           </p>
+        )
+      }
+    >
+      {amount > 0n && (
+        <form className="form" onSubmit={submit} noValidate>
           <fieldset className="form-fields" disabled={tx.locked}>
             <Field label="Send to" id="rescue-recipient" error={recipientError} alert>
               <input autoComplete="off" spellCheck={false} value={recipientText ?? sender.address} onChange={(e) => setRecipientText(e.target.value)} />
@@ -453,12 +462,13 @@ function CloseSection({ view, sender }: { view: CampaignView; sender: Sender }) 
   }
 
   return (
-    <Panel title="Close this Fundit" headingId="close-heading">
-      {view.summary.closed ? (
-        <p>This Fundit is closed. It no longer takes donations.</p>
-      ) : (
+    <Panel
+      title="Close this Fundit"
+      headingId="close-heading"
+      description={view.summary.closed ? 'This Fundit is closed. It no longer takes donations.' : 'Closing stops new donations.'}
+    >
+      {!view.summary.closed && (
         <>
-          <p>Closing stops new donations.</p>
           <p>
             <strong>{CLOSE_TEXT}</strong>
           </p>
@@ -563,6 +573,7 @@ function ConnectNotice() {
   return (
     <div className="manage">
       <PageHeader
+        width="narrow"
         title="Manage this Fundit"
         subtitle="Sign in with the Fundit account that started this Fundit to manage it."
         actions={<SignInButton className="ui-btn ui-btn-primary ui-btn-lg" />}
@@ -582,15 +593,16 @@ export function Manage() {
   if (query.isError) {
     return (
       <div className="manage">
-        <PageHeader
-          title="Could not load this Fundit"
-          subtitle="The Arc network did not answer. Check your connection and try again."
-          actions={
+        <PageHeader title="Could not load this Fundit" />
+        <EmptyState
+          action={
             <Button variant="secondary" onClick={() => query.refetch()}>
               Try again
             </Button>
           }
-        />
+        >
+          <p>The Arc network did not answer. Check your connection and try again.</p>
+        </EmptyState>
       </div>
     )
   }

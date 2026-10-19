@@ -90,6 +90,7 @@ function BackupDialog({ stored }: { stored: StoredPasskey }) {
       <AddBackupPasskey
         stored={stored}
         headingId={headingId}
+        inDialog
         onLater={dismissBackupPrompt}
         onDone={dismissBackupPrompt}
         onGuardChange={onGuardChange}

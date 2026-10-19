@@ -403,6 +403,22 @@ describe('Manage', () => {
     expect(args).toEqual([1000_000000n, { title: 'Clean water now', description: 'Wells.', imageUrl: '', links: [] }])
   })
 
+  // A screen reader user on a bad link must hear which link is wrong and why, as on Create.
+  it('ties a bad link to its error', async () => {
+    state.view = view()
+    const send = fakeSender()
+    renderPage()
+    const user = userEvent.setup()
+    const link = screen.getByLabelText('Link 1')
+    expect(link.getAttribute('aria-invalid')).toBeNull()
+    await user.type(link, 'http://example.com')
+    await user.click(button('Save changes'))
+    const error = await screen.findByText('Use a full link that starts with https://')
+    expect(link.getAttribute('aria-invalid')).toBe('true')
+    expect(link.getAttribute('aria-describedby')).toBe(error.id)
+    expect(send).not.toHaveBeenCalled()
+  })
+
   it('shows a pending recovery with a cancel button', async () => {
     const readyAt = BigInt(Math.floor(Date.now() / 1000) + 3 * 86400)
     state.view = view({ backup: STRANGER, recoveryReadyAt: readyAt })

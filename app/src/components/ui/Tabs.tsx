@@ -75,9 +75,8 @@ export function TabPanel({ id, active, children }: { id: string; active: boolean
 
 export type TabItem = { id: string; label: string; content: ReactNode }
 
-// The tabs as the pages use them before Plan 6 moves them on: the tabs hold their own state and content.
-// keepMounted keeps a panel mounted (hidden) once it has been opened, so a form keeps its state, including a send
-// in flight. components/Tabs.tsx re-exports this as Tabs until Task 7.
+// Tabs that hold their own state and content (Add money uses them). keepMounted keeps a panel mounted (hidden)
+// once it has been opened, so a form keeps its state, including a send in flight.
 export function ContentTabs({
   label,
   tabs,

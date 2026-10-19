@@ -53,7 +53,7 @@
 
 .recover-words > .ui-field:focus-within {
   border-color: var(--focus);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent);
+  box-shadow: var(--focus-halo);
 }
 
 .recover-words > .ui-field > .ui-field-label {

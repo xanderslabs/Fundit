@@ -6,10 +6,8 @@
   min-width: 0;
 }
 
-.backup-prompt h2 {
+.backup-prompt h2:not(.ui-dialog-title) {
   margin: 0;
-  /* Room for the dialog's Close button at the top right. */
-  padding-right: calc(var(--hit-target) + var(--space-2));
   font-size: var(--text-lg);
   line-height: var(--text-lg-line);
   letter-spacing: var(--tracking-heading);
@@ -29,10 +27,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-}
-
-.backup-confirm > .ui-btn {
-  align-self: flex-start;
 }
 
 .backup-actions {
@@ -56,17 +50,4 @@
   color: var(--text-muted);
   font-size: var(--text-sm);
   line-height: var(--text-sm-line);
-}
-
-.backup-error {
-  color: var(--danger-ink);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  line-height: var(--text-sm-line);
-}
-
-@media (max-width: 480px) {
-  .backup-confirm > .ui-btn {
-    align-self: stretch;
-  }
 }

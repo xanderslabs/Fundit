@@ -5,6 +5,7 @@ import { type QrMatrix, qrMatrix } from './qr'
 export const POSTER_WIDTH = 1080
 export const POSTER_HEIGHT = 1350
 
+// A canvas cannot read CSS tokens, so the poster keeps the brand ink and muted colours as literals.
 const INK = '#101928'
 const MUTED = '#586283'
 const MARGIN = 80

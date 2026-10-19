@@ -4,6 +4,7 @@ import { explainError } from '../lib/errors'
 import { ADD_MONEY_PATH } from '../lib/urls'
 import { Button, Field } from './ui'
 import './AddBackupPasskey.css'
+import './Form.css'
 import {
   addBackupPasskey,
   canPayBackupGas,
@@ -20,6 +21,8 @@ type Props = {
   onLater?: () => void
   onDone?: () => void
   headingId?: string
+  // Rendered in a Dialog: the heading takes the shared dialog title class.
+  inDialog?: boolean
   // The question to ask before leaving, or null when leaving loses nothing. The dialog uses it for Escape,
   // the backdrop and Close.
   onGuardChange?: (message: string | null) => void
@@ -78,7 +81,7 @@ function useLeaveGuard(message: string | null) {
 
 // Adds a recovery key to a passkey account. The words are made and shown first, the person types three of them
 // back, and only then is the key's address sent to the account. The words live only in this component.
-export function AddBackupPasskey({ stored, onLater, onDone, headingId, onGuardChange }: Props) {
+export function AddBackupPasskey({ stored, onLater, onDone, headingId, inDialog = false, onGuardChange }: Props) {
   const ownId = useId()
   const id = headingId ?? ownId
   const pendingStored = useBackupPending(stored)
@@ -230,7 +233,7 @@ export function AddBackupPasskey({ stored, onLater, onDone, headingId, onGuardCh
                 />
               </Field>
             ))}
-            <Button type="submit" disabled={busy}>
+            <Button type="submit" block disabled={busy}>
               Add the recovery key
             </Button>
           </form>
@@ -256,7 +259,7 @@ export function AddBackupPasskey({ stored, onLater, onDone, headingId, onGuardCh
   } else {
     body = (
       <div className="backup-actions">
-        <Button disabled={busy || funded === null} onClick={() => void show()}>
+        <Button block disabled={busy || funded === null} onClick={() => void show()}>
           Show my recovery key
         </Button>
         {onLater && (
@@ -270,7 +273,9 @@ export function AddBackupPasskey({ stored, onLater, onDone, headingId, onGuardCh
 
   return (
     <section className="backup-prompt" aria-labelledby={id}>
-      <h2 id={id}>Add a recovery key</h2>
+      <h2 id={id} className={inDialog ? 'ui-dialog-title' : undefined}>
+        Add a recovery key
+      </h2>
       <p>
         If you lose every device with your passkey, nobody can recover your Fundit account. A recovery key is 12 words you write down and keep
         safe. Anyone with these words can control your account.
@@ -278,7 +283,8 @@ export function AddBackupPasskey({ stored, onLater, onDone, headingId, onGuardCh
       {body}
       {sending && <p className="backup-hint">Follow the steps your browser shows.</p>}
       {error && (
-        <p className="field-error backup-error" role="alert">
+        // field-error is the e2e hook for a failed save. form-error styles it.
+        <p className="field-error form-error" role="alert">
           {error}
         </p>
       )}

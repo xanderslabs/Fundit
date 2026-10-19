@@ -44,8 +44,33 @@ describe('CSS lint guardrail', () => {
     'border-radius: min(var(--radius-lg), 10px)',
   ])('rejects %s', async (decl) => {
     const { errors } = await lint(`.probe { ${decl}; }`)
-    expect(errors).toHaveLength(1)
+    // A raw colour can trip both the token rule and a colour rule, so count at least one error.
+    expect(errors.length).toBeGreaterThanOrEqual(1)
   })
+
+  // The colour rules cover every property, not only color and background: a raw colour in a border, a shadow,
+  // an outline or an SVG fill would otherwise slip past the token rule.
+  it.each([
+    'border: 1px solid #ddd',
+    'border-color: rgb(0 0 0)',
+    'box-shadow: 0 0 0 3px red',
+    'box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2)',
+    'outline-color: rgb(0 0 0)',
+    'outline: 2px solid hsl(0 0% 0%)',
+    'fill: #fff',
+    'stroke: white',
+  ])('rejects a raw colour in %s', async (decl) => {
+    const { errors } = await lint(`.probe { ${decl}; }`)
+    expect(errors.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it.each(['border: 1px solid var(--border)', 'box-shadow: var(--shadow-1)', 'outline: 2px solid var(--focus)', 'fill: currentColor', 'border-color: transparent'])(
+    'allows %s',
+    async (decl) => {
+      const { errors } = await lint(`.probe { ${decl}; }`)
+      expect(errors).toEqual([])
+    },
+  )
 
   it.each([
     'margin: 0 auto',
@@ -83,7 +108,9 @@ describe('CSS lint guardrail', () => {
   })
 
   it('lints base.css, and lets tokens.css define raw colours', async () => {
-    expect(await lint('.x { color: red; }', 'src/styles/base.css')).toEqual({ ignored: false, errors: [expect.any(String)] })
-    expect((await lint(':root { --red: #ff3b30; }', 'src/styles/tokens.css')).errors).toEqual([])
+    const base = await lint('.x { color: red; }', 'src/styles/base.css')
+    expect(base.ignored).toBe(false)
+    expect(base.errors.length).toBeGreaterThanOrEqual(1)
+    expect((await lint(':root { --red: #ff3b30; --veil: rgb(16 25 40 / 0.45); }', 'src/styles/tokens.css')).errors).toEqual([])
   })
 })

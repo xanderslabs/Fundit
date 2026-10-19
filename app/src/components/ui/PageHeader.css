@@ -25,12 +25,9 @@
   min-width: 0;
 }
 
+/* The size comes from the h1 default in base.css, which steps down on phones. */
 .ui-page-title {
   margin: 0;
-  font-size: var(--text-2xl);
-  font-weight: var(--weight-bold);
-  line-height: var(--text-2xl-line);
-  letter-spacing: var(--tracking-heading);
   overflow-wrap: anywhere;
 }
 
@@ -51,11 +48,4 @@
   flex-wrap: wrap;
   gap: var(--space-2);
   max-width: 100%;
-}
-
-@media (max-width: 480px) {
-  .ui-page-title {
-    font-size: var(--text-xl);
-    line-height: var(--text-xl-line);
-  }
 }
