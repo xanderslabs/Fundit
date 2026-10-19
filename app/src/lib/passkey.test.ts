@@ -53,6 +53,7 @@ const NO_MAPPING = vi.hoisted(
       details: "Cannot find target wallet to identifier map  in the system. Either the specified identifier doesn't exist or it's not accessible to the caller.",
     }),
 )
+const circle = vi.hoisted(() => ({ answer: '0x00000000000000000000000000000000000000cc' }))
 // A fake of the lazily loaded SDK module. toWebAuthnCredential is the passkey prompt.
 const kit = vi.hoisted(() => {
   const bundler = { waitForUserOperationReceipt: vi.fn(), estimateUserOperationGas: vi.fn(), sendUserOperation: vi.fn() }
@@ -77,7 +78,9 @@ const kit = vi.hoisted(() => {
       toPasskeyTransport: vi.fn(() => ({})),
       toModularTransport: vi.fn(() => ({})),
       // The passkey's own address, unless the caller names the account (a recovered or mapped one).
-      toCircleSmartAccount: vi.fn(async (p: { address?: string }) => ({ address: p.address ?? '0x00000000000000000000000000000000000000cc' })),
+      // Without an address, the account Circle's API names (circle_getAddress). Usually the passkey's own address,
+      // but for a passkey added by recovery Circle names the recovered account (seen live on 2026-10-19).
+      toCircleSmartAccount: vi.fn(async (p: { address?: string }) => ({ address: p.address ?? circle.answer })),
       // 1,000 gwei, about Circle's fee on Arc testnet.
       getUserOperationGasPrice: vi.fn(async () => {
         const tier = { maxFeePerGas: '1000000000000', maxPriorityFeePerGas: '960000000000' }
@@ -413,7 +416,7 @@ describe('which account a passkey opens', () => {
     setOwn()
     expect(await loginPasskey()).toEqual({ address: OWN, recoveredElsewhere: true })
     expect(kit.sdk.getAddressMapping).toHaveBeenCalledWith(expect.anything(), LOOKUP)
-    expect(lastAccountArgs().address).toBeUndefined()
+    expect(lastAccountArgs().address).toBe(OWN)
     expect(readPasskeySession()).toEqual({ address: OWN, credentialId: 'cred-live' })
   })
 
@@ -506,22 +509,47 @@ describe('which account a passkey opens', () => {
 
   // The own account's address comes from Circle's API. It must be the one Circle's factory on Arc gives for this
   // public key, or Circle could hand a passkey any account.
-  it('works out the own account on Arc from the public key, and refuses an address Circle gives that differs', async () => {
+  // The own account is the one Circle's factory gives on Arc for this public key. Circle's API can name another
+  // account (it names the recovered account for a passkey added by recovery), so its answer is never used.
+  it('opens the own account at the address Circle\'s factory gives on Arc, whatever Circle\'s API names', async () => {
     expect(await loginPasskey()).toEqual({ address: OWN })
     const read = factory.reads.at(-1) as { address: string; args: readonly unknown[] }
     expect(read.address).toBe(CIRCLE_MSCA_FACTORY)
     expect(read.args[0]).toBe(keccak256(encodeAbiParameters([{ type: 'uint256' }, { type: 'uint256' }], [3n, 4n])))
     expect(read.args[1]).toBe(`0x${'0'.repeat(64)}`)
     clearPasskeySession()
-    factory.address = OTHER
+    circle.answer = OTHER
     try {
-      const err = await loginPasskey().catch((e: unknown) => e)
-      expect(explainError(err)).toBe('We could not confirm your account. Try again later.')
-      expect(readPasskeySession()).toBeNull()
-      await expect(registerPasskey('ana.phone')).rejects.toThrow('We could not confirm your account.')
-      expect(readPasskeySession()).toBeNull()
+      expect(await loginPasskey()).toEqual({ address: OWN })
+      expect(lastAccountArgs().address).toBe(OWN)
+      clearPasskeySession()
+      expect(await registerPasskey('ana.phone')).toMatchObject({ address: OWN })
+      expect(lastAccountArgs().address).toBe(OWN)
     } finally {
-      factory.address = OWN
+      circle.answer = OWN
+    }
+  })
+
+  // The live failure: after a recovery, Circle's API names the recovered account for the new passkey. A reload, then
+  // a send, must sign for the recovered account through the record, not refuse.
+  it('sends from the recovered account after a reload when Circle names the recovered account', async () => {
+    mappedTo(RECOVERED)
+    circle.answer = RECOVERED
+    localStorage.setItem(RECORD, RECOVERED)
+    const stored = { address: RECOVERED, credentialId: 'cred-live' }
+    savePasskeySession(stored)
+    try {
+      expect((await storedPasskeySender(stored).send([A])).status).toBe('success')
+      expect(kit.bundler.sendUserOperation.mock.calls[0]![0].account.address).toBe(RECOVERED)
+      // Step 6 of the e2e: sign out, then a fresh sign-in with the same passkey opens the same account.
+      clearPasskeySession()
+      expect(await loginPasskey()).toEqual({ address: RECOVERED })
+      // Without the record (another device), the passkey opens its own account, never the one Circle names.
+      localStorage.removeItem(RECORD)
+      clearPasskeySession()
+      expect(await loginPasskey()).toEqual({ address: OWN, recoveredElsewhere: true })
+    } finally {
+      circle.answer = OWN
     }
   })
 

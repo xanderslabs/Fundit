@@ -311,7 +311,7 @@ async function recoveredAccount(credentialId: string, publicKey: Hex, own: Addre
 const factoryAbi = parseAbi(['function getAddress(bytes32 sender, bytes32 salt, bytes initializingData) view returns (address addr, bytes32 mixedSalt)'])
 async function derivedAddress(publicKey: Hex): Promise<Address> {
   const key = publicKeyXY(publicKey)
-  if (!key) throw new PlainError(UNCONFIRMED)
+  if (!key) throw new Error('Unreadable passkey public key')
   const sender = keccak256(encodeAbiParameters(parseAbiParameters('uint256, uint256'), [key.x, key.y]))
   const install = encodeAbiParameters(parseAbiParameters('address[], uint256[], (uint256 x, uint256 y)[], uint256[], uint256'), [
     [],
@@ -325,14 +325,12 @@ async function derivedAddress(publicKey: Hex): Promise<Address> {
   return address
 }
 
-const UNCONFIRMED = 'We could not confirm your account. Try again later.'
-
-// The passkey's own account. Circle's SDK takes its address from Circle's API, so it must match the one Circle's
-// factory gives on Arc; otherwise nothing opens.
+// The passkey's own account, at the address Circle's factory gives on Arc. Circle's API (circle_getAddress, which
+// toCircleSmartAccount uses without an address) names the recovered account for a passkey added by recovery (seen
+// live on 2026-10-19), so its answer is never used: the own account always opens at the factory's address.
 async function connectOwn(lib: Sdk, credential: Credential, key: string): Promise<Live> {
-  const [own, derived] = await Promise.all([connect(lib, credential, key), checked(derivedAddress(credential.publicKey))])
-  if (!same(own.account.address, derived)) throw new PlainError(UNCONFIRMED)
-  return own
+  const own = await checked(derivedAddress(credential.publicKey))
+  return connect(lib, credential, key, own)
 }
 
 // Circle answers circle_getAddressMapping for an owner it has no record of with an error (-32602 and this text,
