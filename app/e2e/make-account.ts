@@ -22,7 +22,7 @@ test('makes the shared e2e passkey account', async ({ browser, baseURL }) => {
   const page = await context.newPage()
   const passkeys = await addVirtualAuthenticator(page)
   await page.goto('/')
-  await page.getByRole('banner').getByRole('button', { name: 'Sign in' }).click()
+  await page.getByRole('banner').getByRole('button', { name: 'Sign in', exact: true }).click()
   await page.getByRole('button', { name: 'Create one now' }).click()
   // Circle takes 5 to 50 characters from A-Z, a-z, 0-9 and _@.:+- only.
   const username = `e2e-shared-${Date.now()}`

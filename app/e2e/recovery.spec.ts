@@ -61,7 +61,7 @@ async function signOut() {
   // The account pill, named by the passkey's username or the address, opens the account menu.
   await page.getByRole('banner').locator('button[aria-haspopup="menu"]').click()
   await page.getByRole('menuitem', { name: 'Sign out' }).click()
-  await expect(page.getByRole('banner').getByRole('button', { name: 'Sign in' })).toBeVisible()
+  await expect(page.getByRole('banner').getByRole('button', { name: 'Sign in', exact: true })).toBeVisible()
 }
 
 async function sendOut(amount: string | 'max') {
@@ -109,7 +109,7 @@ test.afterAll(async () => {
 
 test('signs up a throwaway account with a fresh passkey and funds it', async () => {
   await page.goto('/')
-  await page.getByRole('banner').getByRole('button', { name: 'Sign in' }).click()
+  await page.getByRole('banner').getByRole('button', { name: 'Sign in', exact: true }).click()
   await page.getByRole('button', { name: 'Create one now' }).click()
   // Circle takes 5 to 50 characters from A-Z, a-z, 0-9 and _@.:+- only.
   await page.getByLabel('Username').fill(`e2e-recover-${Date.now()}`)
@@ -195,9 +195,9 @@ test('after a reload, sends a tiny amount from the recovered account', async () 
 
 test('signs in fresh with the new passkey and opens the same account', async () => {
   await signOut()
-  await page.getByRole('banner').getByRole('button', { name: 'Sign in' }).click()
+  await page.getByRole('banner').getByRole('button', { name: 'Sign in', exact: true }).click()
   await page.getByRole('button', { name: 'Sign in with your passkey' }).click()
-  await expect(page.getByRole('banner').getByRole('button', { name: 'Sign in' })).toBeHidden({ timeout: 60_000 })
+  await expect(page.getByRole('banner').getByRole('button', { name: 'Sign in', exact: true })).toBeHidden({ timeout: 60_000 })
   expect(await shownAddress()).toBe(account)
   const held = await usdcBalance(account)
   expect(held).toBeGreaterThan(0n)

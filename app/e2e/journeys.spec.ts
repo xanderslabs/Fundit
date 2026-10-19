@@ -138,7 +138,7 @@ test.afterAll(async () => {
 
 test('signs in with the shared passkey', async () => {
   await page.goto('/')
-  await page.getByRole('banner').getByRole('button', { name: 'Sign in' }).click()
+  await page.getByRole('banner').getByRole('button', { name: 'Sign in', exact: true }).click()
   await page.getByRole('button', { name: 'Sign in with your passkey' }).click()
   await expect(page.getByRole('banner').getByRole('button', { name: username, exact: true })).toBeVisible({ timeout: 60_000 })
 
