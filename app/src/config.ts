@@ -62,6 +62,7 @@ const env = {
   VITE_REOWN_PROJECT_ID: import.meta.env?.VITE_REOWN_PROJECT_ID,
   VITE_CIRCLE_CLIENT_KEY: import.meta.env?.VITE_CIRCLE_CLIENT_KEY,
   VITE_CROSSCHAIN: import.meta.env?.VITE_CROSSCHAIN,
+  VITE_BETA: import.meta.env?.VITE_BETA,
 }
 
 // Free public RPCs. Every host here must also be in public/_headers connect-src.
@@ -132,6 +133,17 @@ export const NETWORKS: Record<ArcNetwork, NetworkConfig> = {
 
 // The network this build runs on (VITE_ARC_NETWORK, mainnet by default).
 export const NETWORK: NetworkConfig = NETWORKS[parseArcNetwork(env.VITE_ARC_NETWORK)]
+
+export type NetworkTagLabel = 'Testnet' | 'Beta'
+
+// The small tag beside the logo. Testnet always says so, because test tokens look like real USDC. On mainnet it
+// reads Beta only while VITE_BETA=1, and shows nothing once that value is cleared.
+export function networkTag(network: ArcNetwork, beta: string | undefined): NetworkTagLabel | null {
+  if (network === 'testnet') return 'Testnet'
+  return beta === '1' ? 'Beta' : null
+}
+
+export const NETWORK_TAG: NetworkTagLabel | null = networkTag(NETWORK.name, env.VITE_BETA)
 
 // The localStorage key for a fundit.<name> record on this network. Mainnet keeps the original names, so live
 // sessions and pending records carry over. Testnet keys read fundit.testnet.<name>, so a dev origin rebuilt for
@@ -241,9 +253,11 @@ export function networkHosts(n: NetworkConfig): string[] {
 export const EXTERNAL_HOSTS: readonly string[] = [ARC_RPC_URL, ...networkHosts(NETWORK)]
 
 // TODO before launch: replace placeholder social handles
-export const SOCIAL_LINKS: readonly { name: string; href: string; icon: string }[] = [
-  { name: 'X', href: 'https://x.com/fundit', icon: '/images/x.svg' },
-  { name: 'Telegram', href: 'https://t.me/fundit', icon: '/images/telegram.svg' },
-  { name: 'Discord', href: 'https://discord.gg/fundit', icon: '/images/discord.svg' },
-  { name: 'Instagram', href: 'https://instagram.com/fundit', icon: '/images/instagram.svg' },
+export type SocialName = 'X' | 'Telegram' | 'Discord' | 'Instagram'
+
+export const SOCIAL_LINKS: readonly { name: SocialName; href: string }[] = [
+  { name: 'X', href: 'https://x.com/fundit' },
+  { name: 'Telegram', href: 'https://t.me/fundit' },
+  { name: 'Discord', href: 'https://discord.gg/fundit' },
+  { name: 'Instagram', href: 'https://instagram.com/fundit' },
 ]

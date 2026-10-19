@@ -3,7 +3,7 @@ import headers from '../public/_headers?raw'
 import redirects from '../public/_redirects?raw'
 import { campaignAbi } from './abi/campaign'
 import { factoryAbi } from './abi/factory'
-import { ARC_RPC_FALLBACKS, ARC_RPC_URL, CCTP_CHAINS, cctpChainNames, EXTERNAL_HOSTS, FORWARD_HOOK_DATA, NETWORK, NETWORKS, networkHosts, storageKey, TOKENS } from './config'
+import { ARC_RPC_FALLBACKS, ARC_RPC_URL, CCTP_CHAINS, cctpChainNames, EXTERNAL_HOSTS, FORWARD_HOOK_DATA, NETWORK, NETWORKS, networkHosts, networkTag, storageKey, TOKENS } from './config'
 import { connectSrcAllows } from './deployConfig'
 
 describe('config', () => {
@@ -240,5 +240,24 @@ describe('_headers framing', () => {
 
   it('serves embed.html for /embed/c/:address on Cloudflare', () => {
     expect(redirects).toMatch(/^\/embed\/\* \/embed 200$/m)
+  })
+})
+
+// Test tokens look like real USDC, so a testnet site always says so beside the logo. On mainnet the Beta tag is
+// the owner's choice (VITE_BETA=1), and it goes away by clearing that value.
+describe('networkTag', () => {
+  it('reads Testnet on testnet, whatever VITE_BETA says', () => {
+    expect(networkTag('testnet', undefined)).toBe('Testnet')
+    expect(networkTag('testnet', '1')).toBe('Testnet')
+  })
+
+  it('reads Beta on mainnet with VITE_BETA=1', () => {
+    expect(networkTag('mainnet', '1')).toBe('Beta')
+  })
+
+  it('shows nothing on mainnet without VITE_BETA', () => {
+    expect(networkTag('mainnet', undefined)).toBeNull()
+    expect(networkTag('mainnet', '')).toBeNull()
+    expect(networkTag('mainnet', 'true')).toBeNull()
   })
 })

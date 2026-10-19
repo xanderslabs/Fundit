@@ -286,6 +286,7 @@ From [`app/.env.example`](app/.env.example):
 | `VITE_FACTORY_DEPLOY_BLOCK` | The block the factory was deployed in. |
 | `VITE_ARC_RPC_URL` | Arc RPC override. Leave it empty to use the network's own RPC. If you set it, it must point at the chosen network. |
 | `VITE_MAINNET_RPC_URL` | Ethereum mainnet RPC. Defaults to `https://ethereum-rpc.publicnode.com`. |
+| `VITE_BETA` | Set to `1` to show the Beta tag on mainnet. Empty by default. A testnet build always shows the Testnet tag. |
 | `VITE_CROSSCHAIN` | Set to `1` to offer **Add money** from another chain. Off by default. Payouts to other chains in **Manage** do not depend on it. |
 
 If you change an RPC host, add it to `connect-src` in `app/public/_headers`.
@@ -293,7 +294,7 @@ If you change an RPC host, add it to `connect-src` in `app/public/_headers`.
 ## Test on Arc testnet
 
 Run every end-to-end test and every test that moves money on Arc testnet, never on Arc mainnet. Testnet
-tokens have no value. The unit tests use mocks, and the contract fork suite only reads Arc mainnet state. A testnet build shows a "Test network" banner.
+tokens have no value. The unit tests use mocks, and the contract fork suite only reads Arc mainnet state. A testnet build shows a "Testnet" tag beside the logo.
 
 1. Set the network in `app/.env.local`:
 

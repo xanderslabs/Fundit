@@ -18,6 +18,7 @@ import {
   TabPanel,
   Tabs,
 } from '../components/ui'
+import { NetworkTag } from '../components/NetworkTag'
 import './StyleGuide.css'
 
 // A development-only page (App.tsx serves it only when import.meta.env.DEV is true) that shows every token and
@@ -240,6 +241,12 @@ export function StyleGuide() {
           <Badge>Ended</Badge>
           <Badge tone="success">Goal reached</Badge>
           <Badge tone="attention">Ends soon</Badge>
+        </Row>
+        <Row label="network tag">
+          <NetworkTag label="Testnet" />
+          <NetworkTag label="Beta" />
+          <NetworkTag label="Testnet" size="sm" />
+          <NetworkTag label="Beta" size="sm" />
         </Row>
         <Banner action={<Button variant="secondary">Learn more</Button>}>
           <p>Fundit runs on Arc. Gifts arrive in seconds.</p>

@@ -21,14 +21,28 @@
 }
 
 .header-logo {
+  display: flex;
   flex: none;
+  align-items: flex-start;
+  gap: var(--space-1);
   border-radius: var(--radius-sm);
+}
+
+.header-logo .network-tag {
+  margin-top: calc(var(--space-1) * -1);
 }
 
 .header-logo img {
   display: block;
   height: 32px;
   width: auto;
+}
+
+/* A smaller logo on the narrowest phones leaves room for the network tag and the account pill. */
+@media (max-width: 360px) {
+  .header-logo img {
+    height: 24px;
+  }
 }
 
 .main {
@@ -79,28 +93,33 @@
 }
 
 .socials a {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--hit-target);
+  height: var(--hit-target);
   border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  transition:
+    color var(--duration) var(--ease),
+    box-shadow var(--duration) var(--ease);
 }
 
-.socials img {
+.socials svg {
   display: block;
-  width: 36px;
-  height: 36px;
-  transition: transform var(--duration) var(--ease);
 }
 
-.socials a:hover img {
-  transform: translateY(-2px);
+/* The glyph turns green and the circle gets a soft ring. Keyboard focus also keeps the shared focus outline. */
+.socials a:hover,
+.socials a:focus-visible {
+  color: var(--action-ink);
+  box-shadow: var(--focus-halo);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .footer-links a,
-  .socials img {
+  .socials a {
     transition: none;
-  }
-
-  .socials a:hover img {
-    transform: none;
   }
 }

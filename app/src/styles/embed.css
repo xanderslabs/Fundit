@@ -37,6 +37,8 @@ body,
 
 .embed-logo {
   display: inline-flex;
+  align-items: flex-start;
+  gap: var(--space-1);
   border-radius: var(--radius-sm);
 }
 
@@ -57,12 +59,6 @@ body,
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   line-clamp: 2;
-}
-
-/* A testnet build shows the banner above the card. One title line keeps the card inside a 220px iframe. */
-#root:has(> .testnet-banner) .embed-title {
-  -webkit-line-clamp: 1;
-  line-clamp: 1;
 }
 
 .embed-progress {

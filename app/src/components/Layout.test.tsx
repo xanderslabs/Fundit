@@ -1,13 +1,23 @@
 import { cleanup, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { NetworkTagLabel } from '../config'
 import { Layout } from './Layout'
-import { TestnetBanner } from './TestnetBanner'
 
+const state = vi.hoisted(() => ({ tag: null as NetworkTagLabel | null }))
+vi.mock('../config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../config')>()),
+  get NETWORK_TAG() {
+    return state.tag
+  },
+}))
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: () => {} }) }))
 vi.mock('wagmi', () => ({ useDisconnect: () => ({ mutate: () => {} }) }))
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  state.tag = null
+})
 
 function renderLayout() {
   render(
@@ -48,22 +58,48 @@ describe('Layout', () => {
       expect(a.getAttribute('rel')).toBe('noopener noreferrer')
     }
   })
+
+  // The icons are one-colour glyphs drawn inline in the text colour, so they follow the theme tokens and load no
+  // image file or icon library.
+  it('draws each social icon as an inline monochrome glyph', () => {
+    renderLayout()
+    const list = within(screen.getByRole('contentinfo')).getByRole('list', { name: 'Fundit on social media' })
+    expect(list.querySelectorAll('img')).toHaveLength(0)
+    const svgs = Array.from(list.querySelectorAll('a > svg'))
+    expect(svgs).toHaveLength(4)
+    for (const svg of svgs) {
+      expect(svg.getAttribute('aria-hidden')).toBe('true')
+      expect(svg.getAttribute('focusable')).toBe('false')
+      expect(svg.getAttribute('fill')).toBe('currentColor')
+      expect(svg.querySelector('path')?.getAttribute('d')).toMatch(/^M/)
+      expect(svg.querySelector('[fill]:not(svg), [style]')).toBeNull()
+    }
+  })
 })
 
-// Test tokens look like real USDC. On a testnet build every page says so, and a mainnet build never does.
-describe('TestnetBanner', () => {
-  it('says test tokens have no value on testnet', () => {
-    render(<TestnetBanner network="testnet" />)
-    expect(screen.getByText('Test network. Tokens here have no value.')).toBeTruthy()
-  })
-
-  it('shows nothing on mainnet', () => {
-    const { container } = render(<TestnetBanner network="mainnet" />)
-    expect(container.textContent).toBe('')
-  })
-
-  it('shows nothing in the default (mainnet) layout', () => {
+// Test tokens look like real USDC, so a testnet site says so beside the logo on every page. The tag is part of
+// the logo link's name and is never a separate link or tab stop.
+describe('Layout network tag', () => {
+  it('shows Testnet beside the logo on testnet', () => {
+    state.tag = 'Testnet'
     renderLayout()
-    expect(screen.queryByText(/Test network/)).toBeNull()
+    const banner = screen.getByRole('banner')
+    const logo = within(banner).getByRole('link', { name: 'Fundit home, testnet' })
+    expect(logo.textContent).toBe('Testnet')
+    expect(within(banner).getAllByRole('link')).toHaveLength(1)
+    expect(banner.querySelectorAll('[tabindex]')).toHaveLength(0)
+  })
+
+  it('shows Beta beside the logo on mainnet with VITE_BETA=1', () => {
+    state.tag = 'Beta'
+    renderLayout()
+    const logo = within(screen.getByRole('banner')).getByRole('link', { name: 'Fundit home, beta' })
+    expect(logo.textContent).toBe('Beta')
+  })
+
+  it('shows no tag on mainnet without VITE_BETA', () => {
+    renderLayout()
+    const logo = within(screen.getByRole('banner')).getByRole('link', { name: 'Fundit home' })
+    expect(logo.textContent).toBe('')
   })
 })

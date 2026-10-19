@@ -1,18 +1,19 @@
 import { Link, Outlet } from 'react-router'
-import { NETWORK, SOCIAL_LINKS } from '../config'
+import { NETWORK_TAG, SOCIAL_LINKS } from '../config'
 import { AccountControl } from './AccountMenu'
+import { NetworkTag, networkTagName } from './NetworkTag'
 import { ScrollToTop } from './ScrollToTop'
-import { TestnetBanner } from './TestnetBanner'
+import { SocialIcon } from './SocialIcon'
 import './Layout.css'
 
 export function Layout() {
   return (
     <div className="layout">
       <ScrollToTop />
-      <TestnetBanner network={NETWORK.name} />
       <header className="header">
-        <Link to="/" className="header-logo" aria-label="Fundit home">
+        <Link to="/" className="header-logo" aria-label={networkTagName('Fundit home', NETWORK_TAG)}>
           <img src="/images/fundit-logo.svg" alt="Fundit" width={139} height={32} />
+          {NETWORK_TAG && <NetworkTag label={NETWORK_TAG} />}
         </Link>
         <AccountControl />
       </header>
@@ -28,7 +29,7 @@ export function Layout() {
           {SOCIAL_LINKS.map((s) => (
             <li key={s.name}>
               <a href={s.href} target="_blank" rel="noopener noreferrer" aria-label={`Fundit on ${s.name}`}>
-                <img src={s.icon} alt="" width={36} height={36} loading="lazy" />
+                <SocialIcon name={s.name} />
               </a>
             </li>
           ))}

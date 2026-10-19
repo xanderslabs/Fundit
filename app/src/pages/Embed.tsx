@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { isAddress } from 'viem'
+import { NetworkTag, networkTagName } from '../components/NetworkTag'
 import { Progress } from '../components/Progress'
 import { campaignStatus, StatusBadge } from '../components/StatusBadge'
+import { NETWORK_TAG } from '../config'
 import { type CampaignView, fetchCampaign, type ReadClient } from '../lib/campaigns'
 import { arcClient } from '../lib/clients'
 import { formatAmount } from '../lib/format'
@@ -103,8 +105,9 @@ export function Embed({ address, origin, client = arcClient }: Props) {
 
 function Logo({ origin }: { origin: string }) {
   return (
-    <a className="embed-logo" href={origin} target="_blank" rel="noopener">
+    <a className="embed-logo" href={origin} target="_blank" rel="noopener" aria-label={networkTagName('Fundit', NETWORK_TAG)}>
       <img src="/images/fundit-logo.svg" alt="Fundit" width={83} height={19} />
+      {NETWORK_TAG && <NetworkTag label={NETWORK_TAG} size="sm" />}
     </a>
   )
 }

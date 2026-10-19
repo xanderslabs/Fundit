@@ -1,7 +1,9 @@
 /* The top bar account pill and its menu. */
+/* It may shrink, so the pill gives way to the logo and its network tag on a narrow screen. */
 .popover-anchor {
   position: relative;
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .popover {
@@ -20,7 +22,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  max-width: min(240px, calc(100vw - 200px));
+  max-width: min(240px, 100%);
   min-height: var(--hit-target);
   padding: var(--space-2) var(--space-4);
   border: 0;

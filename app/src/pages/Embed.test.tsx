@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import type { Address } from 'viem'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { TOKENS } from '../config'
+import { type NetworkTagLabel, TOKENS } from '../config'
 import type { ReadClient, Summary } from '../lib/campaigns'
 import { Embed } from './Embed'
 
@@ -13,6 +13,14 @@ vi.mock('wagmi', () => {
 vi.mock('@reown/appkit/react', () => {
   throw new Error('the embed page loaded AppKit')
 })
+
+const state = vi.hoisted(() => ({ tag: null as NetworkTagLabel | null }))
+vi.mock('../config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../config')>()),
+  get NETWORK_TAG() {
+    return state.tag
+  },
+}))
 
 const ADDRESS = '0x00000000000000000000000000000000000000a1' as Address
 const ORIGIN = 'https://fundit.fun'
@@ -44,7 +52,10 @@ function client(known: boolean, s: Summary = summary()): ReadClient {
   } as unknown as ReadClient
 }
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  state.tag = null
+})
 
 describe('Embed', () => {
   // Rendered with no WagmiProvider, QueryClientProvider or router: the card works on its own.
@@ -104,6 +115,29 @@ describe('Embed', () => {
     const c = { readContract: vi.fn().mockRejectedValueOnce(new Error('down')), multicall: vi.fn() } as unknown as ReadClient
     render(<Embed address={ADDRESS} origin={ORIGIN} client={c} />)
     expect(await screen.findByRole('button', { name: 'Try again' })).toBeTruthy()
+  })
+})
+
+// A card on another site must not pass test tokens off as real money, so it carries the same tag as the header.
+describe('Embed network tag', () => {
+  it('shows Testnet beside the Fundit mark on testnet', async () => {
+    state.tag = 'Testnet'
+    render(<Embed address={ADDRESS} origin={ORIGIN} client={client(true)} />)
+    await screen.findByText('Clean water')
+    expect(screen.getByRole('link', { name: 'Fundit, testnet' }).textContent).toBe('Testnet')
+  })
+
+  it('shows Beta on mainnet with VITE_BETA=1', async () => {
+    state.tag = 'Beta'
+    render(<Embed address={ADDRESS} origin={ORIGIN} client={client(true)} />)
+    await screen.findByText('Clean water')
+    expect(screen.getByRole('link', { name: 'Fundit, beta' }).textContent).toBe('Beta')
+  })
+
+  it('shows no tag on mainnet without VITE_BETA', async () => {
+    render(<Embed address={ADDRESS} origin={ORIGIN} client={client(true)} />)
+    await screen.findByText('Clean water')
+    expect(screen.getByRole('link', { name: 'Fundit' }).textContent).toBe('')
   })
 })
 
