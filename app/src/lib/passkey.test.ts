@@ -1,13 +1,12 @@
 import { act, renderHook } from '@testing-library/react'
 import { type Address, decodeFunctionData, erc20Abi, getAddress, type Hex, type TransactionReceipt } from 'viem'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { CIRCLE_MULTISIG_PLUGIN, ENTRY_POINT, TOKENS, TX_TIMEOUT_MS } from '../config'
+import { CIRCLE_MULTISIG_PLUGIN, ENTRY_POINT, storageKey, TX_TIMEOUT_MS } from '../config'
 import { explainError, NeedsNetworkFee } from './errors'
 import { useSender } from '../hooks/useSender'
 import {
   addBackupPasskey,
   checkPendingBackup,
-  chooseAccount,
   clearPasskeySession,
   discardPendingBackup,
   dismissBackupPrompt,
@@ -101,8 +100,6 @@ vi.mock('./passkeyKit', async () =>
 const balance = vi.hoisted(() => ({ value: 1_000_000n }))
 // Token balances for single accounts (lower case), in place of balance.value for that holder.
 const held = vi.hoisted(() => new Map<string, bigint>())
-// The same for one token only, keyed "token:holder" (both lower case). Read before held.
-const heldToken = vi.hoisted(() => new Map<string, bigint>())
 // The account's EntryPoint deposit, in native wei.
 const deposit = vi.hoisted(() => ({ value: 0n }))
 // Circle's answer to circle_getUserOperationGasPrice with every tier at this max fee (wei per gas).
@@ -119,8 +116,6 @@ vi.mock('./clients', () => ({
     readContract: async (args: { functionName: string; address: string; args?: readonly unknown[] }) => {
       if (args.address === ENTRY_POINT) return deposit.value
       const holder = String(args.args?.[0] ?? '').toLowerCase()
-      const tokenKey = `${args.address.toLowerCase()}:${holder}`
-      if (args.functionName === 'balanceOf' && heldToken.has(tokenKey)) return heldToken.get(tokenKey)
       if (args.functionName === 'balanceOf' && held.has(holder)) return held.get(holder)
       if (args.functionName !== 'ownershipInfoOf') return balance.value
       owners.reads.push(args)
@@ -349,14 +344,15 @@ describe('useSender', () => {
   })
 })
 
-// A passkey added to an existing account (by recovery) opens that account, not its own new one. But anyone can add
-// someone else's public key as an owner of their own account and map it at Circle, so a mapped account is only ever
-// offered, never opened on its own, and the passkey's own account wins once it was used. A failed lookup must never
-// put the person in an empty account that looks like their money is gone.
+// A passkey opens its own account. Anyone can add someone else's public key as an owner of their own account, map it
+// at Circle and fund it as a lure, so neither a mapping nor ownership on chain is enough to open another account.
+// Only a recovery on this device is: recoverWithPhrase leaves a record, used while the passkey still owns the account.
+// A failed lookup must never put the person in an account that looks like their money is gone.
 describe('which account a passkey opens', () => {
   const OWN = getAddress('0x00000000000000000000000000000000000000cc') as Address
   const RECOVERED = getAddress('0x00000000000000000000000000000000000000Ab') as Address
   const OTHER = getAddress('0x00000000000000000000000000000000000000Cd') as Address
+  const RECORD = `${storageKey('passkey.recovered.')}cred-live`
   const passkeyOwner = (x: bigint, y: bigint) => ({ weight: 1n, credType: 0, addr: '0x0000000000000000000000000000000000000000', publicKeyX: x, publicKeyY: y })
   const LOOKUP = { owner: { type: 'WEBAUTHOWNER', identifier: { publicKeyX: '3', publicKeyY: '4' } } }
 
@@ -368,13 +364,10 @@ describe('which account a passkey opens', () => {
     kit.bundler.sendUserOperation.mockResolvedValue(OP_HASH)
     kit.bundler.waitForUserOperationReceipt.mockReset()
     kit.bundler.waitForUserOperationReceipt.mockResolvedValue(receipt(true))
-    // The passkey's own account was never used: not deployed, no USDC, no EURC.
-    held.set(OWN.toLowerCase(), 0n)
   })
   afterEach(() => {
     code.clear()
     held.clear()
-    heldToken.clear()
     owners.data = []
     owners.fail = false
     localStorage.clear()
@@ -386,99 +379,53 @@ describe('which account a passkey opens', () => {
     for (const a of accounts) code.set(a.toLowerCase(), '0x6001')
     owners.data = [passkeyOwner(9n, 9n), passkeyOwner(3n, 4n)]
   }
+  const lastAccountArgs = () => kit.sdk.toCircleSmartAccount.mock.calls.at(-1)![0] as { address?: string }
 
-  it('offers a mapped account and opens it only after the person says yes', async () => {
-    mappedTo(RECOVERED)
-    held.set(RECOVERED.toLowerCase(), 2_500_000n)
-    const res = await loginPasskey()
-    expect(res).toEqual({ status: 'choose', own: OWN, options: [{ address: RECOVERED, usdc: 2_500_000n }] })
+  // The attack: the passkey's key is added to someone else's funded account and mapped there.
+  it.each([
+    ['empty', () => held.set(OWN.toLowerCase(), 0n)],
+    ['funded', () => held.set(OWN.toLowerCase(), 5_000_000n)],
+  ])('never opens a mapped account without a recovery record, when the own account is %s', async (_name, setOwn) => {
+    mappedTo(OTHER)
+    held.set(OTHER.toLowerCase(), 100_000_000n)
+    setOwn()
+    expect(await loginPasskey()).toEqual({ address: OWN, recoveredElsewhere: true })
     expect(kit.sdk.getAddressMapping).toHaveBeenCalledWith(expect.anything(), LOOKUP)
-    // Nothing is open while the person decides.
-    expect(readPasskeySession()).toBeNull()
-    expect(await chooseAccount(RECOVERED)).toEqual({ address: RECOVERED })
-    expect(kit.sdk.toCircleSmartAccount).toHaveBeenLastCalledWith(expect.objectContaining({ address: RECOVERED }))
-    expect(readPasskeySession()).toEqual({ address: RECOVERED, credentialId: 'cred-live' })
-    // The answer is kept for this passkey: the next sign-in opens the same account without asking.
+    expect(lastAccountArgs().address).toBeUndefined()
+    expect(readPasskeySession()).toEqual({ address: OWN, credentialId: 'cred-live' })
+  })
+
+  it('opens the passkey\'s own account with no hint when Circle has no other mapping', async () => {
+    expect(await loginPasskey()).toEqual({ address: OWN })
+    mappedTo(OWN)
     clearPasskeySession()
+    expect(await loginPasskey()).toEqual({ address: OWN })
+  })
+
+  it('opens the account this device recovered with the passkey, and keeps the record across sign-out', async () => {
+    mappedTo(RECOVERED)
+    localStorage.setItem(RECORD, RECOVERED)
+    expect(await loginPasskey()).toEqual({ address: RECOVERED })
+    expect(lastAccountArgs().address).toBe(RECOVERED)
+    clearPasskeySession()
+    expect(localStorage.getItem(RECORD)).toBe(RECOVERED)
     expect(await loginPasskey()).toEqual({ address: RECOVERED })
   })
 
-  it('opens a new account of their own when the person says no, and remembers that too', async () => {
-    mappedTo(RECOVERED)
-    expect(await loginPasskey()).toMatchObject({ status: 'choose' })
-    expect(await chooseAccount(OWN)).toEqual({ address: OWN })
-    expect(readPasskeySession()).toEqual({ address: OWN, credentialId: 'cred-live' })
-    clearPasskeySession()
-    kit.sdk.getAddressMapping.mockClear()
-    expect(await loginPasskey()).toEqual({ address: OWN })
-    expect(kit.sdk.getAddressMapping).not.toHaveBeenCalled()
-  })
-
-  it('refuses a pick that was not offered', async () => {
-    mappedTo(RECOVERED)
-    await loginPasskey()
-    await expect(chooseAccount(OTHER)).rejects.toThrow('Sign in again to choose your account.')
-    expect(readPasskeySession()).toBeNull()
-  })
-
-  // The attack: someone adds this passkey's public key to their own account and maps it. A person whose own
-  // account is in use must never land in that account, where money they add could be taken.
-  it.each([
-    ['deployed', () => code.set(OWN.toLowerCase(), '0x6001')],
-    ['holding USDC', () => held.set(OWN.toLowerCase(), 1n)],
-  ])('never offers or opens a mapped account when the own account is %s', async (_name, used) => {
-    mappedTo(OTHER)
-    used()
-    expect(await loginPasskey()).toEqual({ address: OWN })
-    expect(kit.sdk.getAddressMapping).not.toHaveBeenCalled()
-    expect((kit.sdk.toCircleSmartAccount.mock.calls.at(-1)![0] as { address?: string }).address).toBeUndefined()
-  })
-
-  it('never offers or opens a mapped account when the own account holds EURC', async () => {
-    mappedTo(OTHER)
-    heldToken.set(`${TOKENS.EURC.address.toLowerCase()}:${OWN.toLowerCase()}`, 1n)
-    expect(await loginPasskey()).toEqual({ address: OWN })
-    expect(kit.sdk.getAddressMapping).not.toHaveBeenCalled()
-  })
-
-  // Several candidates are a choice for the person, never a lockout.
-  it('lists every mapped account with its balance, plus their own new account', async () => {
-    mappedTo(RECOVERED, OTHER)
-    held.set(RECOVERED.toLowerCase(), 1_000_000n)
-    held.set(OTHER.toLowerCase(), 0n)
-    expect(await loginPasskey()).toEqual({
-      status: 'choose',
-      own: OWN,
-      options: [
-        { address: RECOVERED, usdc: 1_000_000n },
-        { address: OTHER, usdc: 0n },
-      ],
-    })
-    expect(await chooseAccount(OTHER)).toEqual({ address: OTHER })
-  })
-
-  // A mapping is an off-chain record. executeRecovery writes it before its user operation, so a recovery that never
-  // landed leaves a mapping to an account this passkey does not own.
-  it('ignores a mapped account that does not list this passkey as an owner on Arc, or is not deployed', async () => {
+  // The passkey was removed from that account since, or the record points at an account it never owned.
+  it('ignores and deletes a record whose account no longer lists the passkey as an owner', async () => {
     mappedTo(RECOVERED)
     owners.data = [passkeyOwner(9n, 9n)]
-    expect(await loginPasskey()).toEqual({ address: OWN })
-    clearPasskeySession()
-    code.clear()
-    owners.data = [passkeyOwner(3n, 4n)]
-    expect(await loginPasskey()).toEqual({ address: OWN })
+    localStorage.setItem(RECORD, RECOVERED)
+    expect(await loginPasskey()).toEqual({ address: OWN, recoveredElsewhere: true })
+    expect(localStorage.getItem(RECORD)).toBeNull()
   })
 
-  it('opens the passkey\'s own new account when Circle has no mapping for it', async () => {
-    expect(await loginPasskey()).toEqual({ address: OWN })
-    expect(kit.sdk.getAddressMapping).toHaveBeenCalledWith(expect.anything(), LOOKUP)
-    expect((kit.sdk.toCircleSmartAccount.mock.calls.at(-1)![0] as { address?: string }).address).toBeUndefined()
-  })
-
-  // After a reload the signer is gone. The send asks for the passkey again and must sign for the account the page
-  // shows, not refuse with "That passkey opens a different wallet".
+  // After a reload the signer is gone. The send asks for the passkey again and must sign for the recovered account,
+  // not refuse with "That passkey opens a different wallet".
   it('sends from a recovered account after a reload', async () => {
     mappedTo(RECOVERED)
+    localStorage.setItem(RECORD, RECOVERED)
     const stored = { address: RECOVERED, credentialId: 'cred-live' }
     savePasskeySession(stored)
     const res = await storedPasskeySender(stored).send([A])
@@ -486,18 +433,20 @@ describe('which account a passkey opens', () => {
     expect(kit.bundler.sendUserOperation.mock.calls[0]![0].account.address).toBe(RECOVERED)
   })
 
-  it('still refuses to sign for an account the passkey does not own', async () => {
-    mappedTo(RECOVERED)
+  it('refuses to sign for an account other than its own without a recovery record, even one it owns', async () => {
+    mappedTo(OTHER)
     const stored = { address: OTHER, credentialId: 'cred-live' }
-    owners.data = [passkeyOwner(9n, 9n)]
+    await expect(storedPasskeySender(stored).send([A])).rejects.toThrow('That passkey opens a different wallet.')
+    localStorage.setItem(RECORD, RECOVERED)
     await expect(storedPasskeySender(stored).send([A])).rejects.toThrow('That passkey opens a different wallet.')
     expect(kit.bundler.sendUserOperation).not.toHaveBeenCalled()
   })
 
   it.each([
     ['the mapping lookup fails', () => kit.sdk.getAddressMapping.mockRejectedValue(new TypeError('Failed to fetch'))],
-    ['the owners on Arc cannot be read', () => {
+    ['the owners of the recovered account cannot be read', () => {
       mappedTo(RECOVERED)
+      localStorage.setItem(RECORD, RECOVERED)
       owners.fail = true
     }],
   ])('shows a plain error and opens no account when %s', async (_name, fail) => {
@@ -505,14 +454,16 @@ describe('which account a passkey opens', () => {
     const err = await loginPasskey().catch((e: unknown) => e)
     expect(explainError(err)).toBe("We couldn't check which account this passkey opens. Check your connection and try again.")
     expect(readPasskeySession()).toBeNull()
-    // A retry once the network is back offers the right account.
+    // A failed read is not proof of anything: the record stays for the retry.
     owners.fail = false
     mappedTo(RECOVERED)
-    expect(await loginPasskey()).toMatchObject({ status: 'choose', options: [{ address: RECOVERED }] })
+    localStorage.setItem(RECORD, RECOVERED)
+    expect(await loginPasskey()).toEqual({ address: RECOVERED })
   })
 
   it('sends nothing after a reload when the owners cannot be read', async () => {
-    code.set(RECOVERED.toLowerCase(), '0x6001')
+    mappedTo(RECOVERED)
+    localStorage.setItem(RECORD, RECOVERED)
     owners.fail = true
     const stored = { address: RECOVERED, credentialId: 'cred-live' }
     savePasskeySession(stored)
@@ -910,6 +861,37 @@ describe('recoverWithPhrase', () => {
     expect(localStorage.getItem(pendingKey)).toBeNull()
   })
 
+  // A synced passkey that recovered the account on another device signs in here to its own account, with the hint.
+  // The words then prove the person holds the recovery key, which owns the account too: only the record is written,
+  // no new passkey is made and nothing is sent.
+  it('re-recovers with the words on a second device for a passkey that already owns the account', async () => {
+    kit.sdk.toWebAuthnCredential.mockResolvedValue(LIVE_CRED)
+    kit.sdk.getAddressMapping.mockResolvedValue([{ walletAddress: RECOVERED }])
+    owners.data = [
+      { weight: 1n, credType: 0, addr: '0x00000000000000000000000000000000000000Ee', publicKeyX: 0n, publicKeyY: 0n },
+      { weight: 1n, credType: 1, addr: '0x0000000000000000000000000000000000000000', publicKeyX: 3n, publicKeyY: 4n },
+    ]
+    try {
+      expect(await loginPasskey()).toEqual({ address: '0x00000000000000000000000000000000000000cc', recoveredElsewhere: true })
+      kit.sdk.toWebAuthnCredential.mockClear()
+      expect(await recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).toEqual({ status: 'recovered', session: { address: RECOVERED, credentialId: 'cred-live' } })
+      expect(kit.sdk.toWebAuthnCredential).not.toHaveBeenCalled()
+      expect(kit.executeRecovery).not.toHaveBeenCalled()
+      clearPasskeySession()
+      expect(await loginPasskey()).toEqual({ address: RECOVERED })
+      // Words whose key is not an owner prove nothing: the recovery adds a new passkey as usual.
+      localStorage.clear()
+      clearPasskeySession()
+      kit.sdk.toWebAuthnCredential.mockResolvedValueOnce(LIVE_CRED).mockResolvedValue(NEW_CRED)
+      owners.data = [owners.data[1]!]
+      await loginPasskey()
+      await recoverWithPhrase({ phrase: PHRASE, username: 'ana' })
+      expect(kit.executeRecovery).toHaveBeenCalledTimes(1)
+    } finally {
+      owners.data = []
+    }
+  })
+
   // My page shows the new passkey's name, but only once that passkey owns the account.
   it('remembers the new passkey name only after the recovery confirms', async () => {
     kit.bundler.waitForUserOperationReceipt.mockResolvedValueOnce(receipt(false))
@@ -1011,25 +993,20 @@ describe('recoverWithPhrase', () => {
       throw NO_MAPPING()
     })
     owners.data = [{ weight: 1n, credType: 0, addr: '0x0000000000000000000000000000000000000000', publicKeyX: 7n, publicKeyY: 8n }]
-    // The new passkey's own account is empty, so without the recovery's answer the login would have to ask.
-    held.set('0x00000000000000000000000000000000000000cc', 0n)
     try {
       expect(await recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).toMatchObject({ status: 'recovered' })
       // Fundit never calls createAddressMapping itself: the SDK's executeRecovery does (see the module comment).
       expect(kit.sdk).not.toHaveProperty('createAddressMapping')
       clearPasskeySession()
-      kit.sdk.getAddressMapping.mockClear()
-      // This device recovered the account, so the login opens it without asking.
+      // This device recovered the account with the new passkey, so the login opens it.
       expect(await loginPasskey()).toEqual({ address: RECOVERED })
       expect(readPasskeySession()).toEqual({ address: RECOVERED, credentialId: 'cred-new' })
-      expect(kit.sdk.getAddressMapping).not.toHaveBeenCalled()
-      // On another device (no answer stored) the same passkey is offered the account once.
+      // On another device (no record) the same passkey opens its own account, with only the hint.
       localStorage.clear()
       clearPasskeySession()
-      expect(await loginPasskey()).toMatchObject({ status: 'choose', options: [{ address: RECOVERED }] })
+      expect(await loginPasskey()).toEqual({ address: '0x00000000000000000000000000000000000000cc', recoveredElsewhere: true })
     } finally {
       owners.data = []
-      held.clear()
     }
   })
 

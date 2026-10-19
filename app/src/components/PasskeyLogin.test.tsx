@@ -14,7 +14,6 @@ const logoutPasskey = vi.fn()
 const openWallet = vi.fn()
 const registerPasskey = vi.fn()
 const loginPasskey = vi.fn()
-const chooseAccount = vi.fn()
 const dismissBackupPrompt = vi.fn()
 const prompt = { value: false }
 
@@ -27,7 +26,6 @@ vi.mock('../lib/passkey', async (importOriginal) => ({
   logoutPasskey: () => logoutPasskey(),
   registerPasskey: (name: string) => registerPasskey(name),
   loginPasskey: () => loginPasskey(),
-  chooseAccount: (a: Address) => chooseAccount(a),
   useBackupPrompt: () => prompt.value,
   dismissBackupPrompt: () => dismissBackupPrompt(),
   useBackupPending: () => false,
@@ -42,7 +40,6 @@ afterEach(() => {
   openWallet.mockReset()
   registerPasskey.mockReset()
   loginPasskey.mockReset()
-  chooseAccount.mockReset()
   dismissBackupPrompt.mockReset()
   prompt.value = false
   vi.restoreAllMocks()
@@ -131,51 +128,29 @@ describe('Sign in', () => {
     expect(create.compareDocumentPosition(note()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  // Someone else could add this passkey to their own account. A mapped account opens only after the person says it
-  // is the one they recovered, and saying no gives them their own new account.
-  it('asks before opening another account the passkey can open, and opens it on yes', async () => {
-    const RECOVERED = '0x00000000000000000000000000000000000000Ab' as Address
-    loginPasskey.mockResolvedValue({ status: 'choose', own: PASSKEY, options: [{ address: RECOVERED, usdc: 2_500_000n }] })
-    chooseAccount.mockResolvedValue({ address: RECOVERED })
-    renderControl()
+  // Circle maps the passkey to another account too, most likely one it recovered on another device. Anyone could
+  // add this passkey to their own account and fund it as a lure, so the hint names no account and no balance.
+  it('after sign-in, hints at recovering on this device too, with no address or balance', async () => {
+    loginPasskey.mockResolvedValue({ address: PASSKEY, recoveredElsewhere: true })
+    renderWithRecover()
     const user = await openSignIn()
     await user.click(screen.getByRole('button', { name: 'Sign in with your passkey' }))
-    const dialog = screen.getByRole('dialog')
-    expect(dialog.textContent).toContain('This passkey can also open account 0x0000...00Ab (balance 2.50 USDC). Is this the account you recovered?')
-    const yes = within(dialog).getByRole('button', { name: 'Yes, open it' })
-    expect(document.activeElement).toBe(yes)
-    expect(within(dialog).getByRole('button', { name: 'No, use a new account' })).toBeTruthy()
-    await user.click(yes)
-    expect(chooseAccount).toHaveBeenCalledWith(RECOVERED)
+    const dialog = screen.getByRole('dialog', { name: "You're signed in" })
+    expect(dialog.textContent).toContain('Recovered your account on another device? Use your recovery key on this device too.')
+    expect(dialog.textContent).not.toMatch(/0x[0-9a-fA-F]{4}|USDC|EURC|balance/i)
+    expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: 'Continue' }))
+    await user.click(within(dialog).getByRole('link', { name: 'Use your recovery key on this device too.' }))
+    expect(screen.getByText('Recover page')).toBeTruthy()
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('opens a new account of their own on no', async () => {
-    loginPasskey.mockResolvedValue({ status: 'choose', own: PASSKEY, options: [{ address: '0x00000000000000000000000000000000000000Ab', usdc: 0n }] })
-    chooseAccount.mockResolvedValue({ address: PASSKEY })
+  it('Continue closes the hint and keeps the person signed in', async () => {
+    loginPasskey.mockResolvedValue({ address: PASSKEY, recoveredElsewhere: true })
     renderControl()
     const user = await openSignIn()
     await user.click(screen.getByRole('button', { name: 'Sign in with your passkey' }))
-    await user.click(screen.getByRole('button', { name: 'No, use a new account' }))
-    expect(chooseAccount).toHaveBeenCalledWith(PASSKEY)
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
     expect(screen.queryByRole('dialog')).toBeNull()
-  })
-
-  // Several accounts are a choice, never a lockout.
-  it('lists every account with its balance, plus a new account, when there are several', async () => {
-    const A1 = '0x00000000000000000000000000000000000000A1' as Address
-    const B2 = '0x00000000000000000000000000000000000000b2' as Address
-    loginPasskey.mockResolvedValue({ status: 'choose', own: PASSKEY, options: [{ address: A1, usdc: 1_000_000n }, { address: B2, usdc: 0n }] })
-    chooseAccount.mockResolvedValue({ address: B2 })
-    renderControl()
-    const user = await openSignIn()
-    await user.click(screen.getByRole('button', { name: 'Sign in with your passkey' }))
-    const dialog = screen.getByRole('dialog')
-    expect(dialog.textContent).toContain('This passkey can open more than one account. Pick the one you recovered.')
-    expect(within(dialog).getByRole('button', { name: 'Open 0x0000...00A1 (balance 1.00 USDC)' })).toBeTruthy()
-    expect(within(dialog).getByRole('button', { name: 'Use a new account' })).toBeTruthy()
-    await user.click(within(dialog).getByRole('button', { name: 'Open 0x0000...00b2 (balance 0.00 USDC)' }))
-    expect(chooseAccount).toHaveBeenCalledWith(B2)
   })
 
   // The two views are one dialog: switching changes the heading and moves focus to the new view's first control.

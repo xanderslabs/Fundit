@@ -28,12 +28,18 @@
   text-align: center;
 }
 
-/* The question when a passkey can open another account too. */
+/* The hint after sign-in when the passkey may have recovered an account on another device. */
 .passkey-question {
   margin: 0;
   font-size: var(--text-md);
   line-height: var(--text-md-line);
-  overflow-wrap: anywhere;
+}
+
+.passkey-question a {
+  color: var(--text);
+  font-weight: var(--weight-medium);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 /* The small lines under the main button: switch view, or go to recovery. */

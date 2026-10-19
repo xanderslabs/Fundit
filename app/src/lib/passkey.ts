@@ -65,7 +65,6 @@ export function clearPasskeySession() {
   live = null
   liveSession = null
   newAccount = null
-  pendingChoice = null
   try {
     localStorage.removeItem(KEY)
   } catch {
@@ -195,7 +194,8 @@ export function passkeySender<A extends { address: Address }>(account: A, bundle
   }
 }
 
-type Live = { credentialId: string; account: { address: Address }; bundler: PasskeyBundler<{ address: Address }> }
+// publicKey is the passkey's, as Circle serializes it: recoverWithPhrase checks it against the account's owners.
+type Live = { credentialId: string; publicKey: Hex; account: { address: Address }; bundler: PasskeyBundler<{ address: Address }> }
 // The signing account for this page load. It is never stored; after a reload the person logs in again.
 let live: Live | null = null
 // The same session as live, as the store shape. getSnapshot falls back to it when storage throws.
@@ -238,42 +238,49 @@ function readBundler(): Promise<ReceiptBundler> {
   return receiptBundler
 }
 
-// Which account a passkey opens. Every passkey has its own account, at an address derived from its public key. A
-// passkey added to an existing account (by recovery) is also an owner of that account, and Circle keeps an address
-// mapping from the passkey to it: executeRecovery in Circle's SDK writes it, as x and y in decimal
-// (dist/index.mjs, executeRecovery). A mapping alone proves nothing. Anyone can add someone else's public key as an
-// owner of their own account (addOwners needs no signature from that key) and map it. So:
-// 1. an account this passkey chose before (on this device, or by recovering here) opens again, while the passkey
-//    is still its owner on Arc;
-// 2. the passkey's own account opens when it was ever used (deployed, or holding USDC or EURC);
-// 3. otherwise mapped accounts that are deployed and list the passkey as an owner on Arc are offered, and the person
-//    picks one or their own new account. Nothing switches to a mapped account without that answer.
-// A failed lookup or read throws LOOKUP_FAILED, so it never opens a new account instead.
+// Which account a passkey opens. Every passkey has its own account, at an address derived from its public key, and
+// that is the account it opens. A passkey added to an existing account by recovery also owns that account, and
+// Circle maps the passkey to it (executeRecovery in Circle's SDK writes the mapping, as x and y in decimal:
+// dist/index.mjs, executeRecovery). Neither the mapping nor ownership on chain proves the account is this person's:
+// anyone can add someone else's public key as an owner of their own account (addOwners needs no signature from that
+// key) and map it, and even fund it as a lure. So a passkey opens another account only with proof that the person
+// recovered it on this device: the record recoverWithPhrase writes, and only while the passkey still owns that
+// account on Arc. Without a record, a mapping to another account only shows a hint to recover on this device too,
+// with no address or balance. A failed lookup throws LOOKUP_FAILED, so it never opens an account in its place.
 const LOOKUP_FAILED = "We couldn't check which account this passkey opens. Check your connection and try again."
 
-// The account picked for each passkey on this device, by credential id. Only addresses are stored.
-const CHOSEN_KEY = storageKey('passkey.account.')
+// Proof of a recovery on this device: credential id to the recovered account. Kept across sign-out; only the address
+// is stored.
+const RECOVERED_KEY = storageKey('passkey.recovered.')
 
-function readChosenAccount(credentialId: string): Address | null {
+function readRecovered(credentialId: string): Address | null {
   try {
-    const v = localStorage.getItem(CHOSEN_KEY + credentialId)
+    const v = localStorage.getItem(RECOVERED_KEY + credentialId)
     return v && isAddress(v) ? v : null
   } catch {
     return null
   }
 }
 
-function rememberChosenAccount(credentialId: string, address: Address) {
+function rememberRecovered(credentialId: string, address: Address) {
   try {
-    localStorage.setItem(CHOSEN_KEY + credentialId, address)
+    localStorage.setItem(RECOVERED_KEY + credentialId, address)
   } catch {
-    // Storage is unavailable. The person is asked again at the next sign-in.
+    // Storage is unavailable. The passkey opens its own account until the person recovers again here.
+  }
+}
+
+function forgetRecovered(credentialId: string) {
+  try {
+    localStorage.removeItem(RECOVERED_KEY + credentialId)
+  } catch {
+    // Nothing stored to clear.
   }
 }
 
 const same = (a: Address, b: Address) => a.toLowerCase() === b.toLowerCase()
 
-// A read for the account choice. Any failure becomes LOOKUP_FAILED, so the caller never guesses.
+// A read for the account check. Any failure becomes LOOKUP_FAILED, so the caller never guesses.
 function checked<T>(p: Promise<T>): Promise<T> {
   return p.catch((err: unknown) => {
     throw new PlainError(LOOKUP_FAILED, { cause: err })
@@ -288,14 +295,14 @@ async function ownsOnChain(account: Address, publicKey: Hex): Promise<boolean> {
   return !!owners && owners.ownersData.some((o) => o.publicKeyX === key.x && o.publicKeyY === key.y)
 }
 
-// True once the passkey's own account was used: deployed, or holding any USDC or EURC.
-async function inUse(address: Address): Promise<boolean> {
-  const [code, usdc, eurc] = await Promise.all([
-    arcClient.getCode({ address }),
-    usdcOf(address),
-    arcClient.readContract({ address: TOKENS.EURC.address, abi: erc20Abi, functionName: 'balanceOf', args: [address] }),
-  ])
-  return (code ?? '0x') !== '0x' || usdc > 0n || eurc > 0n
+// The recovered account this passkey may open on this device, or null. A record whose passkey no longer owns the
+// account on Arc is deleted.
+async function recoveredAccount(credentialId: string, publicKey: Hex, own: Address): Promise<Address | null> {
+  const recorded = readRecovered(credentialId)
+  if (!recorded || same(recorded, own)) return null
+  if (await checked(ownsOnChain(recorded, publicKey))) return recorded
+  forgetRecovered(credentialId)
+  return null
 }
 
 // Circle answers circle_getAddressMapping for an owner it has no record of with an error (-32602 and this text,
@@ -324,30 +331,19 @@ async function mappedWallets(sdk: Sdk['sdk'], client: unknown, owner: MappingOwn
   return [...new Set(mappings.map((m) => m.walletAddress.toLowerCase()))].map((w) => getAddress(w))
 }
 
-// Another account this passkey can open, with its USDC balance, for the person to pick from.
-export type AccountOption = { address: Address; usdc: bigint }
-
-// The account a login opens, or the accounts to offer when the person has to pick (rules above).
-async function resolveLogin(lib: Sdk, credential: Credential, own: Address): Promise<Address | AccountOption[]> {
-  const chosen = readChosenAccount(credential.id)
-  if (chosen && same(chosen, own)) return own
-  if (chosen && (await checked(ownsOnChain(chosen, credential.publicKey)))) return chosen
-  if (await checked(inUse(own))) return own
-  const key = publicKeyXY(credential.publicKey)
-  if (!key) return own
+// True when Circle maps this passkey to an account other than its own: it was probably added there by a recovery
+// on another device. Only used for a hint; the account is never opened from this.
+async function mappedElsewhere(lib: Sdk, publicKey: Hex, own: Address): Promise<boolean> {
+  const key = publicKeyXY(publicKey)
+  if (!key) return false
   const { sdk } = lib
-  const options = await checked(
-    (async () => {
-      const mapped = await mappedWallets(sdk, clients(lib, clientKey()).client, {
-        type: sdk.OwnerIdentifierType.WebAuthn,
-        identifier: { publicKeyX: key.x.toString(), publicKeyY: key.y.toString() },
-      })
-      const others = mapped.filter((w) => !same(w, own))
-      const owned = await Promise.all(others.map((w) => ownsOnChain(w, credential.publicKey)))
-      return Promise.all(others.filter((_, i) => owned[i]).map(async (address) => ({ address, usdc: await usdcOf(address) })))
-    })(),
+  const mapped = await checked(
+    mappedWallets(sdk, clients(lib, clientKey()).client, {
+      type: sdk.OwnerIdentifierType.WebAuthn,
+      identifier: { publicKeyX: key.x.toString(), publicKeyY: key.y.toString() },
+    }),
   )
-  return options.length === 0 ? own : options
+  return mapped.some((w) => !same(w, own))
 }
 
 // The smart account for this passkey: its own account, or the named one.
@@ -362,6 +358,7 @@ async function connect(lib: Sdk, credential: Credential, key: string, address?: 
   })
   return {
     credentialId: credential.id,
+    publicKey: credential.publicKey,
     account,
     bundler: sendingBundler(lib, transport, client) as unknown as PasskeyBundler<{ address: Address }>,
   }
@@ -440,37 +437,22 @@ export async function registerPasskey(username: string): Promise<PasskeySession>
   return { address: live!.account.address, username }
 }
 
-// The person must pick an account before the login finishes: chooseAccount with one of options, or with own for
-// a new account of their own.
-export type AccountChoice = { status: 'choose'; own: Address; options: AccountOption[] }
-// A login waiting for chooseAccount. Never stored: a reload starts the login again.
-let pendingChoice: { lib: Sdk; credential: Credential; key: string; own: Live; options: AccountOption[] } | null = null
+// recoveredElsewhere: the passkey opened its own account, but Circle maps it to another one too. The sign-in shows a
+// hint to use the recovery key on this device.
+export type LoginResult = PasskeySession & { recoveredElsewhere?: true }
 
 // Logs in with a passkey already on this device. The browser lists the passkeys saved for this site.
-export async function loginPasskey(): Promise<PasskeySession | AccountChoice> {
-  pendingChoice = null
+export async function loginPasskey(): Promise<LoginResult> {
   const { lib, credential, key } = await credentialFor('Login', {})
   const own = await connect(lib, credential, key)
-  const res = await resolveLogin(lib, credential, own.account.address)
-  if (Array.isArray(res)) {
-    pendingChoice = { lib, credential, key, own, options: res }
-    return { status: 'choose', own: own.account.address, options: res }
+  const recovered = await recoveredAccount(credential.id, credential.publicKey, own.account.address)
+  if (recovered) {
+    start(await connect(lib, credential, key, recovered))
+    return { address: recovered }
   }
-  start(same(res, own.account.address) ? own : await connect(lib, credential, key, res))
-  return { address: live!.account.address }
-}
-
-// Finishes a login that offered a choice, with the account the person picked (or their own). The answer is kept
-// for this passkey on this device, so the next sign-in does not ask again.
-export async function chooseAccount(address: Address): Promise<PasskeySession> {
-  const p = pendingChoice
-  if (!p) throw new PlainError('Sign in again to choose your account.')
-  const own = p.own.account.address
-  if (!same(address, own) && !p.options.some((o) => same(o.address, address))) throw new PlainError('Sign in again to choose your account.')
-  pendingChoice = null
-  rememberChosenAccount(p.credential.id, same(address, own) ? own : address)
-  start(same(address, own) ? p.own : await connect(p.lib, p.credential, p.key, address))
-  return { address: live!.account.address }
+  const elsewhere = await mappedElsewhere(lib, credential.publicKey, own.account.address)
+  start(own)
+  return { address: own.account.address, ...(elsewhere && { recoveredElsewhere: true as const }) }
 }
 
 export function logoutPasskey() {
@@ -478,17 +460,18 @@ export function logoutPasskey() {
 }
 
 // The signing account for the stored session. After a reload this asks for the same passkey once. The session's
-// account is the passkey's own, or one it picked or recovered; then it must still own that account on Arc.
+// account is the passkey's own, or one recovered with it on this device (see recoveredAccount).
 async function ensureLive(stored: StoredPasskey): Promise<Live> {
   if (live && live.credentialId === stored.credentialId) return live
   const { lib, credential, key } = await credentialFor('Login', { credentialId: stored.credentialId })
   let next = await connect(lib, credential, key)
   if (!same(next.account.address, stored.address)) {
+    const recovered = await recoveredAccount(credential.id, credential.publicKey, next.account.address)
     // Never sign for a wallet other than the one the page shows.
-    if (!(await checked(ownsOnChain(stored.address, credential.publicKey)))) {
+    if (!recovered || !same(recovered, stored.address)) {
       throw new PlainError('That passkey opens a different wallet. Sign out and sign in again.')
     }
-    next = await connect(lib, credential, key, stored.address)
+    next = await connect(lib, credential, key, recovered)
   }
   setLive(next)
   return next
@@ -1031,8 +1014,8 @@ function finishRecovery(account: Address, credentialId: string): RecoveryResult 
   } catch {
     // Nothing stored to clear.
   }
-  // This device just recovered the account with this passkey, so it never asks which account to open.
-  rememberChosenAccount(credentialId, account)
+  // The proof that this device recovered the account with this passkey (see recoveredAccount).
+  rememberRecovered(credentialId, account)
   const session = { address: account, credentialId }
   live = null
   liveSession = session
@@ -1046,6 +1029,23 @@ function settleRecovery(pending: PendingRecovery, res: TxResult): RecoveryResult
   if (res.status !== 'success') throw new PlainError('The recovery did not go through. Nothing changed. Try again.')
   if (pending.username) rememberPasskeyUsername(pending.account, pending.username)
   return finishRecovery(pending.account, pending.credentialId)
+}
+
+// The credential id of the passkey signed in on this page when both it and the recovery key own the account on Arc.
+// null otherwise, or when the owners cannot be read: the recovery then adds a new passkey, which is always safe.
+async function signedInOwner(account: Address, recoveryAddress: Address): Promise<string | null> {
+  const current = live
+  if (!current) return null
+  try {
+    const owners = await readOwners(account)
+    const key = publicKeyXY(current.publicKey)
+    if (!owners || !key) return null
+    const keyOwns = owners.ownersData.some((o) => o.addr.toLowerCase() === recoveryAddress.toLowerCase())
+    const passkeyOwns = owners.ownersData.some((o) => o.publicKeyX === key.x && o.publicKeyY === key.y)
+    return keyOwns && passkeyOwns ? current.credentialId : null
+  } catch {
+    return null
+  }
 }
 
 // Recovers a passkey account with its recovery key, as in Circle's passkey-recovery example:
@@ -1082,6 +1082,10 @@ export async function recoverWithPhrase(p: { phrase: string; username: string })
   // After Start over: the earlier recovery may have gone through. Then its passkey opens the account.
   const earlier = await earlierRecovery(account)
   if (earlier) return finishRecovery(account, earlier)
+  // The passkey signed in on this page may already own the account: a synced passkey whose account was recovered on
+  // another device. Then the words, whose key is an owner too, are the proof, and nothing is sent.
+  const already = await signedInOwner(account, recovery.address)
+  if (already) return finishRecovery(account, already)
   const [held, reserve] = await Promise.all([usdcOf(account), passkeyReserve(account)])
   if (held < reserve) throw new RecoveryNeedsFunds(account, reserve)
 
