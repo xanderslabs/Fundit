@@ -31,12 +31,6 @@ describe.each(['terms', 'privacy'] as const)('%s page', (page) => {
     expect(heading.nextElementSibling?.textContent).toBe('A Fundit is a fundraiser created on Fundit.')
   })
 
-  // The legal text has not been reviewed yet and must say so on the page.
-  it('shows the draft notice', () => {
-    text(page)
-    expect(screen.getByText('Draft: review before launch.')).toBeTruthy()
-  })
-
   // Every account is a Fundit account secured by a passkey, so the policy always describes it.
   it('always mentions passkeys', () => {
     expect(text(page)).toMatch(/passkey/i)
@@ -56,10 +50,15 @@ describe.each(['terms', 'privacy'] as const)('%s page', (page) => {
   })
 
   // fundit.xyz is not our domain, so mail sent there would reach a stranger.
-  it('gives hello@fundit.fun as the contact, keeps the draft notice and the governing law placeholder', () => {
+  it('gives hello@fundit.fun as the contact and keeps the governing law placeholder', () => {
     const t = text(page)
     expect(t).toMatch(/hello@fundit\.fun/)
     expect(t).not.toMatch(/fundit\.xyz/)
     if (page === 'terms') expect(t).toMatch(/\[to be set before launch\]/)
+  })
+
+  // The owner took the draft notice off for launch. The rest of the legal text is unchanged.
+  it('shows no draft notice', () => {
+    expect(text(page)).not.toMatch(/Draft: review before launch|has not had a legal review/)
   })
 })

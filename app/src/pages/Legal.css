@@ -43,11 +43,3 @@
   text-decoration-thickness: 2px;
   text-underline-offset: 3px;
 }
-
-.legal-draft {
-  margin-bottom: var(--space-5);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--attention);
-  border-radius: var(--radius-md);
-  background: var(--attention-bg);
-}

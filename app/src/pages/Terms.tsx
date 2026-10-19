@@ -4,9 +4,6 @@ import './Legal.css'
 export function Terms() {
   return (
     <article className="legal">
-      <p className="legal-draft" role="note">
-        <strong>Draft: review before launch.</strong> This text has not had a legal review yet.
-      </p>
       <h1>Terms of Service</h1>
       <p>A Fundit is a fundraiser created on Fundit.</p>
 

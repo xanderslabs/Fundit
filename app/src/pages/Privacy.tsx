@@ -4,9 +4,6 @@ import './Legal.css'
 export function Privacy() {
   return (
     <article className="legal">
-      <p className="legal-draft" role="note">
-        <strong>Draft: review before launch.</strong> This text has not had a legal review yet.
-      </p>
       <h1>Privacy Policy</h1>
       <p>A Fundit is a fundraiser created on Fundit.</p>
 
