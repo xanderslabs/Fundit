@@ -81,11 +81,9 @@ describe('AddBackupPasskey', () => {
   it('explains the recovery key', async () => {
     render(ui())
     expect(screen.getByRole('heading', { name: 'Add a recovery key' })).toBeTruthy()
-    expect(
-      screen.getByText(
-        "Write these 12 words down in order and keep them somewhere safe. If you lose your passkey, they are the only way back into your account. Anyone who has them can control your account, and Fundit can't show them again.",
-      ),
-    ).toBeTruthy()
+    // Before the words are shown, the text explains the key without talking about words the person cannot see yet.
+    expect(screen.getByText("A recovery key is 12 words that get you back into your account if you lose your passkey. Save one now, so you never lose this account.")).toBeTruthy()
+    expect(screen.queryByText(/Write these 12 words/)).toBeNull()
     expect(await screen.findByRole('button', { name: 'Show my recovery key' })).toBeTruthy()
   })
 
@@ -100,6 +98,9 @@ describe('AddBackupPasskey', () => {
     // One warning, said once: the words control the account.
     expect(screen.getAllByText(/can control your account/)).toHaveLength(1)
     expect(document.activeElement?.textContent).toMatch(/^Write these 12 words down in order/)
+    expect(document.activeElement?.textContent).toBe(
+      "Write these 12 words down in order and keep them somewhere safe. If you lose your passkey, they are the only way back into your account. Anyone who has them can control your account, and Fundit can't show them again.",
+    )
     expect(addBackupPasskey).not.toHaveBeenCalled()
 
     await confirmWords(user, true)

@@ -278,9 +278,16 @@ export function AddBackupPasskey({ stored, onLater, onDone, headingId, inDialog 
       <h2 id={id} className={inDialog ? 'ui-dialog-title' : undefined}>
         Add a recovery key
       </h2>
+      {/* Before the words are on screen, the intro explains the key; once they are, it says what to do with them. */}
       <p ref={wordsIntro} tabIndex={-1}>
-        Write these 12 words down in order and keep them somewhere safe. If you lose your passkey, they are the only way back into your account.
-        Anyone who has them can control your account, and Fundit can't show them again.
+        {phrase === null ? (
+          <>A recovery key is 12 words that get you back into your account if you lose your passkey. Save one now, so you never lose this account.</>
+        ) : (
+          <>
+            Write these 12 words down in order and keep them somewhere safe. If you lose your passkey, they are the only way back into your account.
+            Anyone who has them can control your account, and Fundit can't show them again.
+          </>
+        )}
       </p>
       {body}
       {sending && <p className="backup-hint">Follow the steps your browser shows.</p>}
