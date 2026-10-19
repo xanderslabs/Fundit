@@ -101,10 +101,18 @@
   --gutter: 16px;
   /* The smallest size of an icon-only button, such as Close. */
   --hit-target: 40px;
+  /* The header logo height. Smaller on the narrowest phones, to leave room for the network tag and the account pill. */
+  --logo-height: 32px;
 }
 
 @media (min-width: 768px) {
   :root {
     --gutter: 24px;
+  }
+}
+
+@media (max-width: 360px) {
+  :root {
+    --logo-height: 24px;
   }
 }

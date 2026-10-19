@@ -34,15 +34,8 @@
 
 .header-logo img {
   display: block;
-  height: 32px;
+  height: var(--logo-height);
   width: auto;
-}
-
-/* A smaller logo on the narrowest phones leaves room for the network tag and the account pill. */
-@media (max-width: 360px) {
-  .header-logo img {
-    height: 24px;
-  }
 }
 
 .main {

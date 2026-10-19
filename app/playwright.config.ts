@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test'
+import { checkE2EBaseUrl } from './e2e/baseUrl'
 
 // Runs against Arc testnet with real Circle passkeys (a virtual authenticator), so there is one worker and
 // one serial spec.
@@ -9,7 +10,7 @@ import { defineConfig, devices } from '@playwright/test'
 // - E2E_BASE_URL set, for example https://fundit.fun: no local server starts, and the suite runs against that
 //   site and its own client key. The passkeys are bound to that site's domain.
 const PORT = 5174
-const BASE_URL = process.env.E2E_BASE_URL || `http://localhost:${PORT}`
+const BASE_URL = process.env.E2E_BASE_URL ? checkE2EBaseUrl(process.env.E2E_BASE_URL) : `http://localhost:${PORT}`
 
 export default defineConfig({
   testDir: './e2e',

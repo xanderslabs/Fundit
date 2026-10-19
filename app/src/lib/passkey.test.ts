@@ -727,12 +727,20 @@ describe('recoverWithPhrase', () => {
     const stored = { address: RECOVERED, credentialId: NEW_CRED.id }
     const { result } = renderHook(() => useBackupNeeded(stored))
     expect(result.current).toBe(true)
-    owners.ids = [`0x${'95'.repeat(30)}`, `0x${'00'.repeat(10)}${'ee'.repeat(20)}`, `0x${'96'.repeat(30)}`]
+    // The recovery signed with the key from the words. Its owner id (the address, left-padded to 30 bytes) is the
+    // one that must still be on the account.
+    const keyAddress = (kit.sdk.toCircleSmartAccount.mock.calls.at(-1) as unknown as [{ owner: { address: string } }])[0].owner.address
+    expect(keyAddress).toBe(kit.mnemonicToAccount.mock.results.at(-1)!.value.address)
+    const keyId = `0x${'00'.repeat(10)}${keyAddress.slice(2).toLowerCase()}`
+    owners.ids = [`0x${'95'.repeat(30)}`, keyId, `0x${'96'.repeat(30)}`]
     try {
       await act(async () => {
         expect(await syncBackupFromChain(RECOVERED)).toBe(true)
       })
       expect(result.current).toBe(false)
+      expect(owners.reads.at(-1)).toMatchObject({ functionName: 'ownershipInfoOf', args: [RECOVERED] })
+      expect(owners.ids).toContain(keyId)
+      expect(BigInt(keyId)).toBe(BigInt(keyAddress))
     } finally {
       owners.ids = []
     }

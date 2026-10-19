@@ -77,7 +77,8 @@ Set `E2E_BASE_URL` to the site's origin:
 E2E_BASE_URL=https://fundit.fun npm --prefix app run e2e
 ```
 
-Playwright starts no local server and opens that site. The site uses its own client key, so the passkeys are
+Playwright starts no local server and opens that site. The config accepts only `https://fundit.fun` or a
+`localhost` URL here, and stops with an error for anything else. The site uses its own client key, so the passkeys are
 bound to its domain (`fundit.fun`), and `VITE_CIRCLE_CLIENT_KEY` in `app/.env.local` is not needed. The suite
 still reads `VITE_ARC_NETWORK` and the factory values from `app/.env.local` in Node, so they must match the
 site: `testnet` and the testnet factory. Run it only against a site built for Arc testnet. The funder pays

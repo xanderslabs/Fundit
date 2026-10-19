@@ -80,6 +80,9 @@ describe('design tokens', () => {
     expect(value('--font')).toMatch(/^'Outfit'/)
     // The gutter widens to 24px from 768px up.
     expect(css).toMatch(/@media \(min-width: 768px\)\s*\{\s*:root\s*\{\s*--gutter:\s*24px;\s*\}\s*\}/)
+    // The header logo is 32px, and 24px at 360px and below, so the network tag and account pill fit at 320px.
+    expect(value('--logo-height')).toBe('32px')
+    expect(css).toMatch(/@media \(max-width: 360px\)\s*\{\s*:root\s*\{\s*--logo-height:\s*24px;\s*\}\s*\}/)
   })
 
   // The brand colours are fixed (spec non-goals). The semantic tokens carry them.
