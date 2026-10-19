@@ -1,7 +1,10 @@
-import { type FormEvent, useEffect, useRef, useState } from 'react'
+import { type FormEvent, type Ref, useEffect, useRef, useState } from 'react'
+import type { Address } from 'viem'
 import { Link } from 'react-router'
 import { explainError, isInvalidUsername, isUserRejection, USERNAME_PATTERN, USERNAME_RULE, USERNAME_TAKEN } from '../lib/errors'
-import { loginPasskey, registerPasskey } from '../lib/passkey'
+import { formatAmount } from '../lib/format'
+import { shortAddress } from '../lib/names'
+import { type AccountChoice, chooseAccount, loginPasskey, registerPasskey } from '../lib/passkey'
 import { Button, Field } from './ui'
 import './Form.css'
 import './PasskeyLogin.css'
@@ -17,6 +20,40 @@ export function usernameError(name: string, submitted: boolean): string | null {
 
 type View = 'signin' | 'create'
 
+const accountLabel = (o: AccountChoice['options'][number]) => `${shortAddress(o.address)} (balance ${formatAmount(o.usdc, 'USDC')})`
+
+// Another account lists this passkey as an owner (a recovered account, most likely). It opens only once the person
+// says so: anyone can add a passkey's public key to their own account.
+function ChooseAccount({ choice, busy, first, pick }: { choice: AccountChoice; busy: boolean; first: Ref<HTMLButtonElement>; pick: (a: Address) => void }) {
+  const [only] = choice.options
+  if (choice.options.length === 1 && only) {
+    return (
+      <>
+        <p className="passkey-question">{`This passkey can also open account ${accountLabel(only)}. Is this the account you recovered?`}</p>
+        <Button ref={first} size="lg" block disabled={busy} onClick={() => pick(only.address)}>
+          Yes, open it
+        </Button>
+        <Button variant="secondary" size="lg" block disabled={busy} onClick={() => pick(choice.own)}>
+          No, use a new account
+        </Button>
+      </>
+    )
+  }
+  return (
+    <>
+      <p className="passkey-question">This passkey can open more than one account. Pick the one you recovered.</p>
+      {choice.options.map((o, i) => (
+        <Button key={o.address} ref={i === 0 ? first : undefined} variant="secondary" size="lg" block disabled={busy} onClick={() => pick(o.address)}>
+          {`Open ${accountLabel(o)}`}
+        </Button>
+      ))}
+      <Button variant="secondary" size="lg" block disabled={busy} onClick={() => pick(choice.own)}>
+        Use a new account
+      </Button>
+    </>
+  )
+}
+
 // Sign in with a passkey already on this device, or switch to the create view and sign up with a username.
 // headingId names the heading for a dialog that wraps this. onLeave runs when the recovery link is followed.
 export function PasskeyLogin({ onDone, onLeave, headingId }: { onDone?: () => void; onLeave?: () => void; headingId?: string }) {
@@ -25,8 +62,10 @@ export function PasskeyLogin({ onDone, onLeave, headingId }: { onDone?: () => vo
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [tried, setTried] = useState(false)
+  const [choice, setChoice] = useState<AccountChoice | null>(null)
   const switched = useRef(false)
   const signInButton = useRef<HTMLButtonElement>(null)
+  const firstChoice = useRef<HTMLButtonElement>(null)
   const usernameField = useRef<HTMLInputElement>(null)
   const name = username.trim()
   const nameError = tried && name === '' ? 'Enter a name for your account.' : usernameError(name, tried)
@@ -36,6 +75,11 @@ export function PasskeyLogin({ onDone, onLeave, headingId }: { onDone?: () => vo
     if (!switched.current) return
     ;(view === 'create' ? usernameField : signInButton).current?.focus()
   }, [view])
+
+  // The sign-in button is gone once the choice shows, so focus moves to its first answer.
+  useEffect(() => {
+    if (choice) firstChoice.current?.focus()
+  }, [choice])
 
   function switchTo(next: View) {
     switched.current = true
@@ -49,7 +93,12 @@ export function PasskeyLogin({ onDone, onLeave, headingId }: { onDone?: () => vo
     setBusy(true)
     setError(null)
     try {
-      await action()
+      const res = await action()
+      if (res && typeof res === 'object' && 'status' in res && res.status === 'choose') {
+        setChoice(res as AccountChoice)
+        return
+      }
+      setChoice(null)
       onDone?.()
     } catch (err) {
       // Sign-up can fail after the browser saved the passkey. That passkey still opens the account.
@@ -73,9 +122,11 @@ export function PasskeyLogin({ onDone, onLeave, headingId }: { onDone?: () => vo
   return (
     <div className="passkey-login">
       <h2 id={headingId} className="ui-dialog-title">
-        {view === 'signin' ? 'Sign in' : 'Create your account'}
+        {choice ? 'Which account?' : view === 'signin' ? 'Sign in' : 'Create your account'}
       </h2>
-      {view === 'signin' ? (
+      {choice ? (
+        <ChooseAccount choice={choice} busy={busy} first={firstChoice} pick={(a) => void run(() => chooseAccount(a))} />
+      ) : view === 'signin' ? (
         <Button ref={signInButton} size="lg" block disabled={busy} onClick={() => void run(() => loginPasskey())}>
           Sign in with your passkey
         </Button>
@@ -109,6 +160,7 @@ export function PasskeyLogin({ onDone, onLeave, headingId }: { onDone?: () => vo
           {error}
         </p>
       )}
+      {!choice && (
       <div className="passkey-alt">
         {view === 'signin' ? (
           <p>
@@ -132,6 +184,7 @@ export function PasskeyLogin({ onDone, onLeave, headingId }: { onDone?: () => vo
           </Link>
         </p>
       </div>
+      )}
     </div>
   )
 }
