@@ -530,7 +530,7 @@ describe('Manage', () => {
       await screen.findByRole('heading', { name: 'Rescue tokens sent by mistake' })
       await user.clear(sendTo())
       await user.type(sendTo(), '0x1234')
-      expect(screen.getByText('Enter a valid address (0x and 40 characters).')).toBeTruthy()
+      expect(screen.getByText('Enter a valid address: 0x and 40 characters.')).toBeTruthy()
       expect(button('Rescue 0.10 EURC').disabled).toBe(true)
 
       await user.clear(sendTo())

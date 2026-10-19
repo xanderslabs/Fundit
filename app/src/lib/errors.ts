@@ -41,12 +41,15 @@ const ERROR_TEXT: Record<string, string> = {
 
 const ABI = [...campaignAbi, ...factoryAbi]
 
-// The one text for an error nothing below can name. The raw error goes to the console, never to the page.
+// The one text for an error nothing below can name. explainError logs the raw error to the console.
 export const FALLBACK = "That didn't work. Check your connection and try again."
+// A Check again that failed. Never "try again": the transaction it checks may still go through.
+export const CHECK_FAILED = 'We could not check it. Check again in a minute.'
 export const CANCELLED = "You cancelled the request. Try again when you're ready."
 export const USERNAME_TAKEN = "That username is taken. Pick another one, or sign in if it's yours."
 const NO_PASSKEY = "That passkey didn't open a Fundit account. Try another passkey, or create an account."
 const PASSKEY_NOT_SAVED = "Your browser didn't save a passkey. Try again, or use another browser or device."
+const PASSKEY_FAILED = "Your passkey didn't work. Try again, or use another browser or device."
 const NO_PASSKEY_SUPPORT = "This browser can't use passkeys. Open Fundit in an up-to-date browser such as Chrome, Safari or Firefox."
 const PASSKEY_EXISTS = 'This device already has a passkey for this account. Sign in with it instead.'
 const PASSKEY_WRONG_SITE = "Passkeys can't be used on this page address. Open Fundit at its usual address and try again."
@@ -211,20 +214,23 @@ function codes(e: unknown): unknown[] {
 }
 
 // Circle's passkey RP and bundler, the browser's WebAuthn errors and the network, matched on the names, codes
-// and texts they send. Circle's RP codes: -32024 a taken username, -32025 an invalid one. Bundler codes
+// and texts they send. Circle's RP answers -32024 for a taken username and -32025 for an invalid one, matched on
+// their text: neither code is known to mean only that, and this also runs on sends. Bundler codes
 // (ERC-4337): -32503 an expired operation, -32504 a throttled sender, -32507 a bad signature.
 function passkeyAndNetworkText(e: unknown): string | null {
   const n = names(e)
   const c = codes(e)
   const t = texts(e)
   const said = (re: RegExp) => t.some((x) => re.test(x))
-  if (c.includes(-32024) || said(/username is duplicated/i)) return USERNAME_TAKEN
+  if (said(/username is duplicated/i)) return USERNAME_TAKEN
   if (isInvalidUsername(e)) return USERNAME_RULE
   if (n.includes('InvalidStateError')) return PASSKEY_EXISTS
   if (n.includes('SecurityError')) return PASSKEY_WRONG_SITE
   if (n.includes('NotSupportedError') || said(/Credential Management API not supported/i)) return NO_PASSKEY_SUPPORT
   if (said(/No credential available|Login verification failed|credential (was )?not found/i)) return NO_PASSKEY
-  if (said(/No credential created|Credential creation failed/i)) return PASSKEY_NOT_SAVED
+  if (said(/No credential created/i)) return PASSKEY_NOT_SAVED
+  // The SDK throws this on sign-up and on sign-in (a stored key it cannot read), so the text fits both.
+  if (said(/Credential creation failed/i)) return PASSKEY_FAILED
   if (said(/Failed to register the (new WebAuthn credential|recovery address)/i)) return SETUP_FAILED
   if (n.includes('InvalidAccountNonceError') || said(/\bAA25\b/)) return NONCE_CLASH
   if (n.includes('UserOperationExpiredError') || c.includes(-32503) || said(/\bAA22\b/)) return EXPIRED
@@ -239,15 +245,10 @@ function passkeyAndNetworkText(e: unknown): string | null {
 export function explainError(e: unknown): string {
   if (isUserRejection(e)) return CANCELLED
   if (e instanceof PlainError) return e.message
-  if (isPrefundError(e)) return NO_NETWORK_FEE
-  const kit = kitText(e)
-  if (kit) return kit
-  const revert = revertText(e)
-  if (revert) return revert
-  const known = passkeyAndNetworkText(e)
-  if (known) return known
+  // Every real failure is logged raw for support, whatever text the person gets. The page never shows it.
   console.error(e)
-  return FALLBACK
+  if (isPrefundError(e)) return NO_NETWORK_FEE
+  return kitText(e) ?? revertText(e) ?? passkeyAndNetworkText(e) ?? FALLBACK
 }
 
 // For adding money from another chain, which can fail after the wallet already approved something. No text it

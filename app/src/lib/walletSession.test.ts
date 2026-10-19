@@ -24,4 +24,13 @@ describe('disconnectWallet', () => {
     disconnectWallet()
     await vi.waitFor(() => expect(wallet.disconnect).toHaveBeenCalledTimes(1))
   })
+
+  // wagmi never clears its recent connector, so without this every later sign-out would load AppKit again.
+  it('forgets the wallet once it is disconnected, so the next sign-out loads nothing', async () => {
+    localStorage.setItem('wagmi.recentConnectorId', '"io.metamask"')
+    localStorage.setItem('@appkit/connections', '{}')
+    disconnectWallet()
+    await vi.waitFor(() => expect(localStorage.getItem('wagmi.recentConnectorId')).toBeNull())
+    expect(localStorage.getItem('@appkit/connections')).toBeNull()
+  })
 })

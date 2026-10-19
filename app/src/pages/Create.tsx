@@ -10,7 +10,7 @@ import { AmountInput, Button, ButtonLink, Card, Field, PageHeader, StatusBox } f
 import { EXPLORER_URL, FACTORY_ADDRESS, type TokenSymbol } from '../config'
 import { useFactoryFees } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
-import { CANCELLED, explainError, needsAddMoney } from '../lib/errors'
+import { CANCELLED, CHECK_FAILED, explainError, needsAddMoney } from '../lib/errors'
 import { bpsToPercent } from '../lib/format'
 import type { Sender, TxResult } from '../lib/sender'
 import { byteLength, MAX_DESCRIPTION, MAX_LINKS, MAX_TITLE, validateCampaign } from '../lib/validate'
@@ -153,7 +153,8 @@ export function Create() {
       handle(await recheckResult(lastSender.current ?? sender, hash, userop))
     } catch (err) {
       // The check itself failed, so the transaction is still unknown. Never leave the page on "Checking...".
-      setPhase({ kind: 'timeout', hash, userop, note: `We could not check it. ${explainError(err)}` })
+      console.error(err)
+      setPhase({ kind: 'timeout', hash, userop, note: CHECK_FAILED })
     } finally {
       inFlight.current = false
     }

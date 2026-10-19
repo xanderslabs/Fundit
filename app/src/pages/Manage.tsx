@@ -191,7 +191,7 @@ function WithdrawSection({ view, sender }: { view: CampaignView; sender: Sender 
 
   const typed = parseTypedAddress((recipientText ?? sender.address).trim())
   let recipientError: string | undefined
-  if (!typed.ok) recipientError = typed.error === 'typo' ? ADDRESS_TYPO : 'Enter a valid address (0x and 40 characters).'
+  if (!typed.ok) recipientError = typed.error === 'typo' ? ADDRESS_TYPO : 'Enter a valid address: 0x and 40 characters.'
   else if (isAddressEqual(typed.address, zeroAddress)) recipientError = 'Enter a recipient address.'
   else if (isAddressEqual(typed.address, campaign)) recipientError = 'Choose a different recipient.'
   const recipient: Address | null = typed.ok && !recipientError ? typed.address : null
@@ -398,7 +398,7 @@ function RescueSection({ view, sender }: { view: CampaignView; sender: Sender })
   const shown = formatAmount(amount, other.symbol)
   const typed = parseTypedAddress((recipientText ?? sender.address).trim())
   let recipientError: string | undefined
-  if (!typed.ok) recipientError = typed.error === 'typo' ? ADDRESS_TYPO : 'Enter a valid address (0x and 40 characters).'
+  if (!typed.ok) recipientError = typed.error === 'typo' ? ADDRESS_TYPO : 'Enter a valid address: 0x and 40 characters.'
   else if (isAddressEqual(typed.address, zeroAddress)) recipientError = 'Enter a recipient address.'
   else if (isAddressEqual(typed.address, campaign)) recipientError = 'Choose a different recipient.'
   const recipient: Address | null = typed.ok && !recipientError ? typed.address : null
@@ -496,7 +496,7 @@ function BackupSection({ view, sender }: { view: CampaignView; sender: Sender })
   const raw = text.trim()
   const typed = raw === '' ? null : parseTypedAddress(raw)
   let error: string | undefined
-  if (typed && !typed.ok) error = typed.error === 'typo' ? ADDRESS_TYPO : 'Enter a valid address (0x and 40 characters).'
+  if (typed && !typed.ok) error = typed.error === 'typo' ? ADDRESS_TYPO : 'Enter a valid address: 0x and 40 characters.'
   else if (typed?.ok && isAddressEqual(typed.address, sender.address)) error = 'Use a different address from your Fundit account.'
   else if (typed?.ok && isAddressEqual(typed.address, zeroAddress)) error = 'Use Remove backup to remove it.'
 

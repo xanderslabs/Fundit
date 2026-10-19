@@ -572,7 +572,8 @@ describe('DonatePanel', () => {
       throw new Error('rpc down')
     }
     await user.click(await screen.findByRole('button', { name: 'Check again' }))
-    expect(await screen.findByText(/We could not check it/)).toBeTruthy()
+    // A failed check must not read as "send again": the transaction may still go through.
+    expect(await screen.findByText('We could not check it. Check again in a minute.')).toBeTruthy()
     expect(screen.queryByText(/Checking the transaction again/)).toBeNull()
     expectBlocked()
     expectExplorerLink()

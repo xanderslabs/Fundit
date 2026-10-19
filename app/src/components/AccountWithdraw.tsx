@@ -110,7 +110,7 @@ function SendOutForm({ sender }: { sender: Sender }) {
   const recipientRaw = recipientText.trim()
   const typed = recipientRaw === '' ? null : parseTypedAddress(recipientRaw)
   let recipientError: string | undefined
-  if (typed && !typed.ok) recipientError = typed.error === 'typo' ? ADDRESS_TYPO : 'Enter a valid address (0x and 40 characters).'
+  if (typed && !typed.ok) recipientError = typed.error === 'typo' ? ADDRESS_TYPO : 'Enter a valid address: 0x and 40 characters.'
   else if (typed?.ok && (isAddressEqual(typed.address, zeroAddress) || isAddressEqual(typed.address, account))) recipientError = OWN_ADDRESS
   const recipient: Address | null = typed?.ok && !recipientError ? typed.address : null
 

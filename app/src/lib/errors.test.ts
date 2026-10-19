@@ -227,7 +227,8 @@ describe('Circle, passkey and network errors', () => {
     ['no passkey for the account', new Error('No credential available.'), "That passkey didn't open a Fundit account. Try another passkey, or create an account."],
     ['a failed login check', new Error('Login verification failed.'), "That passkey didn't open a Fundit account. Try another passkey, or create an account."],
     ['a passkey the browser did not save', new Error('No credential created.'), "Your browser didn't save a passkey. Try again, or use another browser or device."],
-    ['a failed passkey creation', new Error('Credential creation failed.'), "Your browser didn't save a passkey. Try again, or use another browser or device."],
+    // The SDK throws this on sign-in too, when it cannot read the stored key, so the text fits both flows.
+    ['a passkey the SDK could not use', new Error('Credential creation failed.'), "Your passkey didn't work. Try again, or use another browser or device."],
     ['a browser without passkeys', new Error('Credential Management API not supported.'), "This browser can't use passkeys. Open Fundit in an up-to-date browser such as Chrome, Safari or Firefox."],
     ['a passkey already on this device', named('InvalidStateError'), 'This device already has a passkey for this account. Sign in with it instead.'],
     ['a passkey on the wrong site address', named('SecurityError'), "Passkeys can't be used on this page address. Open Fundit at its usual address and try again."],
@@ -243,6 +244,29 @@ describe('Circle, passkey and network errors', () => {
     ['a network that is down', new TypeError('Failed to fetch'), "Fundit couldn't reach the network. Check your connection and try again."],
     ['an HTTP request with no answer', Object.assign(new BaseError('HTTP request failed.'), { name: 'HttpRequestError' }), "Fundit couldn't reach the network. Check your connection and try again."],
   ])('explains %s', (_label, err, text) => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(explainError(err)).toBe(text)
+    vi.mocked(console.error).mockRestore()
+  })
+
+  // -32024 is not known to mean only a taken username, and explainError also runs on sends. Only Circle's text counts.
+  it('does not read a bare -32024 as a taken username', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(explainError(rpc(-32024, 'Something else entirely'))).not.toMatch(/username/)
+    vi.mocked(console.error).mockRestore()
+  })
+
+  // Support needs the raw error for a mapped text too, not only for the fallback. A cancel or a PlainError is not
+  // a failure, so it is not logged.
+  it('logs the raw error behind every mapped text, but not a cancel or a PlainError', () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const down = new TypeError('Failed to fetch')
+    explainError(down)
+    expect(log).toHaveBeenCalledWith(down)
+    log.mockClear()
+    explainError(named('NotAllowedError'))
+    explainError(new NeedsNetworkFee(1n))
+    expect(log).not.toHaveBeenCalled()
+    log.mockRestore()
   })
 })

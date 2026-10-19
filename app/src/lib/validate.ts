@@ -94,7 +94,7 @@ export function validateCampaign(input: CampaignInput): CampaignResult {
   if (rawBackup !== '') {
     const parsed = parseTypedAddress(rawBackup)
     if (!parsed.ok) {
-      errors.backup = parsed.error === 'typo' ? ADDRESS_TYPO : 'Enter a valid address (0x and 40 characters), or leave it empty.'
+      errors.backup = parsed.error === 'typo' ? ADDRESS_TYPO : 'Enter a valid address, 0x and 40 characters, or leave it empty.'
     } else if (input.sender && isAddressEqual(parsed.address, input.sender)) {
       errors.backup = 'Use a different address from your Fundit account.'
     } else {

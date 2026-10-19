@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { Link } from 'react-router'
 import type { Hex } from 'viem'
 import { EXPLORER_URL, TX_TIMEOUT_MS } from '../config'
-import { CANCELLED, explainError, needsAddMoney, PlainError } from '../lib/errors'
+import { CANCELLED, CHECK_FAILED, explainError, needsAddMoney, PlainError } from '../lib/errors'
 import { arcReceipts, type Call, type Sender, type TxResult, waitForResult } from '../lib/sender'
 import { ADD_MONEY_PATH } from '../lib/urls'
 import { Button, StatusBox } from './ui'
@@ -102,7 +102,8 @@ export function useTx(onSuccess: (hash: Hex) => void) {
     try {
       handle(await recheckResult(lastSender.current, hash, userop))
     } catch (err) {
-      setPhase({ kind: 'timeout', hash, userop, note: `We could not check it. ${explainError(err)}` })
+      console.error(err)
+      setPhase({ kind: 'timeout', hash, userop, note: CHECK_FAILED })
     } finally {
       inFlight.current = false
     }

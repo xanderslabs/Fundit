@@ -18,7 +18,7 @@ import type { CampaignView } from '../lib/campaigns'
 import { arcClient } from '../lib/clients'
 import { BALANCES_KEY, balancesKey, fetchAccountBalances } from '../lib/deposit'
 import { buildDonateCalls, donationBreakdown, fetchDonorFunds } from '../lib/donate'
-import { CANCELLED, explainError, needsAddMoney } from '../lib/errors'
+import { CANCELLED, CHECK_FAILED, explainError, needsAddMoney } from '../lib/errors'
 import { bpsToPercent, formatAmount, formatExact, parseAmount } from '../lib/format'
 import { addAtLeast } from '../lib/passkey'
 import type { TxResult } from '../lib/sender'
@@ -256,7 +256,8 @@ export function DonatePanel({ view }: { view: CampaignView }) {
       }
     } catch (err) {
       // The check itself failed, so the transaction is still unknown. Stay blocked rather than invite a second send.
-      setPhase({ kind: 'timeout', hash, approve, userop, note: `We could not check it. ${explainError(err)}` })
+      console.error(err)
+      setPhase({ kind: 'timeout', hash, approve, userop, note: CHECK_FAILED })
     } finally {
       inFlight.current = false
     }

@@ -42,7 +42,7 @@ function literals(code: string): string[] {
 const sentence = (t: string) => / /.test(t) && /[.?!]$/.test(t.trim())
 
 // Where error text lives: every sentence in lib/errors.ts, every PlainError, setError and error phase message,
-// and the UPPER_CASE text constants those use.
+// the UPPER_CASE text constants those use, field error assignments and text inside a .form-error element.
 function errorTexts(): { file: string; text: string }[] {
   const out: { file: string; text: string }[] = []
   for (const path of sourceFiles(SRC)) {
@@ -59,6 +59,10 @@ function errorTexts(): { file: string; text: string }[] {
     for (const m of code.matchAll(/(?:PlainError|setError)\(([^;]*?)\)\s*(?:$|;|\n)/gm)) add(literals(m[1]!))
     for (const m of code.matchAll(/kind: 'error', message: ([^}]*)\}/g)) add(literals(m[1]!))
     for (const m of code.matchAll(/^(?:export )?const [A-Z][A-Z_]+ =\s*\n?\s*(['"`][\s\S]*?['"`])\s*$/gm)) add(literals(m[1]!))
+    // Field and form errors: recipientError = ..., error: '...', errors.backup = ..., and JSX text in .form-error.
+    for (const m of code.matchAll(/\b\w*[Ee]rrors?(?:\.\w+)?\s*=\s*([^;\n]*(?:\n\s*[?:][^;\n]*)*)/g)) add(literals(m[1]!))
+    for (const m of code.matchAll(/\berror:\s*([^,}\n]*)/g)) add(literals(m[1]!))
+    for (const m of code.matchAll(/className="form-error"[^>]*>([^<]*)</g)) add([m[1]!.trim()])
   }
   return out
 }
