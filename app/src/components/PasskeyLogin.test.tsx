@@ -117,6 +117,20 @@ describe('Sign in', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
+  // People new to passkeys worry that Fundit holds their key. The line under the button says it never does, in both views.
+  it('says under the passkey button, in both views, that the passkey stays with the person', async () => {
+    const NOTE = 'Your passkey stays with you, on your device or in your password manager. Fundit can never see it or act for you.'
+    renderControl()
+    const user = await openSignIn()
+    const note = () => screen.getByText(NOTE)
+    expect(note().classList.contains('passkey-note')).toBe(true)
+    const signIn = screen.getByRole('button', { name: 'Sign in with your passkey' })
+    expect(signIn.compareDocumentPosition(note()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Create one now' }))
+    const create = screen.getByRole('button', { name: 'Create account' })
+    expect(create.compareDocumentPosition(note()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   // Someone else could add this passkey to their own account. A mapped account opens only after the person says it
   // is the one they recovered, and saying no gives them their own new account.
   it('asks before opening another account the passkey can open, and opens it on yes', async () => {

@@ -20,6 +20,9 @@ export function usernameError(name: string, submitted: boolean): string | null {
 
 type View = 'signin' | 'create'
 
+// Under the passkey button in both views: what a passkey is, for someone who has not used one.
+const PASSKEY_NOTE = 'Your passkey stays with you, on your device or in your password manager. Fundit can never see it or act for you.'
+
 const accountLabel = (o: AccountChoice['options'][number]) => `${shortAddress(o.address)} (balance ${formatAmount(o.usdc, 'USDC')})`
 
 // Another account lists this passkey as an owner (a recovered account, most likely). It opens only once the person
@@ -154,6 +157,7 @@ export function PasskeyLogin({ onDone, onLeave, headingId }: { onDone?: () => vo
           </Button>
         </form>
       )}
+      {!choice && <p className="passkey-note">{PASSKEY_NOTE}</p>}
       {busy && <p className="passkey-hint">Follow the steps your browser shows.</p>}
       {error && (
         <p className="form-error" role="alert">
