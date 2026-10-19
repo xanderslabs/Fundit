@@ -11,7 +11,8 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { campaignAbi } from '../abi/campaign'
 import { ARC_CHAIN_ID } from '../config'
-import { type ReceiptClient, waitForResult, wagmiSender } from './sender'
+import { type ReceiptClient, waitForResult } from './sender'
+import { wagmiSender } from './wagmiSender'
 
 const core = vi.hoisted(() => ({
   getChainId: vi.fn(),

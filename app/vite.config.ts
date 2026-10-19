@@ -38,8 +38,9 @@ export default defineConfig(({ command, mode }) => {
     // testnet.
     ...(mode === 'test' && { envDir: false as const }),
     build: {
-      // The AppKit vendor chunk (about 1,320 kB minified, 360 kB gzipped) all loads at start, so splitting
-      // it further would not shrink the first load. Raise the limit just above it.
+      // AppKit and wagmi load only when a wallet tab in Add money opens, and the passkey and bridge SDKs load
+      // on demand too. Their largest chunks are about 700 kB minified, none on the first load. Raise the
+      // limit above them.
       chunkSizeWarningLimit: 1400,
       rolldownOptions: {
         input: {
@@ -47,14 +48,14 @@ export default defineConfig(({ command, mode }) => {
           embed: fileURLToPath(new URL('./embed.html', import.meta.url)),
         },
         output: {
-          // Keep the wallet libraries in their own long-cached chunks, apart from app code. The $initial
-          // tag limits each group to modules on the first-load graph, so lazy AppKit views stay lazy.
+          // Keep the libraries on the first load in their own long-cached chunks, apart from app code. The
+          // $initial tag limits each group to modules on the first-load graph. AppKit and wagmi are not on it:
+          // they load with the Add money wallet tabs (components/WalletTabs.tsx).
           codeSplitting: {
             groups: [
-              { name: 'appkit', test: /node_modules[\\/](@reown|@walletconnect|lit|@lit|lit-html|lit-element)[\\/]/, tags: ['$initial'], priority: 1 },
-              { name: 'wagmi', test: /node_modules[\\/](wagmi|@wagmi|@tanstack)[\\/]/, tags: ['$initial'], priority: 2 },
+              { name: 'query', test: /node_modules[\\/]@tanstack[\\/]/, tags: ['$initial'], priority: 2 },
               { name: 'viem', test: /node_modules[\\/](viem|ox|abitype|@noble|@scure)[\\/]/, tags: ['$initial'], priority: 3 },
-              // React on its own, so the embed page (embed.html) shares it without loading the wagmi chunk.
+              // React on its own, so the embed page (embed.html) shares it without loading the query chunk.
               { name: 'react', test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/, tags: ['$initial'], priority: 4 },
             ],
           },

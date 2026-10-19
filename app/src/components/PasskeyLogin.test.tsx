@@ -18,7 +18,7 @@ const dismissBackupPrompt = vi.fn()
 const prompt = { value: false }
 
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: openWallet }) }))
-vi.mock('wagmi', () => ({ useDisconnect: () => ({ mutate: disconnect }) }))
+vi.mock('../lib/walletSession', () => ({ disconnectWallet: () => disconnect() }))
 vi.mock('../hooks/useName', () => ({ useName: () => ({ data: undefined }) }))
 vi.mock('../lib/passkey', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/passkey')>()),

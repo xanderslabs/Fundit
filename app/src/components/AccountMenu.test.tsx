@@ -17,7 +17,7 @@ const confirmLeave = vi.fn(() => true)
 
 // AppKit is mocked only to prove that nothing here opens it. It opens only inside Add money.
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: openWallet }) }))
-vi.mock('wagmi', () => ({ useDisconnect: () => ({ mutate: disconnect }) }))
+vi.mock('../lib/walletSession', () => ({ disconnectWallet: () => disconnect() }))
 vi.mock('../hooks/useName', () => ({ useName: () => ({ data: undefined }) }))
 vi.mock('../lib/passkey', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/passkey')>()),

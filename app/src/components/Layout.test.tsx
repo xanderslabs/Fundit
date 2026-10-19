@@ -12,7 +12,7 @@ vi.mock('../config', async (importOriginal) => ({
   },
 }))
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: () => {} }) }))
-vi.mock('wagmi', () => ({ useDisconnect: () => ({ mutate: () => {} }) }))
+vi.mock('../lib/walletSession', () => ({ disconnectWallet: () => {} }))
 
 afterEach(() => {
   cleanup()

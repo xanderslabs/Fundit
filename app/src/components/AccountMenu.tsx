@@ -1,9 +1,9 @@
 import { type KeyboardEvent, type Ref, type RefObject, useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import type { Address } from 'viem'
-import { useDisconnect } from 'wagmi'
 import { dismissBackupPrompt, logoutPasskey, readPasskeyUsername, type StoredPasskey, useBackupPrompt, usePasskeySession } from '../lib/passkey'
 import { ADD_MONEY_PATH } from '../lib/urls'
+import { disconnectWallet } from '../lib/walletSession'
 import { AddBackupPasskey, confirmLeave } from './AddBackupPasskey'
 import { Name } from './Name'
 import { PasskeyLogin } from './PasskeyLogin'
@@ -136,13 +136,12 @@ export function AccountControl() {
 // other way out. A wallet connected to add money goes too; with none connected that does nothing. True when the
 // person signed out.
 export function useSignOut(): () => boolean {
-  const { mutate: disconnect } = useDisconnect()
   return useCallback(() => {
     if (!confirmLeave()) return false
-    disconnect()
+    disconnectWallet()
     logoutPasskey()
     return true
-  }, [disconnect])
+  }, [])
 }
 
 function AccountMenu({ address, onSignedOut }: { address: Address; onSignedOut: () => void }) {

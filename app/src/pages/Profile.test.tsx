@@ -36,10 +36,10 @@ vi.mock('../hooks/useSender', () => ({ useSender: () => state.sender }))
 const openWallet = vi.hoisted(() => vi.fn())
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: openWallet }) }))
 const disconnect = vi.hoisted(() => vi.fn())
+vi.mock('../lib/walletSession', () => ({ disconnectWallet: disconnect }))
 vi.mock('wagmi', () => ({
   useConfig: () => ({}),
   useConnection: () => ({ isConnected: false }),
-  useDisconnect: () => ({ mutate: disconnect }),
 }))
 // The lists load from Arc; lib/activity.test.ts and lib/campaigns.test.ts cover the reads.
 vi.mock('../lib/clients', () => ({ arcClient: {} }))

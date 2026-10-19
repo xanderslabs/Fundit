@@ -1,0 +1,27 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { disconnectWallet } from './walletSession'
+
+// Loading ../wagmi creates AppKit. Sign out must not do that for a person who never connected a wallet here.
+const wallet = vi.hoisted(() => ({ loads: 0, disconnect: vi.fn(async () => {}) }))
+vi.mock('../wagmi', () => {
+  wallet.loads++
+  return { disconnectWallet: wallet.disconnect }
+})
+
+afterEach(() => localStorage.clear())
+
+describe('disconnectWallet', () => {
+  it('loads no wallet code when this browser never connected a wallet', async () => {
+    disconnectWallet()
+    await new Promise((r) => setTimeout(r, 0))
+    expect(wallet.loads).toBe(0)
+    expect(wallet.disconnect).not.toHaveBeenCalled()
+  })
+
+  // A wallet connected on an earlier visit would come back in Add money for the next person on this browser.
+  it('disconnects a wallet this browser remembers', async () => {
+    localStorage.setItem('wagmi.recentConnectorId', '"io.metamask"')
+    disconnectWallet()
+    await vi.waitFor(() => expect(wallet.disconnect).toHaveBeenCalledTimes(1))
+  })
+})

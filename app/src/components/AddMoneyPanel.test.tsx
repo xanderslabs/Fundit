@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router'
 import { type Address, decodeFunctionData, type Hex, UserRejectedRequestError } from 'viem'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -48,6 +49,7 @@ const openWallet = vi.hoisted(() => vi.fn())
 const disconnect = vi.hoisted(() => vi.fn())
 // The Fundit account is signed in. state.external is a regular wallet connected here to add money from.
 vi.mock('wagmi', () => ({
+  WagmiProvider: ({ children }: { children: ReactNode }) => children,
   useConfig: () => ({}),
   useConnection: () =>
     state.external
@@ -56,6 +58,8 @@ vi.mock('wagmi', () => ({
   useDisconnect: () => ({ mutate: disconnect }),
 }))
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: openWallet }) }))
+// The real setup creates AppKit. The wallet tabs only need its config, which the wagmi mocks above ignore.
+vi.mock('../wagmi', () => ({ wagmiConfig: {} }))
 // Bridge Kit itself is covered in lib/bridge.test.ts. Here only the panel's busy state matters.
 const bridgeKit = vi.hoisted(() => ({ donateCrossChain: vi.fn(), estimateCrossChain: vi.fn() }))
 vi.mock('../lib/bridge', async (importOriginal) => ({
@@ -98,11 +102,16 @@ function renderPage() {
   )
 }
 
-async function openWalletTab() {
+// The wallet tabs load on first open, so this waits until the tab has its content.
+async function openTab(name: 'From a wallet' | 'From another chain') {
   const user = userEvent.setup()
-  await user.click(screen.getByRole('tab', { name: 'From a wallet' }))
+  await user.click(screen.getByRole('tab', { name }))
+  const panel = screen.getByRole('tabpanel', { name })
+  await waitFor(() => expect(panel.textContent).not.toContain('Loading...'), { timeout: 5000 })
   return user
 }
+
+const openWalletTab = () => openTab('From a wallet')
 
 async function fillDeposit(amount: string) {
   const user = await openWalletTab()
@@ -179,8 +188,7 @@ describe('AddMoneyPanel', () => {
     bridgeKit.estimateCrossChain.mockResolvedValue(10_000n)
     bridgeKit.donateCrossChain.mockReturnValue(new Promise(() => {}))
     renderPage()
-    const user = userEvent.setup()
-    await user.click(screen.getByRole('tab', { name: 'From another chain' }))
+    const user = await openTab('From another chain')
     await user.type(screen.getByLabelText('Amount'), '5')
     await screen.findByText(/^At least /)
     await user.click(screen.getByRole('button', { name: 'Bridge USDC' }))
@@ -295,7 +303,7 @@ describe('AddMoneyPanel', () => {
       JSON.stringify([{ kind: 'submitted', id: 's-1', campaign: ACCOUNT, srcDomain: 6, amount: '25', createdAt: Date.now() }]),
     )
     renderPage()
-    await userEvent.setup().click(screen.getByRole('tab', { name: 'From another chain' }))
+    await openTab('From another chain')
     expect(
       screen.getByText(
         'A transfer to your Fundit account is still on its way. Wait for it to arrive before you send another. Follow it in the Account tab.',

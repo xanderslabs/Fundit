@@ -1,8 +1,6 @@
-import { type Config, getChainId, sendTransaction, switchChain } from '@wagmi/core'
 import { type Address, type Hex, type TransactionReceipt, WaitForTransactionReceiptTimeoutError } from 'viem'
-import { ARC_CHAIN_ID, TX_TIMEOUT_MS } from '../config'
 import { arcClient } from './clients'
-import { explainError, isUserRejection } from './errors'
+import { explainError } from './errors'
 
 // No value field: Arc amounts always move through the ERC-20 interface, never msg.value.
 export type Call = { to: Address; data: Hex }
@@ -97,40 +95,4 @@ export async function waitForResult(client: ReceiptClient, hash: Hex, timeoutMs:
 // of gas. 25% on top covers that gap with room to spare. Used for wallet transactions and passkey call gas.
 export function withGasMargin(estimate: bigint): bigint {
   return (estimate * 125n) / 100n
-}
-
-export function wagmiSender(config: Config, address: Address): Sender {
-  return {
-    kind: 'eoa',
-    address,
-    async send(calls, opts) {
-      if (calls.length === 0) throw new Error('No calls to send')
-      if (getChainId(config) !== ARC_CHAIN_ID) {
-        try {
-          await switchChain(config, { chainId: ARC_CHAIN_ID })
-        } catch (err) {
-          if (isUserRejection(err)) return { status: 'rejected', completed: 0 }
-          throw err
-        }
-      }
-      let last: TxResult | null = null
-      for (const [completed, call] of calls.entries()) {
-        // A revert here throws before anything is sent, like a wallet's own estimate would.
-        const gas = withGasMargin(await arcClient.estimateGas({ account: address, to: call.to, data: call.data }))
-        let hash: Hex
-        try {
-          // chainId makes wagmi refuse to send if the wallet is not on Arc.
-          hash = await sendTransaction(config, { account: address, chainId: ARC_CHAIN_ID, to: call.to, data: call.data, gas })
-        } catch (err) {
-          if (isUserRejection(err)) return { status: 'rejected', completed }
-          throw err
-        }
-        opts?.onHash?.(hash, completed)
-        last = await waitForResult(arcReceipts, hash, TX_TIMEOUT_MS)
-        if (last.status !== 'success') return { ...last, completed }
-      }
-      // calls is not empty, so the loop ran and every call succeeded.
-      return last!
-    },
-  }
 }
