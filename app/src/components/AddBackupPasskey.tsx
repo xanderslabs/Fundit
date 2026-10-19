@@ -109,7 +109,7 @@ export function AddBackupPasskey({ stored, onLater, onDone, headingId, inDialog 
     }
   }, [stored.address])
 
-  // The Show button goes away when the words appear, so focus moves to their explanation.
+  // The Show button goes away when the words appear, so focus moves to the explanation above them.
   const wordsIntro = useRef<HTMLParagraphElement>(null)
   useEffect(() => {
     if (phrase !== null) wordsIntro.current?.focus()
@@ -197,10 +197,6 @@ export function AddBackupPasskey({ stored, onLater, onDone, headingId, inDialog 
   if (phrase !== null) {
     body = (
       <>
-        <p ref={wordsIntro} tabIndex={-1}>
-          Your recovery key is these 12 words. Write them down in this order and keep them somewhere safe. Anyone who has these words can control
-          your account, so never share them. Fundit cannot show them again.
-        </p>
         <ol className="recovery-phrase">
           {phrase.split(' ').map((word, i) => (
             <li key={i}>{word}</li>
@@ -276,9 +272,9 @@ export function AddBackupPasskey({ stored, onLater, onDone, headingId, inDialog 
       <h2 id={id} className={inDialog ? 'ui-dialog-title' : undefined}>
         Add a recovery key
       </h2>
-      <p>
-        If you lose every device with your passkey, nobody can recover your Fundit account. A recovery key is 12 words you write down and keep
-        safe. Anyone with these words can control your account.
+      <p ref={wordsIntro} tabIndex={-1}>
+        Write these 12 words down in order and keep them somewhere safe. If you lose your passkey, they are the only way back into your account.
+        Anyone who has them can control your account, and Fundit can't show them again.
       </p>
       {body}
       {sending && <p className="backup-hint">Follow the steps your browser shows.</p>}

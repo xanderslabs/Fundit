@@ -287,7 +287,7 @@ describe('Backup prompt after sign-up', () => {
     prompt.value = true
     renderControl()
     const dialog = screen.getByRole('dialog', { name: 'Add a recovery key' })
-    expect(dialog.textContent).toContain('If you lose every device with your passkey, nobody can recover your Fundit account.')
+    expect(dialog.textContent).toContain('Write these 12 words down in order and keep them somewhere safe.')
     await userEvent.setup().click(await screen.findByRole('button', { name: 'Later' }))
     expect(dismissBackupPrompt).toHaveBeenCalledTimes(1)
   })

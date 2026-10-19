@@ -83,7 +83,7 @@ describe('AddBackupPasskey', () => {
     expect(screen.getByRole('heading', { name: 'Add a recovery key' })).toBeTruthy()
     expect(
       screen.getByText(
-        'If you lose every device with your passkey, nobody can recover your Fundit account. A recovery key is 12 words you write down and keep safe. Anyone with these words can control your account.',
+        "Write these 12 words down in order and keep them somewhere safe. If you lose your passkey, they are the only way back into your account. Anyone who has them can control your account, and Fundit can't show them again.",
       ),
     ).toBeTruthy()
     expect(await screen.findByRole('button', { name: 'Show my recovery key' })).toBeTruthy()
@@ -97,7 +97,9 @@ describe('AddBackupPasskey', () => {
     const user = userEvent.setup()
     await showWords(user)
     expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toEqual(WORDS)
-    expect(screen.getByText(/Anyone who has these words can control your account/)).toBeTruthy()
+    // One warning, said once: the words control the account.
+    expect(screen.getAllByText(/can control your account/)).toHaveLength(1)
+    expect(document.activeElement?.textContent).toMatch(/^Write these 12 words down in order/)
     expect(addBackupPasskey).not.toHaveBeenCalled()
 
     await confirmWords(user, true)
