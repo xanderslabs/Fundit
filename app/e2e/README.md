@@ -41,7 +41,7 @@ The links are also kept as `tx` annotations on each test.
   | Variable | Value |
   | --- | --- |
   | `VITE_ARC_NETWORK` | `testnet`. The suite refuses to run with any other value. |
-  | `VITE_CIRCLE_CLIENT_KEY` | A Circle client key whose allowed domain is `localhost`. |
+  | `VITE_CIRCLE_CLIENT_KEY` | A Circle client key whose allowed domain is `localhost`. Not needed with `E2E_BASE_URL`. |
   | `VITE_FACTORY_ADDRESS` | The testnet factory. |
   | `VITE_FACTORY_DEPLOY_BLOCK` | The block the testnet factory was deployed in. |
 
@@ -51,9 +51,15 @@ The links are also kept as `tx` annotations on each test.
   account that holds testnet USDC. Get USDC for it from the [Circle faucet](https://faucet.circle.com) on Arc
   Testnet. The file is gitignored (`.env.*`). The key is read only in the Node process, never sent to the
   page and never printed. Never use a key that holds mainnet funds, and never use the factory deployer.
-- Free port `5174` on `localhost`.
+- Free port `5174` on `localhost`, for a local run only.
 
 ## Run
+
+The suite has two targets. `E2E_BASE_URL` picks one.
+
+### Against the local dev server
+
+Leave `E2E_BASE_URL` unset:
 
 ```shell
 npm --prefix app run e2e
@@ -61,6 +67,21 @@ npm --prefix app run e2e
 
 Playwright starts the Vite dev server on `http://localhost:5174`, which reads `app/.env.local`. Use
 `localhost`, never `127.0.0.1`: Circle checks the page hostname and accepts only `localhost` for this key.
+This works only while a Circle client key lists `localhost` as its passkey domain and allowed domain.
+
+### Against a live site
+
+Set `E2E_BASE_URL` to the site's origin:
+
+```shell
+E2E_BASE_URL=https://fundit.fun npm --prefix app run e2e
+```
+
+Playwright starts no local server and opens that site. The site uses its own client key, so the passkeys are
+bound to its domain (`fundit.fun`), and `VITE_CIRCLE_CLIENT_KEY` in `app/.env.local` is not needed. The suite
+still reads `VITE_ARC_NETWORK` and the factory values from `app/.env.local` in Node, so they must match the
+site: `testnet` and the testnet factory. Run it only against a site built for Arc testnet. The funder pays
+for the run in the same way as a local run.
 
 ## Cost
 

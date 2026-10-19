@@ -1,9 +1,15 @@
 import { defineConfig, devices } from '@playwright/test'
 
 // Runs against Arc testnet with real Circle passkeys (a virtual authenticator), so there is one worker and
-// one serial spec. Circle accepts only the hostname localhost for the localhost client key, never 127.0.0.1.
+// one serial spec.
+//
+// Two targets (see e2e/README.md):
+// - E2E_BASE_URL unset: Playwright starts the dev server on localhost, which reads app/.env.local. Circle accepts
+//   only the hostname localhost for the localhost client key, never 127.0.0.1.
+// - E2E_BASE_URL set, for example https://fundit.fun: no local server starts, and the suite runs against that
+//   site and its own client key. The passkeys are bound to that site's domain.
 const PORT = 5174
-const BASE_URL = `http://localhost:${PORT}`
+const BASE_URL = process.env.E2E_BASE_URL || `http://localhost:${PORT}`
 
 export default defineConfig({
   testDir: './e2e',
@@ -20,10 +26,12 @@ export default defineConfig({
     ...devices['Desktop Chrome'],
   },
   // The dev server reads app/.env.local (testnet network, localhost client key, testnet factory).
-  webServer: {
-    command: `npx vite --port ${PORT} --strictPort --host localhost`,
-    url: BASE_URL,
-    reuseExistingServer: false,
-    timeout: 60_000,
-  },
+  webServer: process.env.E2E_BASE_URL
+    ? undefined
+    : {
+        command: `npx vite --port ${PORT} --strictPort --host localhost`,
+        url: BASE_URL,
+        reuseExistingServer: false,
+        timeout: 60_000,
+      },
 })

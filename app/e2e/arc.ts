@@ -22,7 +22,10 @@ export function checkEnv(): { factory: Address; deployBlock: bigint } {
   if (env.VITE_ARC_NETWORK !== 'testnet') {
     throw new Error('The e2e suite runs on Arc testnet only. Set VITE_ARC_NETWORK=testnet in app/.env.local.')
   }
-  if (!env.VITE_CIRCLE_CLIENT_KEY) throw new Error('Set VITE_CIRCLE_CLIENT_KEY (the localhost client key) in app/.env.local.')
+  // A live site (E2E_BASE_URL) uses its own client key. Only the local dev server needs the localhost one.
+  if (!process.env.E2E_BASE_URL && !env.VITE_CIRCLE_CLIENT_KEY) {
+    throw new Error('Set VITE_CIRCLE_CLIENT_KEY (the localhost client key) in app/.env.local.')
+  }
   if (!env.VITE_FACTORY_ADDRESS || !env.VITE_FACTORY_DEPLOY_BLOCK) {
     throw new Error('Set VITE_FACTORY_ADDRESS and VITE_FACTORY_DEPLOY_BLOCK (the testnet factory) in app/.env.local.')
   }

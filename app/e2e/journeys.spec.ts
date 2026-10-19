@@ -130,10 +130,11 @@ test('signs up with a passkey', async () => {
   console.log(`Fundit account ${account}: ${NET.explorerUrl}/address/${account}`)
   await expect(page.getByRole('banner').getByRole('button', { name: username, exact: true })).toBeVisible()
 
-  // The passkey is on the virtual authenticator, bound to localhost (Circle's rpId for this client key).
+  // The passkey is on the virtual authenticator, bound to the site's hostname (Circle's rpId for its client key):
+  // localhost for the local dev server, fundit.fun for E2E_BASE_URL=https://fundit.fun.
   const creds = await passkeys.credentials()
   expect(creds).toHaveLength(1)
-  expect(creds[0]!.rpId).toBe('localhost')
+  expect(creds[0]!.rpId).toBe(new URL(page.url()).hostname)
   // A new account has no code and no money until its first user operation.
   expect(await arc.getCode({ address: account })).toBeUndefined()
   expect(await usdcBalance(account)).toBe(0n)
