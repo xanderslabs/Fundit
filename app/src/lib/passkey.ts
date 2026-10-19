@@ -777,9 +777,15 @@ export function addAtLeast(reserve: bigint, what = 'It pays the network fee.'): 
   return `Add at least ${formatAmount(reserve, 'USDC')} to your Fundit account first. ${what}`
 }
 
-// True when the account holds enough USDC to pay the backup's network fee.
+// The backup button waits for canPayBackupGas. After this long it stops waiting.
+export const FUNDS_CHECK_TIMEOUT_MS = 15_000
+
+// True when the account holds enough USDC to pay the backup's network fee. A check that takes longer than
+// FUNDS_CHECK_TIMEOUT_MS answers true, so the button never stays disabled: addBackupPasskey checks the funds again.
 export async function canPayBackupGas(address: Address): Promise<boolean> {
-  const [usdc, reserve] = await Promise.all([usdcOf(address), passkeyReserve(address)])
+  const res = await withTimeout(Promise.all([usdcOf(address), passkeyReserve(address)]), FUNDS_CHECK_TIMEOUT_MS)
+  if (res === 'timeout') return true
+  const [usdc, reserve] = res
   return usdc >= reserve
 }
 

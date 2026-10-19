@@ -144,7 +144,7 @@ E2E_BASE_URL=https://fundit.fun npm --prefix app run e2e:recovery
 ```
 
 It signs up a new throwaway account (`e2e-recover-<milliseconds>`) with a fresh virtual passkey, funds it
-with 1.5 USDC from the funder and saves a recovery key. Then it signs out, clears storage and moves to a new
+with 2.5 USDC from the funder and saves a recovery key. Then it signs out, clears storage and moves to a new
 browser context with a new virtual authenticator, so the first passkey is gone. It recovers the account with
 the 12 words, reloads and sends 0.01 USDC to the funder, signs out and signs in again with the new passkey.
 The account address must stay the same and its balance must not be zero. At the end it sends what is left

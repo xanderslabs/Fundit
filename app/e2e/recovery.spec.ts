@@ -12,8 +12,10 @@ import { addVirtualAuthenticator } from './passkey'
 // e2e/README.md). Each run signs up one new account and sends what is left back to the funder at the end.
 test.describe.configure({ mode: 'serial' })
 
-// The first operation (saving the recovery key) also deploys the account, about 1 USDC at Circle's prices.
-const FIRST_FUNDING = parseUnits('1.5', 6)
+// The first operation (saving the recovery key) also deploys the account. Before it, the app asks for the fallback
+// reserve of a new account: 1.6M gas x Circle's fee x 1.25, which is 1.78 USDC at 890 gwei (2026-10-19). With
+// 1.5 USDC the page asked to add money first. The rest goes back to the funder at the end.
+const FIRST_FUNDING = parseUnits('2.5', 6)
 // What the account must hold before the recovery: the recovery operation's reserve and the tiny send after it.
 const BEFORE_RECOVERY = parseUnits('1', 6)
 const TINY_SEND = '0.01'
@@ -129,7 +131,11 @@ test('saves a recovery key and keeps its words', async () => {
   const banner = page.getByRole('region', { name: 'Recovery key', exact: true })
   await banner.getByRole('button', { name: 'Save now' }).click()
   const backup = page.getByRole('region', { name: 'Add a recovery key' })
-  await backup.getByRole('button', { name: 'Show my recovery key' }).click({ timeout: 45_000 })
+  const show = backup.getByRole('button', { name: 'Show my recovery key' })
+  const short = backup.getByText('Add a little money first.')
+  await expect(show.and(page.locator(':enabled')).or(short)).toBeVisible({ timeout: 45_000 })
+  if (await short.count()) throw new Error(`The page asks to add money first: raise FIRST_FUNDING (account holds ${formatUnits(await usdcBalance(account), 6)} USDC).`)
+  await show.click()
   const phrase = backup.locator('ol.recovery-phrase li')
   await expect(phrase).toHaveCount(12)
   words = await phrase.allInnerTexts()

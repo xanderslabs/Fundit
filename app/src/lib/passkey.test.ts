@@ -6,11 +6,13 @@ import { explainError, NeedsNetworkFee } from './errors'
 import { useSender } from '../hooks/useSender'
 import {
   addBackupPasskey,
+  canPayBackupGas,
   canReuseSignedInPasskey,
   checkPendingBackup,
   clearPasskeySession,
   discardPendingBackup,
   dismissBackupPrompt,
+  FUNDS_CHECK_TIMEOUT_MS,
   checkPendingRecovery,
   discardPendingRecovery,
   isValidRecoveryPhrase,
@@ -685,6 +687,40 @@ describe('backup from the chain', () => {
     await vi.advanceTimersByTimeAsync(1)
     expect(await outcome).toBe('gave up')
     expect(flag()).toBeNull()
+  })
+
+  // The backup button waits for this answer. A read that never answers must not keep it disabled for good: after the
+  // timeout the person may try, and the send checks the funds again.
+  it('lets the backup start when the funds check hangs past its timeout', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    owners.hang = true
+    try {
+      const outcome = canPayBackupGas(stored.address)
+      let settled = false
+      void outcome.then(() => (settled = true))
+      await vi.advanceTimersByTimeAsync(FUNDS_CHECK_TIMEOUT_MS - 1)
+      expect(settled).toBe(false)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(await outcome).toBe(true)
+    } finally {
+      owners.hang = false
+    }
+  })
+
+  // The live e2e case: a new account holding 1.50 USDC while Circle's fee is about 890 gwei. Its first operation
+  // also deploys it, so the reserve is 1.6M gas x 890 gwei x 1.25 = 1.78 USDC: the page asks to add money first.
+  it('says a new account holding less than its first operation reserve cannot pay yet', async () => {
+    kit.sdk.getUserOperationGasPrice.mockResolvedValue(tiers(890_226_250_000n))
+    balance.value = 1_500_000n
+    try {
+      expect(await passkeyReserve(stored.address)).toBe(1_790_000n)
+      expect(await canPayBackupGas(stored.address)).toBe(false)
+      balance.value = 1_790_000n
+      expect(await canPayBackupGas(stored.address)).toBe(true)
+    } finally {
+      balance.value = 1_000_000n
+      kit.sdk.getUserOperationGasPrice.mockResolvedValue(tiers(1_000_000_000_000n))
+    }
   })
 
   // A recovery key added in another browser leaves no flag here. The account's owners on Arc are the record,
