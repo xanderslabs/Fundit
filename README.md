@@ -209,6 +209,12 @@ From `contracts/deployments/arc-testnet.json`. The explorer is `https://explorer
 
 - Deploy block: `67870064` ([deploy transaction](https://explorer.testnet.arc.io/tx/0xbf0bbbbb106dbca7294a4e72a3ab1c153519b6c1269589684a45f55aaf80a728)). Set `VITE_FACTORY_DEPLOY_BLOCK` to this
   value.
+- Source verification: both contracts are verified on the Arc testnet explorer (Blockscout) since
+  2026-10-19. See the
+  [`CampaignFactory`](https://explorer.testnet.arc.io/address/0x6890D40a9A472D0d05aDb5938D85B07059ad54ab?tab=contract)
+  and
+  [`Campaign` implementation](https://explorer.testnet.arc.io/address/0xC7109CAAA5375EE740b95a3DeE52c4C92A02Ba8E?tab=contract)
+  contract tabs.
 - Fees: 1% on donations and 1% on withdrawals, the same as on mainnet.
 
 ### External contracts
