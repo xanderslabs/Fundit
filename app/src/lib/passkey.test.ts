@@ -103,6 +103,8 @@ vi.mock('./passkeyKit', async () =>
 const balance = vi.hoisted(() => ({ value: 1_000_000n }))
 // Token balances for single accounts (lower case), in place of balance.value for that holder.
 const held = vi.hoisted(() => new Map<string, bigint>())
+// Accounts (lower case) whose code reads once, then reads as missing, with the count of reads so far.
+const flaky = vi.hoisted(() => new Map<string, number>())
 // Owners data for single accounts (lower case), in place of owners.data for that account.
 const ownersFor = vi.hoisted(() => new Map<string, unknown[]>())
 // The Circle factory's getAddress on Arc: the passkey's own account, worked out on chain from its public key.
@@ -135,8 +137,14 @@ vi.mock('./clients', () => ({
       const only = ownersFor.get(holder)
       return only ? [[], only, 1n] : [owners.ids, owners.data, 1n]
     },
-    getCode: ({ address }: { address: string }) =>
-      owners.hang ? new Promise<undefined>(() => {}) : Promise.resolve(code.get(address.toLowerCase())),
+    getCode: ({ address }: { address: string }) => {
+      if (owners.hang) return new Promise<undefined>(() => {})
+      const a = address.toLowerCase()
+      // A node that answers code once, then none, for an account listed in flaky.
+      const seen = (flaky.get(a) ?? 0) + 1
+      if (flaky.has(a)) flaky.set(a, seen)
+      return Promise.resolve(flaky.has(a) && seen > 1 ? undefined : code.get(a))
+    },
   },
 }))
 vi.mock('wagmi', () => ({
@@ -1128,6 +1136,21 @@ describe('recoverWithPhrase', () => {
       expect(Object.keys(localStorage).filter((k) => k.startsWith(storageKey('passkey.recovered.')))).toEqual([])
     })
 
+    // The node reports no code for the real account on the owner read. Treating that as "not an owner" would leave
+    // only the attacker's account and recover into it.
+    it('refuses when an owner read finds no code, instead of dropping that account', async () => {
+      kit.sdk.getAddressMapping.mockResolvedValue([{ walletAddress: ATTACKER }, { walletAddress: RECOVERED }])
+      flaky.set(RECOVERED.toLowerCase(), 0)
+      try {
+        await expect(recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).rejects.toThrow(REFUSE)
+      } finally {
+        flaky.clear()
+      }
+      expect(kit.sdk.toWebAuthnCredential).not.toHaveBeenCalled()
+      expect(kit.executeRecovery).not.toHaveBeenCalled()
+      expect(Object.keys(localStorage).filter((k) => k.startsWith(storageKey('passkey.recovered.')))).toEqual([])
+    })
+
     it('refuses with the plain message when the owners cannot be read', async () => {
       kit.sdk.getAddressMapping.mockResolvedValue([{ walletAddress: ATTACKER }, { walletAddress: RECOVERED }])
       owners.fail = true
@@ -1162,6 +1185,14 @@ describe('recoverWithPhrase', () => {
     } finally {
       ownersFor.clear()
     }
+  })
+
+  // Several mapped accounts, none deployed: no account holds the key on chain, so none can be recovered.
+  it('says no account was found when none of several mapped accounts is deployed', async () => {
+    code.clear()
+    kit.sdk.getAddressMapping.mockResolvedValue([{ walletAddress: RECOVERED }, { walletAddress: '0x00000000000000000000000000000000000000Cd' }])
+    await expect(recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).rejects.toThrow("We couldn't find a Fundit account for this recovery key.")
+    expect(kit.sdk.toWebAuthnCredential).not.toHaveBeenCalled()
   })
 
   it('refuses when no Fundit account uses this recovery key', async () => {

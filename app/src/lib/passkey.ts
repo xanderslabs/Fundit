@@ -36,7 +36,6 @@ const ARC_CHAIN_HEX = numberToHex(ARC_CHAIN.id)
 const KEY = storageKey('passkey')
 export const PASSKEY_EVENT = 'fundit:passkey'
 
-
 export type PasskeySession = { address: Address; username?: string }
 export type StoredPasskey = { address: Address; credentialId: string }
 
@@ -1101,17 +1100,25 @@ async function signedInOwner(account: Address, recoveryAddress: Address): Promis
   }
 }
 
+const NO_ACCOUNT = "We couldn't find a Fundit account for this recovery key. Check the words and try again."
 const SEVERAL_ACCOUNTS = 'We found more than one account for this recovery key. Contact hello@fundit.fun so we can help you safely.'
 
 // The recovery key's address is public on chain once it is registered, and a pending registration can be seen and
 // front-run. Anyone can add the key as an owner of their own account (addOwners needs no signature from the key),
 // even in an earlier block, and map it at Circle. Fundit never registers one key on two accounts, so of the deployed
 // accounts, more than one that lists the key as an owner on Arc only comes from an attack: refuse, never pick. A
-// failed read refuses too.
+// failed read refuses too, and so does a read that finds no code: these accounts were just seen deployed, and
+// dropping one on a node's empty answer could leave only the attacker's.
 async function ownedByKey(wallets: Address[], key: Address): Promise<Address[]> {
   let owned: boolean[]
   try {
-    owned = await Promise.all(wallets.map(async (w) => !!(await readOwners(w))?.ownersData.some((o) => same(o.addr, key))))
+    owned = await Promise.all(
+      wallets.map(async (w) => {
+        const owners = await readOwners(w)
+        if (!owners) throw new Error('No code on a deployed account')
+        return owners.ownersData.some((o) => same(o.addr, key))
+      }),
+    )
   } catch {
     throw new PlainError(SEVERAL_ACCOUNTS)
   }
@@ -1139,13 +1146,15 @@ export async function recoverWithPhrase(p: { phrase: string; username?: string }
   const { transport, client } = clients(lib, key)
 
   let wallets = await mappedWallets(sdk, client, { type: sdk.OwnerIdentifierType.EOA, identifier: { address: recovery.address } })
-  if (wallets.length === 0) throw new PlainError("We couldn't find a Fundit account for this recovery key. Check the words and try again.")
+  if (wallets.length === 0) throw new PlainError(NO_ACCOUNT)
   if (wallets.length > 1) {
     // Circle can also hold a wallet made for the key itself. The account that added the key is deployed on Arc.
     const deployed = await Promise.all(wallets.map(async (w) => ((await arcClient.getCode({ address: w })) ?? '0x') !== '0x'))
     wallets = wallets.filter((_, i) => deployed[i])
+    if (wallets.length === 0) throw new PlainError(NO_ACCOUNT)
     if (wallets.length > 1) wallets = await ownedByKey(wallets, recovery.address)
-    if (wallets.length !== 1) throw new PlainError('This recovery key belongs to more than one account, so Fundit cannot pick one. Sign in with a passkey for the account instead.')
+    // Several deployed accounts map the key and none lists it as an owner: not a state Fundit makes.
+    if (wallets.length !== 1) throw new PlainError(SEVERAL_ACCOUNTS)
   }
   const account = wallets[0]!
 
