@@ -316,7 +316,7 @@ function SendOutForm({ sender }: { sender: Sender }) {
           startOverWarning="The earlier transfer may still go through. If it does and you send again, the money goes out twice. Start over anyway?"
         />
         {tx.phase.kind !== 'timeout' && (
-          <Button type="submit" disabled={!canSubmit}>
+          <Button type="submit" block disabled={!canSubmit}>
             {tx.busy ? 'Sending...' : 'Send'}
           </Button>
         )}

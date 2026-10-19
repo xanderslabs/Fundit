@@ -203,11 +203,13 @@
   gap: var(--space-2);
 }
 
-/* TxStatus takes no room in the form's gaps while it is empty. */
+/* While empty, TxStatus stays in the accessibility tree (so its first message is announced) but takes no room
+   in the form's gaps. Never display: none. */
 .tx-status:empty {
-  display: none;
+  position: absolute;
 }
 
+.form > p,
 .form-status > p {
   margin: 0;
 }

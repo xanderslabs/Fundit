@@ -14,11 +14,6 @@
   letter-spacing: var(--tracking-heading);
 }
 
-/* In a dialog, the title leaves room for the Close button, as the dialog's own title does. */
-.ui-dialog .share-title {
-  padding-right: var(--space-7);
-}
-
 /* The message the network links prefill, shown so the person knows what they will post. */
 .share-message {
   margin: 0;

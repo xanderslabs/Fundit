@@ -15,6 +15,8 @@ function classes({ variant = 'primary', size = 'md', block = false }: Look, extr
 
 type ButtonProps = Look & ComponentPropsWithRef<'button'> & { loading?: boolean }
 
+// Width rule: the one action that completes a card's form or task is block (full width), set with the prop;
+// supporting actions (Max, Remove, Check again, Dismiss) keep their natural width.
 // A busy button is disabled, so a send cannot go out twice. type defaults to "button" so a button in a form
 // never submits it by accident.
 export function Button({ variant, size, block, loading = false, disabled, className, type = 'button', children, ...rest }: ButtonProps) {

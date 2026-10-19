@@ -282,7 +282,6 @@ describe('ui components', () => {
     expect(readFileSync('src/components/PasskeyLogin.css', 'utf8')).not.toMatch(/passkey-title|h2/)
   })
 
-  // A field that cannot be changed must look different, not only refuse input.
   // A form error that appears while the person types must be read out, and a quiet one must not interrupt.
   it('Field alert gives the error role alert, and only then', () => {
     const { rerender } = render(
@@ -302,6 +301,7 @@ describe('ui components', () => {
     expect(screen.getByLabelText('Recipient').getAttribute('aria-describedby')).toBe('to-error')
   })
 
+  // A field that cannot be changed must look different, not only refuse input.
   it('Field shows a disabled control as disabled', () => {
     const rule = parse(css('Field.css')).rules.find((r) => r.selector.includes(':disabled'))
     expect(rule?.selector).toMatch(/\.ui-input:disabled/)

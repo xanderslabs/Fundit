@@ -136,7 +136,7 @@ function EditSection({ view, sender }: { view: CampaignView; sender: Sender }) {
           </Field>
         </fieldset>
         <TxStatus tx={tx} noun="edit" successText="Your changes are saved." startOverWarning={RETRY_WARNING} />
-        <Button type="submit" disabled={!canSubmit}>
+        <Button type="submit" block disabled={!canSubmit}>
           {tx.busy ? 'Saving...' : 'Save changes'}
         </Button>
       </form>
@@ -362,7 +362,7 @@ function WithdrawSection({ view, sender }: { view: CampaignView; sender: Sender 
           startOverWarning="The earlier withdrawal may still go through. If it does and you withdraw again, you will take out funds twice. Start over anyway?"
         />
         {tx.phase.kind !== 'timeout' && (
-          <Button type="submit" disabled={!canSubmit}>
+          <Button type="submit" block disabled={!canSubmit}>
             {tx.busy ? 'Withdrawing...' : 'Withdraw'}
           </Button>
         )}
@@ -427,7 +427,7 @@ function RescueSection({ view, sender }: { view: CampaignView; sender: Sender })
             </Field>
           </fieldset>
           {tx.phase.kind !== 'timeout' && (
-            <Button type="submit" disabled={!canSubmit}>
+            <Button type="submit" block disabled={!canSubmit}>
               {tx.busy ? 'Sending...' : `Rescue ${shown}`}
             </Button>
           )}
@@ -462,7 +462,7 @@ function CloseSection({ view, sender }: { view: CampaignView; sender: Sender }) 
           <p>
             <strong>{CLOSE_TEXT}</strong>
           </p>
-          <Button variant="danger" className="manage-close" disabled={tx.locked} onClick={close}>
+          <Button variant="danger" block disabled={tx.locked} onClick={close}>
             Close this Fundit
           </Button>
         </>
@@ -545,16 +545,14 @@ function BackupSection({ view, sender }: { view: CampaignView; sender: Sender })
             <input autoComplete="off" spellCheck={false} placeholder="0x..." value={text} onChange={(e) => setText(e.target.value)} />
           </Field>
         </fieldset>
-        <div className="form-actions">
-          <Button type="submit" disabled={raw === '' || error !== undefined || tx.locked}>
-            Save backup
+        <Button type="submit" block disabled={raw === '' || error !== undefined || tx.locked}>
+          Save backup
+        </Button>
+        {hasBackup && (
+          <Button variant="secondary" className="manage-remove-backup" disabled={tx.locked} onClick={() => void setBackup(zeroAddress, 'Remove backup')}>
+            Remove backup
           </Button>
-          {hasBackup && (
-            <Button variant="secondary" disabled={tx.locked} onClick={() => void setBackup(zeroAddress, 'Remove backup')}>
-              Remove backup
-            </Button>
-          )}
-        </div>
+        )}
         <TxStatus tx={tx} noun="transaction" successText="Saved." startOverWarning={RETRY_WARNING} />
       </form>
     </Panel>

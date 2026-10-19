@@ -88,8 +88,8 @@ function EmbedCode({ snippet }: { snippet: string }) {
 }
 
 // Every way to pass a Fundit on: the link, the phone's share sheet, share links for each network, a QR code with
-// a printable poster, and an embed code.
-export function SharePanel({ address, title, isCreator, headingId }: Props & { headingId?: string }) {
+// a printable poster, and an embed code. inDialog gives the heading the shared dialog title look.
+export function SharePanel({ address, title, isCreator, headingId, inDialog = false }: Props & { headingId?: string; inDialog?: boolean }) {
   const origin = window.location.origin
   const url = funditUrl(origin, address)
   const name = title.trim() || 'this Fundit'
@@ -115,7 +115,9 @@ export function SharePanel({ address, title, isCreator, headingId }: Props & { h
 
   return (
     <div className="share-panel">
-      <h2 id={headingId} className="share-title">Share this Fundit</h2>
+      <h2 id={headingId} className={inDialog ? 'ui-dialog-title' : 'share-title'}>
+        Share this Fundit
+      </h2>
       <p className="share-message">{message}</p>
 
       <div className="share-row">
@@ -185,7 +187,7 @@ export function ShareDialog(props: Props) {
         Share
       </Button>
       <Dialog open={open} onClose={() => setOpen(false)} labelledBy={headingId} size="md">
-        <SharePanel {...props} headingId={headingId} />
+        <SharePanel {...props} headingId={headingId} inDialog />
       </Dialog>
     </>
   )

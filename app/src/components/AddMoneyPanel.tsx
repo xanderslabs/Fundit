@@ -213,11 +213,13 @@ function BridgeToAccount({ recipient, onBusyChange }: { recipient: Address; onBu
       </div>
 
       {wallet ? (
-        <Button type="submit" disabled={!canSubmit}>
+        <Button type="submit" block disabled={!canSubmit}>
           {busy ? 'Sending...' : 'Bridge USDC'}
         </Button>
       ) : modal.available ? (
-        <Button onClick={() => void modal.connect()}>Connect the wallet that holds the USDC</Button>
+        <Button block onClick={() => void modal.connect()}>
+          Connect the wallet that holds the USDC
+        </Button>
       ) : (
         <p>{NO_WALLETS}</p>
       )}
@@ -326,7 +328,7 @@ function WalletDeposit({ account, bridging }: { account: Address; bridging: bool
         successText="Money added to your Fundit account."
         startOverWarning="The earlier transfer may still go through. If it does and you send again, you will add the money twice. Start over anyway?"
       />
-      <Button type="submit" disabled={!canSubmit}>
+      <Button type="submit" block disabled={!canSubmit}>
         {tx.busy ? 'Sending...' : 'Add to my Fundit account'}
       </Button>
     </form>
