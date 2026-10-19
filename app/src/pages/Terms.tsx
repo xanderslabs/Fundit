@@ -1,4 +1,5 @@
 import { Link } from 'react-router'
+import './Legal.css'
 
 export function Terms() {
   return (

@@ -1,37 +1,25 @@
-/* The embed card (embed.html). It fills its iframe: 360 x 220 by default, and any width the host gives it. */
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
+/* The embed card (embed.html). It fills its iframe: 360 x 220 by default, and any width the host gives it.
+   base.css sets the reset, the body type and the focus ring. */
 html,
-body {
-  height: 100%;
-  margin: 0;
-}
-
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font);
-  line-height: 1.4;
-  -webkit-font-smoothing: antialiased;
-}
-
+body,
 #root {
   height: 100%;
 }
 
-.embed {
+#root {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  height: 100%;
-  min-height: 180px;
-  padding: 16px 18px;
+}
+
+.embed {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   background: var(--bg);
 }
 
@@ -43,45 +31,38 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-2);
+  min-height: var(--space-5);
 }
 
 .embed-logo {
   display: inline-flex;
+  border-radius: var(--radius-sm);
 }
 
 .embed-logo img {
   display: block;
 }
 
-.embed-badge {
-  padding: 1px 10px;
-  border-radius: var(--radius-pill);
-  background: var(--surface);
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: var(--weight-bold);
-}
-
-.embed-badge-done {
-  background: var(--success);
-  color: var(--ink);
-}
-
 .embed-title {
   display: -webkit-box;
+  flex-shrink: 0;
   overflow: hidden;
   margin: 0;
-  font-size: 20px;
-  font-weight: var(--weight-display);
-  line-height: 1.25;
-  /* Room for descenders under the clamp. */
-  padding-bottom: 2px;
-  flex-shrink: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  line-height: var(--text-lg-line);
+  letter-spacing: var(--tracking-heading);
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   line-clamp: 2;
+}
+
+/* A testnet build shows the banner above the card. One title line keeps the card inside a 220px iframe. */
+#root:has(> .testnet-banner) .embed-title {
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
 }
 
 .embed-progress {
@@ -89,122 +70,55 @@ body {
 }
 
 .embed-amounts {
-  margin: 0 0 6px;
-  color: var(--muted);
-  font-size: 14px;
+  margin: 0 0 var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-line);
 }
 
 .embed-amounts strong {
   color: var(--text);
-  font-size: 16px;
-}
-
-.progress {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.progress-track {
-  flex: 1;
-  height: 8px;
-  overflow: hidden;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--primary) 18%, transparent);
-}
-
-.progress-fill {
-  height: 100%;
-  border-radius: inherit;
-  background: var(--accent);
-}
-
-.progress-done {
-  background: var(--success);
-}
-
-.progress-label {
-  min-width: 3ch;
-  font-size: 14px;
-  font-weight: var(--weight-bold);
   font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-bold);
 }
 
 .embed-foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .embed-muted {
   margin: 0;
-  color: var(--muted);
-  font-size: 14px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-line);
 }
 
-.embed-give,
-.embed-retry {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+/* The card's one action. A little shorter than a page button, so the card fits its iframe. */
+.embed-give {
   min-width: 112px;
-  padding: 8px 22px;
-  border: 0;
-  border-radius: var(--radius-pill);
-  background: var(--success);
-  /* Ink on the brand green passes WCAG AA; white on it does not. */
-  color: var(--ink);
-  font: inherit;
-  font-weight: var(--weight-bold);
-  text-decoration: none;
-  cursor: pointer;
+  padding-top: var(--space-1);
+  padding-bottom: var(--space-1);
 }
 
 .embed-retry {
   align-self: flex-start;
 }
 
-.embed-give:hover,
-.embed-retry:hover {
-  filter: brightness(0.95);
-}
-
 .embed-link {
+  border-radius: var(--radius-sm);
   color: var(--text);
   font-weight: var(--weight-bold);
   text-decoration: underline;
-  text-decoration-color: var(--accent);
+  text-decoration-color: var(--attention);
   text-decoration-thickness: 2px;
   text-underline-offset: 4px;
 }
 
-:focus {
-  outline: none;
-}
-
-:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
-
 @media (max-width: 300px) {
-  .embed {
-    padding: 14px;
-  }
-
   .embed-give {
     min-width: 0;
   }
-}
-
-/* Testnet builds only: one line above the card. */
-.testnet-banner {
-  margin: 0;
-  padding: 2px 8px;
-  background: var(--accent);
-  color: var(--ink);
-  font-size: 12px;
-  font-weight: var(--weight-medium);
-  text-align: center;
 }

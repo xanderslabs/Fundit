@@ -1,10 +1,11 @@
 import { useQueries } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Link } from 'react-router'
 import { CampaignGrid, LoadError } from '../components/CampaignGrid'
+import { Button, ButtonLink, PageHeader } from '../components/ui'
 import { campaignsQuery, PAGE_SIZE } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
 import { type CampaignView, uniqueByAddress } from '../lib/campaigns'
+import './Explore.css'
 
 type Sort = 'newest' | 'raised' | 'closest'
 
@@ -66,22 +67,20 @@ export function Explore() {
 
   return (
     <>
-      <section className="page-head">
-        <h1>Explore Fundits</h1>
-        <p className="muted">Find a Fundit you care about and help it reach its goal.</p>
-      </section>
+      <PageHeader width="wide" title="Explore Fundits" subtitle="Find a Fundit you care about and help it reach its goal." />
 
       <form className="filters" role="search" onSubmit={(e) => e.preventDefault()}>
-        <label className="field field-grow">
+        <label className="filters-search">
           <span className="sr-only">Search Fundits</span>
           <input
             type="search"
+            className="ui-input"
             placeholder="Search by title or description"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </label>
-        <label className="field">
+        <label className="filters-sort">
           <span className="sr-only">Sort by</span>
           <select className="select" value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
             {SORTS.map((s) => (
@@ -91,7 +90,7 @@ export function Explore() {
             ))}
           </select>
         </label>
-        <label className="check">
+        <label className="filters-check">
           <input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} />
           Show closed
         </label>
@@ -109,9 +108,7 @@ export function Explore() {
               signedIn ? (
                 <>
                   <p>No Fundits yet. Yours could be the first.</p>
-                  <Link to="/create" className="btn">
-                    Start a Fundit
-                  </Link>
+                  <ButtonLink to="/create">Start a Fundit</ButtonLink>
                 </>
               ) : (
                 <p>No Fundits yet. Sign in to start the first one.</p>
@@ -124,15 +121,10 @@ export function Explore() {
       )}
 
       {hasMore && (
-        <div className="more">
-          <button
-            type="button"
-            className="btn btn-outline"
-            disabled={loadingMore}
-            onClick={() => setPages((p) => p + 1)}
-          >
+        <div className="explore-more">
+          <Button variant="secondary" disabled={loadingMore} onClick={() => setPages((p) => p + 1)}>
             {loadingMore ? 'Loading...' : 'Load older Fundits'}
-          </button>
+          </Button>
         </div>
       )}
       {failed && loaded.length > 0 && <LoadError onRetry={() => failed.refetch()} />}

@@ -118,22 +118,10 @@ describe('design tokens', () => {
     }
   })
 
-  // Until Task 7 moves every page onto the new names, the old names must still resolve.
-  it('keeps the old token names as aliases', () => {
-    const aliases: Record<string, string> = {
-      '--primary': '#586283',
-      '--ink': '#101928',
-      '--accent': '#ff7c0a',
-      '--success': '#19b820',
-      '--error': '#ff3b30',
-      '--success-ink': '#0f7a14',
-      '--error-ink': '#c0150b',
-      '--muted': '#586283',
-      '--card': '#eceff1',
-      '--radius': '16px',
-      '--page-width': '1200px',
-    }
-    for (const [name, v] of Object.entries(aliases)) expect(value(name), name).toBe(v)
-    for (const name of ['--hover', '--weight-display-heavy']) expect(tokens.has(name), name).toBe(true)
+  // Every page now uses the semantic names (Plan 6, Task 7). The old names are gone, so a page cannot drift
+  // back to them, and no heading can be set in the 900 weight the type scale forbids.
+  it('has no old token names left', () => {
+    const old = ['--primary', '--ink', '--accent', '--success', '--error', '--success-ink', '--error-ink', '--muted', '--card', '--hover', '--weight-display-heavy', '--radius', '--page-width']
+    for (const name of old) expect(tokens.has(name), name).toBe(false)
   })
 })

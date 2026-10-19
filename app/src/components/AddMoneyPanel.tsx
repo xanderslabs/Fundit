@@ -23,9 +23,8 @@ import { fetchForwardFee } from '../lib/iris'
 import { shortAddress } from '../lib/names'
 import { wagmiSender } from '../lib/sender'
 import { AddressQr } from './AddressTools'
-import { Tabs } from './Tabs'
 import { TxStatus, useTx } from './TxStatus'
-import { AddressChip, AmountInput, Button, Field, StatusBox } from './ui'
+import { AddressChip, AmountInput, Button, ContentTabs, Field, StatusBox } from './ui'
 import './AddMoneyPanel.css'
 import './Form.css'
 
@@ -382,7 +381,7 @@ export function AddMoneyPanel({ account }: { account: Address }) {
   ]
   return (
     <>
-      <Tabs label="Ways to add money" tabs={tabs} keepMounted className="deposit-tabs" />
+      <ContentTabs label="Ways to add money" tabs={tabs} keepMounted className="deposit-tabs" />
       <p className="form-hint">Card and bank coming soon.</p>
     </>
   )

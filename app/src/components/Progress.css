@@ -1,5 +1,4 @@
-/* The class names stay as they are: the embed card styles the same markup in embed.css. The embed bundle loads
-   this file too, before embed.css, so embed.css wins where both set a property. Task 7 can merge the two. */
+/* The Fundit card, the Fundit page and the embed card all use this one bar. */
 .progress {
   display: flex;
   align-items: center;

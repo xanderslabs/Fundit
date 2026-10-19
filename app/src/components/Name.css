@@ -1,0 +1,22 @@
+/* A name or short address, with the avatar when there is one. A long name ends in an ellipsis. */
+.name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 100%;
+  vertical-align: bottom;
+}
+
+.name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.name-avatar {
+  flex: none;
+  width: 1.2em;
+  height: 1.2em;
+  border-radius: var(--radius-pill);
+  object-fit: cover;
+}

@@ -1,0 +1,295 @@
+/* The one loud thing on the page: a big, tight, centred headline with the two buttons right under it. */
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-8) 0;
+  text-align: center;
+}
+
+.hero h1 {
+  max-width: 13ch;
+  margin: 0;
+  font-size: var(--text-display);
+  font-weight: var(--weight-display);
+  line-height: var(--text-display-line);
+  letter-spacing: var(--tracking-display);
+  text-wrap: balance;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+/* What people raise for: seven photos, each a way into Explore. Four portrait tiles in a gentle stagger, then
+   three wider ones that fill the second row, so no tile sits alone. */
+.causes {
+  margin: 0 0 var(--space-8);
+}
+
+.cause-list {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--space-4);
+  align-items: start;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cause {
+  grid-column: span 3;
+}
+
+.cause:nth-child(-n + 4):nth-child(even) {
+  margin-top: var(--space-6);
+}
+
+.cause:nth-child(n + 5) {
+  grid-column: span 4;
+}
+
+.cause:nth-child(n + 5) img {
+  aspect-ratio: 4 / 3;
+}
+
+.cause-link {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.cause-link img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  transition: transform var(--duration) var(--ease);
+}
+
+.cause-link:hover img {
+  transform: scale(1.04);
+}
+
+.cause-title {
+  position: absolute;
+  right: var(--space-2);
+  bottom: var(--space-2);
+  left: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--photo-label);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  line-height: var(--text-sm-line);
+}
+
+/* Featured and Newest */
+.section {
+  padding: var(--space-4) 0 var(--space-7);
+}
+
+.featured h2 {
+  margin: 0 0 var(--space-4);
+}
+
+.featured-card {
+  max-width: 560px;
+}
+
+.section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.section-head h2 {
+  margin: 0;
+}
+
+.section-link {
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-weight: var(--weight-bold);
+  text-decoration: underline;
+  text-decoration-color: var(--attention);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
+/* How it works. The steps are a real sequence, so they are numbered. */
+.how {
+  margin: 0 0 var(--space-7);
+  padding: var(--space-7) var(--space-6);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.how h2,
+.faq h2 {
+  margin: 0 0 var(--space-5);
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step h3 {
+  margin: var(--space-4) 0 var(--space-1);
+}
+
+.step p {
+  max-width: 34ch;
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.step-number {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-pill);
+  background: var(--attention);
+  color: var(--text);
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Questions */
+.faq {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: var(--space-4) var(--space-7);
+  align-items: start;
+}
+
+.faq-list {
+  border-top: 1px solid var(--line);
+}
+
+.faq-item {
+  border-bottom: 1px solid var(--line);
+}
+
+.faq-item summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-1);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  line-height: var(--text-lg-line);
+  list-style: none;
+  cursor: pointer;
+  transition: color var(--duration) var(--ease);
+}
+
+.faq-item summary::-webkit-details-marker {
+  display: none;
+}
+
+/* A plus that turns into a minus when the answer is open. */
+.faq-item summary::after {
+  content: '';
+  flex: none;
+  width: 14px;
+  height: 14px;
+  background: var(--icon-plus) center / contain no-repeat;
+}
+
+.faq-item[open] summary::after {
+  background-image: var(--icon-minus);
+}
+
+.faq-item summary:hover {
+  color: var(--text-muted);
+}
+
+.faq-answer {
+  max-width: 62ch;
+  padding: 0 var(--space-1) var(--space-5);
+  color: var(--text-muted);
+}
+
+.faq-answer p {
+  margin: 0;
+}
+
+.faq-answer p + p {
+  margin-top: var(--space-2);
+}
+
+@media (max-width: 900px) {
+  .hero {
+    padding: var(--space-6) 0;
+  }
+
+  .cause-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cause,
+  .cause:nth-child(n + 5) {
+    grid-column: auto;
+  }
+
+  .cause:nth-child(-n + 4):nth-child(even) {
+    margin-top: 0;
+  }
+
+  .cause:nth-child(n + 5) img {
+    aspect-ratio: 4 / 5;
+  }
+
+  .cause:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .cause:last-child img {
+    aspect-ratio: 16 / 9;
+  }
+
+  .faq {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .hero-actions {
+    align-self: stretch;
+  }
+
+  .hero-actions > .ui-btn {
+    flex: 1 1 100%;
+  }
+
+  .how {
+    padding: var(--space-6) var(--space-4);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cause-link:hover img {
+    transform: none;
+  }
+}

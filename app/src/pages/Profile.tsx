@@ -9,7 +9,7 @@ import { AddMoneyPanel } from '../components/AddMoneyPanel'
 import { CampaignGrid, LoadError } from '../components/CampaignGrid'
 import { PendingBridgeTracker } from '../components/PendingBridgeTracker'
 import { ShareDialog } from '../components/SharePanel'
-import { AddressChip, Banner, Button, ButtonLink, Card, EmptyState, Panel, Stat, TabPanel, Tabs } from '../components/ui'
+import { AddressChip, Banner, Button, ButtonLink, Card, EmptyState, PageHeader, Panel, Stat, TabPanel, Tabs } from '../components/ui'
 import { EXPLORER_URL } from '../config'
 import { blockTimes } from '../hooks/useActivity'
 import { useCampaign } from '../hooks/useCampaigns'
@@ -412,11 +412,12 @@ export function Profile() {
 
   if (!sender || !session) {
     return (
-      <section className="notice">
-        <h1>My page</h1>
-        <p>Sign in to see your Fundits and the donations you made.</p>
-        <SignInButton />
-      </section>
+      <PageHeader
+        width="narrow"
+        title="My page"
+        subtitle="Sign in to see your Fundits and the donations you made."
+        actions={<SignInButton className="ui-btn ui-btn-primary ui-btn-lg" />}
+      />
     )
   }
 

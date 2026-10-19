@@ -4,6 +4,7 @@ import { TestnetBanner } from './components/TestnetBanner'
 import { NETWORK } from './config'
 import { Embed } from './pages/Embed'
 import './styles/tokens.css'
+import './styles/base.css'
 import './styles/embed.css'
 
 // Entry for /embed/c/:address, the card other sites put in an iframe. It is its own page (embed.html), so it

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { isAddress } from 'viem'
 import { Progress } from '../components/Progress'
-import { campaignStatus } from '../components/StatusBadge'
+import { campaignStatus, StatusBadge } from '../components/StatusBadge'
 import { type CampaignView, fetchCampaign, type ReadClient } from '../lib/campaigns'
 import { arcClient } from '../lib/clients'
 import { formatAmount } from '../lib/format'
+// The embed has no router, so it styles plain links and buttons with the ui button classes.
+import '../components/ui/Button.css'
 
 type State = { kind: 'loading' } | { kind: 'ready'; view: CampaignView } | { kind: 'not-a-fundit' } | { kind: 'error' }
 
@@ -49,7 +51,7 @@ export function Embed({ address, origin, client = arcClient }: Props) {
       <main className="embed embed-notice">
         <Logo origin={origin} />
         <p className="embed-muted">Could not load this Fundit. The Arc network did not answer.</p>
-        <button type="button" className="embed-retry" onClick={load}>
+        <button type="button" className="ui-btn ui-btn-secondary ui-btn-md embed-retry" onClick={load}>
           Try again
         </button>
       </main>
@@ -71,7 +73,7 @@ export function Embed({ address, origin, client = arcClient }: Props) {
     <main className="embed">
       <div className="embed-top">
         <Logo origin={origin} />
-        {status !== 'Open' && <span className={status === 'Closed' ? 'embed-badge' : 'embed-badge embed-badge-done'}>{status}</span>}
+        {status !== 'Open' && <StatusBadge summary={summary} />}
       </div>
       <p className="embed-title">{summary.meta.title || 'Untitled Fundit'}</p>
       <div className="embed-progress">
@@ -90,7 +92,7 @@ export function Embed({ address, origin, client = arcClient }: Props) {
       ) : (
         <div className="embed-foot">
           <span className="embed-muted">{symbol} on Arc</span>
-          <a className="embed-give" href={href} target="_blank" rel="noopener">
+          <a className="ui-btn ui-btn-primary ui-btn-md embed-give" href={href} target="_blank" rel="noopener">
             Give
           </a>
         </div>

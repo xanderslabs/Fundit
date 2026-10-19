@@ -32,7 +32,7 @@ type SignInProps = {
 
 // Sign-in is passkey only: the dialog opens the Fundit account sign-in and nothing else. The wallet modal never
 // opens from here; it opens only inside Add money.
-export function SignInButton({ className = 'btn', label = 'Sign in', onPasskeyDone, buttonRef }: SignInProps) {
+export function SignInButton({ className = 'ui-btn ui-btn-primary', label = 'Sign in', onPasskeyDone, buttonRef }: SignInProps) {
   const [open, setOpen] = useState(false)
   const trigger = useRef<HTMLButtonElement | null>(null)
   const headingId = useId()

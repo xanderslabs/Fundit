@@ -1,0 +1,53 @@
+/* Terms and Privacy: long text at a comfortable line length. */
+.legal {
+  max-width: 72ch;
+  margin: 0 auto;
+  padding-bottom: var(--space-6);
+  overflow-wrap: anywhere;
+}
+
+.legal h1 {
+  margin-bottom: var(--space-4);
+}
+
+.legal h2 {
+  margin: var(--space-6) 0 var(--space-2);
+  font-size: var(--text-lg);
+  line-height: var(--text-lg-line);
+}
+
+.legal h3 {
+  margin: var(--space-5) 0 var(--space-2);
+  font-size: var(--text-md);
+  line-height: var(--text-md-line);
+}
+
+.legal p,
+.legal ul {
+  margin: 0 0 var(--space-3);
+}
+
+.legal ul {
+  padding-left: var(--space-5);
+}
+
+.legal li + li {
+  margin-top: var(--space-1);
+}
+
+.legal a {
+  border-radius: var(--radius-sm);
+  font-weight: var(--weight-medium);
+  text-decoration: underline;
+  text-decoration-color: var(--attention);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+.legal-draft {
+  margin-bottom: var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--attention);
+  border-radius: var(--radius-md);
+  background: var(--attention-bg);
+}

@@ -3,6 +3,7 @@ import { NETWORK, SOCIAL_LINKS } from '../config'
 import { AccountControl } from './AccountMenu'
 import { ScrollToTop } from './ScrollToTop'
 import { TestnetBanner } from './TestnetBanner'
+import './Layout.css'
 
 export function Layout() {
   return (

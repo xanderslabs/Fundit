@@ -3,9 +3,11 @@ import { Link, useNavigate } from 'react-router'
 import { SignInButton } from '../components/AccountMenu'
 import { CampaignCard } from '../components/CampaignCard'
 import { CampaignGrid, LoadError } from '../components/CampaignGrid'
+import { ButtonLink } from '../components/ui'
 import { CHAIN_NAMES } from '../config'
 import { useCampaigns, useFeatured } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
+import './Home.css'
 
 const NEWEST_COUNT = 6
 
@@ -127,16 +129,19 @@ function CreateFunditButton() {
   const signedIn = useSender() !== null
   const navigate = useNavigate()
 
-  const className = 'btn btn-lg btn-outline'
   if (signedIn) {
     return (
-      <Link to="/create" className={className}>
+      <ButtonLink to="/create" variant="secondary" size="lg">
         Create a Fundit
-      </Link>
+      </ButtonLink>
     )
   }
   return (
-    <SignInButton className={className} label="Create a Fundit" onPasskeyDone={() => void navigate('/create')} />
+    <SignInButton
+      className="ui-btn ui-btn-secondary ui-btn-lg"
+      label="Create a Fundit"
+      onPasskeyDone={() => void navigate('/create')}
+    />
   )
 }
 
@@ -150,9 +155,9 @@ export function Home() {
       <section className="hero" aria-labelledby="hero-title">
         <h1 id="hero-title">Fundraising for everyone, everywhere.</h1>
         <div className="hero-actions">
-          <Link to="/explore" className="btn btn-lg">
+          <ButtonLink to="/explore" size="lg">
             Donate to a Fundit
-          </Link>
+          </ButtonLink>
           <CreateFunditButton />
         </div>
       </section>
@@ -207,16 +212,14 @@ export function Home() {
               signedIn ? (
                 <>
                   <p>No Fundits yet. Yours could be the first.</p>
-                  <Link to="/create" className="btn">
-                    Start a Fundit
-                  </Link>
+                  <ButtonLink to="/create">Start a Fundit</ButtonLink>
                 </>
               ) : (
                 <>
                   <p>No Fundits yet. Sign in to start the first one, or look around.</p>
-                  <Link to="/explore" className="btn btn-outline">
+                  <ButtonLink to="/explore" variant="secondary">
                     Explore
-                  </Link>
+                  </ButtonLink>
                 </>
               )
             }

@@ -29,7 +29,7 @@ export function App() {
         <Route
           path="recover"
           element={
-            <Suspense fallback={<p className="muted">Loading...</p>}>
+            <Suspense fallback={<p className="main-loading">Loading...</p>}>
               <Recover />
             </Suspense>
           }
@@ -41,7 +41,7 @@ export function App() {
           <Route
             path="styleguide"
             element={
-              <Suspense fallback={<p className="muted">Loading...</p>}>
+              <Suspense fallback={<p className="main-loading">Loading...</p>}>
                 <StyleGuide />
               </Suspense>
             }

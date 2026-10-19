@@ -1,0 +1,43 @@
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.filters-search {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.filters-sort {
+  flex: 0 1 220px;
+  min-width: 0;
+}
+
+.filters-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  font-weight: var(--weight-medium);
+}
+
+.filters-check input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.explore-more {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-6);
+}
+
+@media (max-width: 480px) {
+  .filters-sort {
+    flex: 1 1 auto;
+  }
+}

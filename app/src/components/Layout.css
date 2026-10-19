@@ -1,0 +1,106 @@
+.layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.header,
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: var(--page-wide);
+  margin: 0 auto;
+}
+
+.header {
+  min-height: 72px;
+  padding: var(--space-4) var(--gutter);
+}
+
+.header-logo {
+  flex: none;
+  border-radius: var(--radius-sm);
+}
+
+.header-logo img {
+  display: block;
+  height: 32px;
+  width: auto;
+}
+
+.main {
+  flex: 1;
+  width: 100%;
+  max-width: var(--page-wide);
+  margin: 0 auto;
+  padding: var(--space-5) var(--gutter);
+}
+
+/* The Suspense fallback while a lazy page loads. */
+.main-loading {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.footer {
+  flex-wrap: wrap;
+  margin-top: var(--space-7);
+  padding: var(--space-6) var(--gutter);
+  border-top: 1px solid var(--line);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-line);
+}
+
+.footer-links {
+  display: flex;
+  gap: var(--space-5);
+  font-weight: var(--weight-medium);
+}
+
+.footer-links a {
+  border-radius: var(--radius-sm);
+  transition: color var(--duration) var(--ease);
+}
+
+.footer-links a:hover {
+  color: var(--text);
+}
+
+.socials {
+  display: flex;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.socials a {
+  display: block;
+  border-radius: var(--radius-pill);
+}
+
+.socials img {
+  display: block;
+  width: 36px;
+  height: 36px;
+  transition: transform var(--duration) var(--ease);
+}
+
+.socials a:hover img {
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .footer-links a,
+  .socials img {
+    transition: none;
+  }
+
+  .socials a:hover img {
+    transform: none;
+  }
+}

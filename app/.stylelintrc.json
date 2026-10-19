@@ -2,11 +2,6 @@
   "plugins": [
     "stylelint-declaration-strict-value"
   ],
-  "ignoreFiles": [
-    "src/styles/base.css",
-    "src/styles/campaigns.css",
-    "src/styles/embed.css"
-  ],
   "rules": {
     "scale-unlimited/declaration-strict-value": [
       [

@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { readFileSync } from 'node:fs'
 import stylelint from 'stylelint'
 import { describe, expect, it } from 'vitest'
 
@@ -74,8 +75,15 @@ describe('CSS lint guardrail', () => {
     expect(errors).toEqual([])
   })
 
-  it('skips the legacy page files until Task 7 and lints tokens.css', async () => {
-    expect((await lint('.x { color: red; }', 'src/styles/base.css')).ignored).toBe(true)
+  // The spec's "done" line: Stylelint passes on every CSS file with no exceptions. An allowlisted file could
+  // hold raw sizes and colours that no check ever sees.
+  it('stylelint allowlist is empty', () => {
+    const config = JSON.parse(readFileSync('.stylelintrc.json', 'utf8')) as { ignoreFiles?: string[] }
+    expect(config.ignoreFiles ?? []).toEqual([])
+  })
+
+  it('lints base.css, and lets tokens.css define raw colours', async () => {
+    expect(await lint('.x { color: red; }', 'src/styles/base.css')).toEqual({ ignored: false, errors: [expect.any(String)] })
     expect((await lint(':root { --red: #ff3b30; }', 'src/styles/tokens.css')).errors).toEqual([])
   })
 })

@@ -29,7 +29,7 @@
 }
 
 /* Every text control in a Field gets one look. The type is 17px, so iOS does not zoom into the field. A select
-   keeps the app-wide .select class (base.css), which the select guardrail test requires. */
+   uses the app-wide .select class below, which the select guardrail test requires. */
 .ui-field > :is(input, textarea),
 .ui-input {
   width: 100%;
@@ -76,6 +76,41 @@
   color: var(--text-muted);
   font-weight: var(--weight-medium);
   pointer-events: none;
+}
+
+/* One look for every dropdown, in a Field or not: no native arrow, and a chevron that stays inside the box at
+   any width. This file loads on every page (the sign-in dialog uses Field), so every select gets it. */
+.select {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-3) var(--space-7) var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg);
+  background-image: var(--select-chevron);
+  background-position: right var(--space-4) center;
+  background-repeat: no-repeat;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-md);
+  line-height: var(--text-md-line);
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+/* A keyboard user gets the same ring as on every other control, on top of the field focus border. The second
+   selector outranks the base.css text-field focus rule, which turns the outline off. */
+.select:focus-visible,
+select.select:focus:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.select:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 @media (prefers-reduced-motion: reduce) {

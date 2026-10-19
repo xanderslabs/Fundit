@@ -2,6 +2,7 @@ import type { Address } from 'viem'
 import { EXPLORER_URL } from '../config'
 import { useName } from '../hooks/useName'
 import { shortAddress } from '../lib/names'
+import './Name.css'
 
 type Props = {
   address: Address

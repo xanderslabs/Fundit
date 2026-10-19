@@ -1,0 +1,53 @@
+/* 404: an unknown page, or a Fundit address that is not a Fundit */
+.not-found {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: var(--page-narrow);
+  margin: 0 auto;
+  padding: var(--space-7) 0 var(--space-8);
+  text-align: center;
+}
+
+.not-found-code {
+  margin: 0 0 var(--space-4);
+  color: var(--text-muted);
+  font-size: var(--text-display);
+  font-weight: var(--weight-display);
+  line-height: var(--text-display-line);
+  letter-spacing: var(--tracking-display);
+}
+
+.not-found h1 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.not-found-text {
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+}
+
+.not-found-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+@media (max-width: 480px) {
+  .not-found h1 {
+    font-size: var(--text-xl);
+    line-height: var(--text-xl-line);
+  }
+
+  .not-found-actions {
+    align-self: stretch;
+  }
+
+  .not-found-actions > .ui-btn {
+    flex: 1 1 100%;
+  }
+}
