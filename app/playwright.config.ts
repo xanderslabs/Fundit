@@ -4,11 +4,9 @@ import { checkE2EBaseUrl } from './e2e/baseUrl'
 // Runs against Arc testnet with real Circle passkeys (a virtual authenticator), so there is one worker and
 // one serial spec.
 //
-// Two targets (see e2e/README.md):
-// - E2E_BASE_URL unset: Playwright starts the dev server on localhost, which reads app/.env.local. Circle accepts
-//   only the hostname localhost for the localhost client key, never 127.0.0.1.
-// - E2E_BASE_URL set, for example https://fundit.fun: no local server starts, and the suite runs against that
-//   site and its own client key. The passkeys are bound to that site's domain.
+// Run it with E2E_BASE_URL=https://fundit.fun (see e2e/README.md). The suite signs in with one shared passkey,
+// and a passkey works only on its own domain, fundit.fun. Without E2E_BASE_URL Playwright still starts the dev
+// server on localhost, but the suite stops at the start: local runs can no longer use passkeys.
 const PORT = 5174
 const BASE_URL = process.env.E2E_BASE_URL ? checkE2EBaseUrl(process.env.E2E_BASE_URL) : `http://localhost:${PORT}`
 

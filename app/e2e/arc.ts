@@ -5,6 +5,7 @@ import { type Address, createPublicClient, createWalletClient, erc20Abi, getAddr
 import { privateKeyToAccount } from 'viem/accounts'
 import { loadEnv } from 'vite'
 import { NETWORKS } from '../src/config'
+import { PASSKEY_FILE, parseSharedPasskey, type SharedPasskey } from './sharedPasskey'
 
 // Node side of the suite: reads Arc testnet and sends from the funder. Every value comes from NETWORKS in
 // src/config.ts and from app/.env.local, the same file the dev server reads.
@@ -55,6 +56,16 @@ function funderKey(): Hex {
     return key as Hex
   }
   throw new Error(`app/${FUNDER_FILE} has no FUNDER_PRIVATE_KEY line.`)
+}
+
+export const PASSKEY_PATH = `${APP_DIR}${PASSKEY_FILE}`
+
+// The shared e2e account's passkey, from app/.env.testnet.passkey (gitignored). Never printed.
+export function loadSharedPasskey(): SharedPasskey {
+  if (!existsSync(PASSKEY_PATH)) {
+    throw new Error(`Missing app/${PASSKEY_FILE}. Make the shared account once with npm run e2e:make-account. See e2e/README.md.`)
+  }
+  return parseSharedPasskey(readFileSync(PASSKEY_PATH, 'utf8'))
 }
 
 let funderWallet: ReturnType<typeof makeFunder> | null = null

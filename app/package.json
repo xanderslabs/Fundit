@@ -13,6 +13,7 @@
     "test": "npm run lint:css && vitest run",
     "lint:css": "stylelint \"src/**/*.css\"",
     "e2e": "playwright test",
+    "e2e:make-account": "playwright test --config playwright.make-account.config.ts",
     "abis": "node scripts/gen-abis.mjs"
   },
   "dependencies": {

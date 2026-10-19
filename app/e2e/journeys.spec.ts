@@ -3,22 +3,30 @@ import { type Address, formatUnits, getAddress, type Hex, pad, parseAbi, parseUn
 import { mnemonicToAccount } from 'viem/accounts'
 import { campaignAbi } from '../src/abi/campaign'
 import { factoryAbi } from '../src/abi/factory'
-import { CIRCLE_MULTISIG_PLUGIN } from '../src/config'
+import { CIRCLE_MULTISIG_PLUGIN, storageKey } from '../src/config'
 import { formatAmount } from '../src/lib/format'
-import { arc, checkChain, checkEnv, fundFromFunder, funderAddress, logTx, NET, txUrl, usdcBalance } from './arc'
+import { arc, checkChain, checkEnv, fundFromFunder, funderAddress, loadSharedPasskey, logTx, NET, txUrl, usdcBalance } from './arc'
 import { addVirtualAuthenticator } from './passkey'
+import { checkRpId, type SharedPasskey, topUpFor } from './sharedPasskey'
 
-// One throwaway Fundit account goes through every journey in order, so the funder pays once per run. The
-// page, its virtual passkey and the account carry over from test to test: a failed step skips the rest.
+// One shared Fundit account (app/.env.testnet.passkey, made once by npm run e2e:make-account) goes through every
+// journey in order. Reusing it keeps Circle's count of active wallets low. The page, its virtual passkey and the
+// account carry over from test to test: a failed step skips the rest. The account keeps its money, Fundits and
+// recovery key from earlier runs, so each step works from whatever state it finds.
 test.describe.configure({ mode: 'serial' })
 
-// What the funder sends. The account gives GIFT of it, withdraws it back and sends the rest to the funder.
-// A run costs the gas of five user operations, the 1% fees, the estimated reserve (the prefund) that Max keeps
-// back in the account, and whatever prefund is left in the account's EntryPoint deposit. Circle's bundler prices user operations far
-// above Arc's base fee, and the first one also deploys the account, so the top-up must cover that prefund.
-const TOP_UP = parseUnits('3', 6)
+// What the account should hold when a run starts. The funder tops it up to this, never more. A run spends the gas
+// of four user operations (create, give, withdraw, send, about 1.1 USDC at Circle's bundler prices), the 1% fees on
+// the gift, and SEND_OUT, and each send needs its estimated prefund on hand. The first recovery key also deploys
+// the account, which costs about 1 USDC more.
+const RUN_BUDGET = parseUnits('2', 6)
+const FIRST_KEY_BUDGET = parseUnits('1.2', 6)
 const GIFT = '0.2'
+// Sent back to the funder at the end. A fixed amount, not Max, so the account keeps its balance for the next run.
+const SEND_OUT = '0.1'
 const MESSAGE = 'Good luck from the e2e run'
+// Each run makes a new Fundit. The title names the run, so My page finds this run's Fundit among earlier ones.
+const TITLE = `E2E testnet garden fund ${new Date().toISOString().slice(0, 19)}`
 
 const ownershipAbi = parseAbi([
   'struct OwnerData { uint256 weight; uint8 credType; address addr; uint256 publicKeyX; uint256 publicKeyY; }',
@@ -28,6 +36,7 @@ const ownershipAbi = parseAbi([
 let context: BrowserContext
 let page: Page
 let passkeys: Awaited<ReturnType<typeof addVirtualAuthenticator>>
+let shared: SharedPasskey
 let factory: Address
 let account: Address
 let username: string
@@ -76,6 +85,12 @@ async function settled(scope: Locator, success: string, timeout = 90_000) {
   await expect(done).toBeVisible()
 }
 
+// True once a recovery key is an owner of the account next to the passkey.
+async function recoveryKeySaved(who: Address): Promise<boolean> {
+  const [ownerIds] = await arc.readContract({ address: CIRCLE_MULTISIG_PLUGIN, abi: ownershipAbi, functionName: 'ownershipInfoOf', args: [who] })
+  return ownerIds.length >= 2
+}
+
 async function openMenuItem(name: string) {
   // The account pill shows the passkey username chosen at sign-up.
   await page.getByRole('banner').getByRole('button', { name: username, exact: true }).click()
@@ -84,16 +99,23 @@ async function openMenuItem(name: string) {
 
 test.beforeAll(async ({ browser }) => {
   factory = checkEnv().factory
+  shared = loadSharedPasskey()
+  checkRpId(shared, test.info().project.use.baseURL!)
+  account = getAddress(shared.account)
+  username = shared.username
   await checkChain()
   funder = funderAddress()
   funderStart = await usdcBalance(funder)
   console.log(`Funder ${funder} holds ${formatUnits(funderStart, 6)} USDC`)
-  expect(funderStart, 'the funder needs testnet USDC from https://faucet.circle.com').toBeGreaterThan(TOP_UP + parseUnits('0.1', 6))
+  console.log(`Shared Fundit account ${account} holds ${formatUnits(await usdcBalance(account), 6)} USDC: ${NET.explorerUrl}/address/${account}`)
   fromBlock = await arc.getBlockNumber()
 
   context = await browser.newContext()
+  // The account pill shows the passkey's username when this browser knows it. Sign-up saved it; sign-in does not.
+  await context.addInitScript(([key, name]) => localStorage.setItem(key!, name!), [storageKey('passkey.username.', 'testnet') + account.toLowerCase(), username])
   page = await context.newPage()
   passkeys = await addVirtualAuthenticator(page)
+  await passkeys.addStored(shared)
   collectUserOpReceipts(page)
   // window.confirm, for leaving with words on screen and the like. No journey here should need one.
   page.on('dialog', (d) => {
@@ -110,50 +132,44 @@ test.afterAll(async () => {
   if (account) console.log(`Test account ${account} keeps ${formatUnits(await usdcBalance(account), 6)} USDC`)
 })
 
-test('signs up with a passkey', async () => {
+test('signs in with the shared passkey', async () => {
   await page.goto('/')
   await page.getByRole('banner').getByRole('button', { name: 'Sign in' }).click()
-  await page.getByRole('button', { name: 'Create one now' }).click()
-  // Circle takes 5 to 50 characters from A-Z, a-z, 0-9 and _@.:+- only.
-  username = `e2e-${Date.now()}`
-  await page.getByLabel('Username').fill(username)
-  await page.getByRole('button', { name: 'Create account' }).click()
+  await page.getByRole('button', { name: 'Sign in with your passkey' }).click()
+  await expect(page.getByRole('banner').getByRole('button', { name: username, exact: true })).toBeVisible({ timeout: 60_000 })
 
-  // Sign-up lands on My page with the Add money panel open on Your address, which shows the account's address.
-  await expect(page).toHaveURL(/\/me\?add=1$/, { timeout: 60_000 })
+  // My page shows the account the passkey opens. It must be the shared one.
+  await openMenuItem('My page')
+  await expect(page).toHaveURL(/\/me$/)
+  await page.getByRole('region', { name: 'Your Fundit account' }).getByRole('button', { name: 'Add money' }).click()
   const panel = page.getByRole('region', { name: 'Add money' })
   await expect(panel.getByRole('tab', { name: 'Your address' })).toHaveAttribute('aria-selected', 'true')
-  await expect(panel.getByRole('img', { name: 'QR code of your Fundit account address' })).toBeVisible()
   const shown = /0x[0-9a-fA-F]{40}/.exec(await panel.getByRole('tabpanel', { name: 'Your address' }).innerText())?.[0]
-  expect(shown).toBeTruthy()
-  account = getAddress(shown!)
-  console.log(`Fundit account ${account}: ${NET.explorerUrl}/address/${account}`)
-  await expect(page.getByRole('banner').getByRole('button', { name: username, exact: true })).toBeVisible()
+  expect(shown && getAddress(shown)).toBe(account)
 
-  // The passkey is on the virtual authenticator, bound to the site's hostname (Circle's rpId for its client key):
-  // localhost for the local dev server, fundit.fun for E2E_BASE_URL=https://fundit.fun.
+  // The one passkey on the virtual authenticator is the stored one, bound to the site's hostname.
   const creds = await passkeys.credentials()
   expect(creds).toHaveLength(1)
   expect(creds[0]!.rpId).toBe(new URL(page.url()).hostname)
-  // A new account has no code and no money until its first user operation.
-  expect(await arc.getCode({ address: account })).toBeUndefined()
-  expect(await usdcBalance(account)).toBe(0n)
-
-  // The recovery key prompt opens right away, but the backup needs gas first, so it points to Add money.
-  const prompt = page.getByRole('dialog')
-  await expect(prompt.getByText('Add a little money first.')).toBeVisible()
-  await prompt.getByRole('link', { name: 'Add money' }).click()
-  await expect(prompt).toHaveCount(0)
 })
 
-test('adds money: the funder sends USDC to the account address', async () => {
-  const hash = await fundFromFunder(account, TOP_UP)
-  logTx('Add money (funder transfer)', hash)
-  expect(await usdcBalance(account)).toBe(TOP_UP)
+test('adds money: the funder tops the account up to what the run needs', async () => {
+  const before = await usdcBalance(account)
+  const budget = RUN_BUDGET + ((await recoveryKeySaved(account)) ? 0n : FIRST_KEY_BUDGET)
+  const topUp = topUpFor(before, budget)
+  if (topUp > 0n) {
+    expect(funderStart, 'the funder needs testnet USDC from https://faucet.circle.com').toBeGreaterThan(topUp + parseUnits('0.1', 6))
+    const hash = await fundFromFunder(account, topUp)
+    logTx('Add money (funder transfer)', hash)
+  } else {
+    console.log(`No top-up needed: the account holds ${formatUnits(before, 6)} USDC`)
+  }
+  const now = await usdcBalance(account)
+  expect(now).toBeGreaterThanOrEqual(budget)
   // The balance card polls every 15 seconds.
   const card = page.getByRole('region', { name: 'Your Fundit account' })
   const usdc = card.locator('.dash-balances div', { hasText: 'USDC' }).locator('dd')
-  await expect(usdc).toHaveText(formatAmount(TOP_UP, 'USDC').split(' ')[0]!, { timeout: 45_000 })
+  await expect(usdc).toHaveText(formatAmount(now, 'USDC').split(' ')[0]!, { timeout: 45_000 })
   // The Add money button closes the panel and opens it again. The address bar follows.
   const addMoney = card.getByRole('button', { name: 'Add money' })
   await expect(addMoney).toHaveAttribute('aria-expanded', 'true')
@@ -168,11 +184,19 @@ test('adds money: the funder sends USDC to the account address', async () => {
   await panel.getByRole('tab', { name: 'Your address' }).click()
 })
 
-test('saves the recovery key after confirming three words', async () => {
+test('saves the recovery key after confirming three words, or shows it saved', async () => {
   await openMenuItem('My page')
   await expect(page).toHaveURL(/\/me$/)
-  // The banner shows until the chain has a recovery key on the account. Save now opens the recovery key flow.
   const banner = page.getByRole('region', { name: 'Recovery key', exact: true })
+  // An earlier run saved it: My page reads the owners on Arc, asks for nothing and says it is saved.
+  if (await recoveryKeySaved(account)) {
+    console.log('The recovery key was saved by an earlier run')
+    await page.getByRole('tab', { name: 'Account' }).click()
+    await expect(page.getByRole('tabpanel', { name: 'Account' }).getByText('Recovery key saved')).toBeVisible({ timeout: 30_000 })
+    await expect(banner).toHaveCount(0)
+    return
+  }
+  // The banner shows until the chain has a recovery key on the account. Save now opens the recovery key flow.
   await expect(banner.getByText('Save a recovery key so you never lose this account')).toBeVisible()
   await banner.getByRole('button', { name: 'Save now' }).click()
   const backup = page.getByRole('region', { name: 'Add a recovery key' })
@@ -199,7 +223,7 @@ test('saves the recovery key after confirming three words', async () => {
   // On chain the recovery key's address is now an owner next to the passkey.
   const recovery = mnemonicToAccount(words.join(' ')).address
   const [ownerIds, owners] = await arc.readContract({ address: CIRCLE_MULTISIG_PLUGIN, abi: ownershipAbi, functionName: 'ownershipInfoOf', args: [account] })
-  expect(ownerIds).toHaveLength(2)
+  expect(ownerIds.length).toBeGreaterThanOrEqual(2)
   expect(owners.map((o) => o.addr.toLowerCase())).toContain(recovery.toLowerCase())
   await expect(banner).toHaveCount(0)
   await page.getByRole('tab', { name: 'Account' }).click()
@@ -209,7 +233,7 @@ test('saves the recovery key after confirming three words', async () => {
 test('creates a Fundit', async () => {
   await openMenuItem('Start a Fundit')
   await expect(page).toHaveURL(/\/create$/)
-  await page.getByLabel('Title').fill('E2E testnet garden fund')
+  await page.getByLabel('Title').fill(TITLE)
   await page.getByLabel('Description').fill('Seeds and tools for the community garden. Made by the e2e suite.')
   await page.getByLabel('Goal').fill('10')
   await expect(page.getByText('Fundit keeps 1% of each donation.')).toBeVisible()
@@ -303,11 +327,11 @@ test('My page lists the Fundit and the gift, labelled Given with name hidden', a
   await openMenuItem('My page')
   await expect(page).toHaveURL(/\/me$/)
   const fundits = page.getByRole('tabpanel', { name: 'Your Fundits' })
-  await expect(fundits.getByRole('link', { name: 'Manage E2E testnet garden fund' })).toHaveAttribute('href', `/manage/${campaign}`)
+  await expect(fundits.getByRole('link', { name: `Manage ${TITLE}` })).toHaveAttribute('href', `/manage/${campaign}`)
   await page.getByRole('tab', { name: 'Your gifts' }).click()
   const gifts = page.getByRole('tabpanel', { name: 'Your gifts' })
-  const row = gifts.getByRole('listitem').filter({ hasText: 'E2E testnet garden fund' })
-  await expect(row).toContainText(`You gave ${formatAmount(parseUnits(GIFT, 6), 'USDC')} to E2E testnet garden fund`, { timeout: 30_000 })
+  const row = gifts.getByRole('listitem').filter({ hasText: TITLE })
+  await expect(row).toContainText(`You gave ${formatAmount(parseUnits(GIFT, 6), 'USDC')} to ${TITLE}`, { timeout: 30_000 })
   await expect(row.getByText('Given with name hidden', { exact: true })).toBeVisible()
   await expect(row.getByText(MESSAGE, { exact: true })).toBeVisible()
   await expect(gifts.getByText(/\[anon\]/)).toHaveCount(0)
@@ -329,16 +353,18 @@ test('sends money out on Arc back to the funder', async () => {
   await send.getByRole('button', { name: 'Max' }).click()
   const field = send.getByRole('textbox', { name: 'Amount' })
   await expect(field).not.toHaveValue('')
-  const amount = parseUnits(await field.inputValue(), 6)
-  const reserve = held - amount
+  const reserve = held - parseUnits(await field.inputValue(), 6)
   console.log(`Max keeps ${formatUnits(reserve, 6)} USDC for the network fee`)
   expect(reserve).toBeGreaterThanOrEqual(50_000n)
+  // The shared account keeps the rest for the next run, so only SEND_OUT goes back.
+  await field.fill(SEND_OUT)
   await send.getByLabel('Recipient').fill(funder)
   await send.getByRole('button', { name: 'Send', exact: true }).click()
   await settled(send, 'Your money was sent.')
   logUserOps('Send money out on Arc')
 
-  // The funder got exactly the Max amount. The account paid this send's gas from what it kept.
+  // The funder got exactly SEND_OUT. The account paid this send's gas on top.
+  const amount = parseUnits(SEND_OUT, 6)
   expect(await usdcBalance(funder)).toBe(before + amount)
-  expect(await usdcBalance(account)).toBeLessThanOrEqual(reserve)
+  expect(await usdcBalance(account)).toBeLessThan(held - amount)
 })
