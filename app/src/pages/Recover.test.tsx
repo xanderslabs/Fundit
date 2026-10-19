@@ -65,7 +65,7 @@ describe('Recover', () => {
     renderPage()
     expect(screen.getByRole('heading', { name: 'Recover your Fundit account' })).toBeTruthy()
     expect(
-      screen.getByText("Enter the 12 words of your recovery key. We'll make a new passkey on this device and move your account to it."),
+      screen.getByText('Enter the 12 words of your recovery key to open your account on this device.'),
     ).toBeTruthy()
     for (let i = 1; i <= 12; i++) expect(screen.getByRole('textbox', { name: `Word ${i}` })).toBeTruthy()
     expect(screen.getByLabelText('Name for your new passkey')).toBeTruthy()
@@ -150,6 +150,8 @@ describe('Recover', () => {
     await fill(user)
     expect(recoverWithPhrase).toHaveBeenCalledWith({ phrase: PHRASE, username: 'ana-phone' })
     expect(await screen.findByText('Your account is back.')).toBeTruthy()
+    // The same words fit both paths: a new passkey, or a passkey on this device that already owned the account.
+    expect(screen.getByText('Your Fundit account is open on this device. Your recovery key still works, so keep it safe.')).toBeTruthy()
     expect(screen.queryByText(`Backup prompt for ${ACCOUNT}`)).toBeNull()
     expect(screen.queryByText(/Add a new recovery key/)).toBeNull()
     expect(screen.getByRole('link', { name: 'Go to My page' }).getAttribute('href')).toBe('/me')

@@ -141,7 +141,7 @@ export function Recover() {
         <PageHeader
           width="narrow"
           title="Your account is back."
-          subtitle={<p>This device has a new passkey for your Fundit account. Your recovery key still works, so keep it safe.</p>}
+          subtitle={<p>Your Fundit account is open on this device. Your recovery key still works, so keep it safe.</p>}
         />
         <ButtonLink to="/me" size="lg" className="recover-done">
           Go to My page
@@ -155,7 +155,7 @@ export function Recover() {
       <PageHeader
         width="narrow"
         title="Recover your Fundit account"
-        subtitle={<p>Enter the 12 words of your recovery key. We'll make a new passkey on this device and move your account to it.</p>}
+        subtitle={<p>Enter the 12 words of your recovery key to open your account on this device.</p>}
       />
 
       <Card className="recover-card">
