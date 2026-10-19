@@ -10,7 +10,9 @@ import {
   checkPendingRecovery,
   discardPendingRecovery,
   normalizePhrase,
+  canReuseSignedInPasskey,
   RecoveryNeedsFunds,
+  RecoveryNeedsName,
   recoverWithPhrase,
   type StoredPasskey,
   usePasskeySession,
@@ -31,6 +33,9 @@ export function Recover() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [needsFunds, setNeedsFunds] = useState<RecoveryNeedsFunds | null>(null)
+  // A passkey name is asked only when the recovery makes a new passkey. Signed in on this page, the words may be
+  // enough (the passkey already owns the account); the recovery says so with RecoveryNeedsName if not.
+  const [askName, setAskName] = useState(() => !canReuseSignedInPasskey())
   const [pending, setPending] = useState<Address | null>(null)
   // Check again found no receipt after the cutoff: the recovery was probably dropped.
   const [stuck, setStuck] = useState(false)
@@ -46,6 +51,7 @@ export function Recover() {
     try {
       await action()
     } catch (err) {
+      if (err instanceof RecoveryNeedsName) setAskName(true)
       if (err instanceof RecoveryNeedsFunds) setNeedsFunds(err)
       else setError(explainError(err))
     } finally {
@@ -95,15 +101,17 @@ export function Recover() {
       setError(INVALID)
       return
     }
-    if (name === '') {
-      setError('Enter a name for your new passkey.')
-      return
+    if (askName) {
+      if (name === '') {
+        setError('Enter a name for your new passkey.')
+        return
+      }
+      setSubmitted(true)
+      if (usernameError(name, true)) return
     }
-    setSubmitted(true)
-    if (usernameError(name, true)) return
     void run(async () => {
       setNeedsFunds(null)
-      settle(await recoverWithPhrase({ phrase, username: name }))
+      settle(await recoverWithPhrase(askName ? { phrase, username: name } : { phrase }))
     })
   }
 
@@ -190,9 +198,11 @@ export function Recover() {
                 </Field>
               ))}
             </fieldset>
-            <Field id="recover-username" label="Name for your new passkey" error={nameError ?? undefined}>
-              <input autoComplete="off" value={username} onChange={(e) => setUsername(e.target.value)} disabled={busy} />
-            </Field>
+            {askName && (
+              <Field id="recover-username" label="Name for your new passkey" error={nameError ?? undefined}>
+                <input autoComplete="off" value={username} onChange={(e) => setUsername(e.target.value)} disabled={busy} />
+              </Field>
+            )}
             {needsFunds && (
               <StatusBox>
                 <p>{needsFunds.message}</p>

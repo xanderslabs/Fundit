@@ -246,7 +246,8 @@ function readBundler(): Promise<ReceiptBundler> {
 // key) and map it, and even fund it as a lure. So a passkey opens another account only with proof that the person
 // recovered it on this device: the record recoverWithPhrase writes, and only while the passkey still owns that
 // account on Arc. Without a record, a mapping to another account only shows a hint to recover on this device too,
-// with no address or balance. A failed lookup throws LOOKUP_FAILED, so it never opens an account in its place.
+// with no address or balance. The record is checked on Arc, never through Circle. A failed Arc read throws
+// LOOKUP_FAILED, so it never opens the own account in place of the recovered one.
 const LOOKUP_FAILED = "We couldn't check which account this passkey opens. Check your connection and try again."
 
 // Proof of a recovery on this device: credential id to the recovered account. Kept across sign-out; only the address
@@ -332,18 +333,21 @@ async function mappedWallets(sdk: Sdk['sdk'], client: unknown, owner: MappingOwn
 }
 
 // True when Circle maps this passkey to an account other than its own: it was probably added there by a recovery
-// on another device. Only used for a hint; the account is never opened from this.
+// on another device. Only used for a hint; the account is never opened from this. A failed lookup only skips the
+// hint, so Circle's mapping API being down never blocks a sign-in.
 async function mappedElsewhere(lib: Sdk, publicKey: Hex, own: Address): Promise<boolean> {
   const key = publicKeyXY(publicKey)
   if (!key) return false
   const { sdk } = lib
-  const mapped = await checked(
-    mappedWallets(sdk, clients(lib, clientKey()).client, {
+  try {
+    const mapped = await mappedWallets(sdk, clients(lib, clientKey()).client, {
       type: sdk.OwnerIdentifierType.WebAuthn,
       identifier: { publicKeyX: key.x.toString(), publicKeyY: key.y.toString() },
-    }),
-  )
-  return mapped.some((w) => !same(w, own))
+    })
+    return mapped.some((w) => !same(w, own))
+  } catch {
+    return false
+  }
 }
 
 // The smart account for this passkey: its own account, or the named one.
@@ -880,6 +884,19 @@ export class RecoveryNeedsFunds extends PlainError {
   }
 }
 
+// The recovery has to make a new passkey and no name was given for it. Recover then asks for one.
+export class RecoveryNeedsName extends PlainError {
+  constructor() {
+    super('Enter a name for your new passkey.')
+  }
+}
+
+// True when a passkey signed in on this page could finish a recovery without a new passkey (see signedInOwner).
+// Recover then asks for a passkey name only if the recovery needs one.
+export function canReuseSignedInPasskey(): boolean {
+  return live !== null
+}
+
 // Lower case, single spaces. The words feed a key derivation, so stray spaces or capitals would give a
 // different key.
 export function normalizePhrase(text: string): string {
@@ -1056,11 +1073,10 @@ async function signedInOwner(account: Address, recoveryAddress: Address): Promis
 // 5. executeRecovery, signed by the local account, adds the new passkey as an owner.
 // 'pending' means the operation went out but did not confirm in time. It is saved (never the words) and
 // checkPendingRecovery finishes it. While it is pending, no second recovery is sent for that account.
-export async function recoverWithPhrase(p: { phrase: string; username: string }): Promise<RecoveryResult> {
+export async function recoverWithPhrase(p: { phrase: string; username?: string }): Promise<RecoveryResult> {
   const phrase = normalizePhrase(p.phrase)
   if (!(await isValidRecoveryPhrase(phrase))) throw new PlainError(INVALID_PHRASE)
-  const username = p.username.trim()
-  if (username === '') throw new PlainError('Enter a name for your new passkey.')
+  const username = (p.username ?? '').trim()
   const key = clientKey()
   const lib = await loadSdk()
   const { sdk } = lib
@@ -1086,6 +1102,8 @@ export async function recoverWithPhrase(p: { phrase: string; username: string })
   // another device. Then the words, whose key is an owner too, are the proof, and nothing is sent.
   const already = await signedInOwner(account, recovery.address)
   if (already) return finishRecovery(account, already)
+  // From here a new passkey is made, and it needs a name.
+  if (username === '') throw new RecoveryNeedsName()
   const [held, reserve] = await Promise.all([usdcOf(account), passkeyReserve(account)])
   if (held < reserve) throw new RecoveryNeedsFunds(account, reserve)
 

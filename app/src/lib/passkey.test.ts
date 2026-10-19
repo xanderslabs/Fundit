@@ -6,6 +6,7 @@ import { explainError, NeedsNetworkFee } from './errors'
 import { useSender } from '../hooks/useSender'
 import {
   addBackupPasskey,
+  canReuseSignedInPasskey,
   checkPendingBackup,
   clearPasskeySession,
   discardPendingBackup,
@@ -24,6 +25,7 @@ import {
   readPendingBackup,
   readPendingRecovery,
   RecoveryNeedsFunds,
+  RecoveryNeedsName,
   recoverWithPhrase,
   registerPasskey,
   reserveFor,
@@ -442,8 +444,29 @@ describe('which account a passkey opens', () => {
     expect(kit.bundler.sendUserOperation).not.toHaveBeenCalled()
   })
 
+  // Circle's mapping only feeds the hint. Circle being down must not block a sign-in or change its account.
+  it('opens the own account with no hint when Circle\'s mapping API is down and there is no record', async () => {
+    kit.sdk.getAddressMapping.mockRejectedValue(new TypeError('Failed to fetch'))
+    expect(await loginPasskey()).toEqual({ address: OWN })
+    expect(readPasskeySession()).toEqual({ address: OWN, credentialId: 'cred-live' })
+  })
+
+  it('opens the recovered account through the Arc owner check when Circle\'s mapping API is down', async () => {
+    mappedTo(RECOVERED)
+    kit.sdk.getAddressMapping.mockRejectedValue(new TypeError('Failed to fetch'))
+    localStorage.setItem(RECORD, RECOVERED)
+    expect(await loginPasskey()).toEqual({ address: RECOVERED })
+    expect(owners.reads.at(-1)).toMatchObject({ functionName: 'ownershipInfoOf', args: [RECOVERED] })
+    // And a send after a reload, with Circle's mapping API still down.
+    const stored = { address: RECOVERED, credentialId: 'cred-live' }
+    clearPasskeySession()
+    savePasskeySession(stored)
+    expect((await storedPasskeySender(stored).send([A])).status).toBe('success')
+  })
+
+  // The record says this device recovered another account. If Arc cannot be read, opening the own account instead
+  // would quietly show the wrong one, so the person gets the plain error and tries again.
   it.each([
-    ['the mapping lookup fails', () => kit.sdk.getAddressMapping.mockRejectedValue(new TypeError('Failed to fetch'))],
     ['the owners of the recovered account cannot be read', () => {
       mappedTo(RECOVERED)
       localStorage.setItem(RECORD, RECOVERED)
@@ -874,7 +897,9 @@ describe('recoverWithPhrase', () => {
     try {
       expect(await loginPasskey()).toEqual({ address: '0x00000000000000000000000000000000000000cc', recoveredElsewhere: true })
       kit.sdk.toWebAuthnCredential.mockClear()
-      expect(await recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).toEqual({ status: 'recovered', session: { address: RECOVERED, credentialId: 'cred-live' } })
+      // No new passkey, so no name for one.
+      expect(canReuseSignedInPasskey()).toBe(true)
+      expect(await recoverWithPhrase({ phrase: PHRASE })).toEqual({ status: 'recovered', session: { address: RECOVERED, credentialId: 'cred-live' } })
       expect(kit.sdk.toWebAuthnCredential).not.toHaveBeenCalled()
       expect(kit.executeRecovery).not.toHaveBeenCalled()
       clearPasskeySession()
@@ -890,6 +915,16 @@ describe('recoverWithPhrase', () => {
     } finally {
       owners.data = []
     }
+  })
+
+  // A name is only for a new passkey. Without one, nothing is made and nothing is sent: the page asks for it.
+  it('asks for a name only when the recovery has to make a new passkey', async () => {
+    expect(canReuseSignedInPasskey()).toBe(false)
+    const err = await recoverWithPhrase({ phrase: PHRASE }).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(RecoveryNeedsName)
+    expect((err as Error).message).toBe('Enter a name for your new passkey.')
+    expect(kit.sdk.toWebAuthnCredential).not.toHaveBeenCalled()
+    expect(kit.executeRecovery).not.toHaveBeenCalled()
   })
 
   // My page shows the new passkey's name, but only once that passkey owns the account.

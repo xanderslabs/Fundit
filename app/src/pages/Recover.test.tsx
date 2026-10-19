@@ -4,7 +4,7 @@ import { MemoryRouter, useLocation } from 'react-router'
 import type { Address } from 'viem'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PlainError } from '../lib/errors'
-import { RecoveryNeedsFunds, type StoredPasskey } from '../lib/passkey'
+import { RecoveryNeedsFunds, RecoveryNeedsName, type StoredPasskey } from '../lib/passkey'
 import { Recover } from './Recover'
 
 const ACCOUNT = '0x00000000000000000000000000000000000000Ab' as Address
@@ -14,11 +14,13 @@ const SESSION = { address: ACCOUNT, credentialId: 'cred-new' }
 const recoverWithPhrase = vi.fn()
 const checkPendingRecovery = vi.fn()
 const discardPendingRecovery = vi.fn()
+const reuse = { value: false }
 vi.mock('../lib/passkey', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/passkey')>()),
   recoverWithPhrase: (...a: unknown[]) => recoverWithPhrase(...a),
   checkPendingRecovery: (...a: unknown[]) => checkPendingRecovery(...a),
   discardPendingRecovery: (...a: unknown[]) => discardPendingRecovery(...a),
+  canReuseSignedInPasskey: () => reuse.value,
 }))
 // The backup prompt has its own tests. Here it only has to appear for the recovered account.
 vi.mock('../components/AddBackupPasskey', () => ({
@@ -30,6 +32,7 @@ afterEach(() => {
   recoverWithPhrase.mockReset()
   checkPendingRecovery.mockReset()
   discardPendingRecovery.mockReset()
+  reuse.value = false
   vi.unstubAllGlobals()
   localStorage.clear()
   sessionStorage.clear()
@@ -151,6 +154,24 @@ describe('Recover', () => {
     expect(screen.queryByText(/Add a new recovery key/)).toBeNull()
     expect(screen.getByRole('link', { name: 'Go to My page' }).getAttribute('href')).toBe('/me')
     expect(screen.queryByLabelText('Word 1')).toBeNull()
+  })
+
+  // Signed in on this page with a passkey that may already own the account: the words alone can be enough, and no
+  // new passkey is made, so no name is asked. If the recovery does need a new passkey, the name field appears.
+  it('asks for a passkey name only when a new passkey will be made', async () => {
+    reuse.value = true
+    recoverWithPhrase.mockRejectedValueOnce(new RecoveryNeedsName()).mockResolvedValue({ status: 'recovered', session: SESSION })
+    const user = renderPage()
+    expect(screen.queryByLabelText('Name for your new passkey')).toBeNull()
+    await user.click(screen.getByLabelText('Word 1'))
+    await user.paste(PHRASE)
+    await user.click(screen.getByRole('button', { name: 'Recover my account' }))
+    expect(recoverWithPhrase).toHaveBeenLastCalledWith({ phrase: PHRASE })
+    expect(await screen.findByText('Enter a name for your new passkey.')).toBeTruthy()
+    await user.type(screen.getByLabelText('Name for your new passkey'), 'ana-phone')
+    await user.click(screen.getByRole('button', { name: 'Recover my account' }))
+    expect(recoverWithPhrase).toHaveBeenLastCalledWith({ phrase: PHRASE, username: 'ana-phone' })
+    expect(await screen.findByText('Your account is back.')).toBeTruthy()
   })
 
   // The words control the account. They must not end up in storage or in the address bar.
