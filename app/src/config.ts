@@ -48,6 +48,9 @@ export type NetworkConfig = {
   bridgeKitChain: 'Arc' | 'Arc_Testnet'
   // The names people see for each chain.
   chainLabels: Record<'Arc' | CctpChainKey, string>
+  // Accounts that made Fundits only to test the app, in lower case. Their Fundits are left out of public lists
+  // (Home, Explore, Featured) but still open by their link.
+  testCreators: readonly string[]
 }
 
 // Vite fills import.meta.env. The e2e suite also reads NETWORKS in Node, where there is none. Each value is read
@@ -96,6 +99,7 @@ export const NETWORKS: Record<ArcNetwork, NetworkConfig> = {
     bridgeKitChain: 'Arc',
     // Optimism's own name for its chain is OP Mainnet.
     chainLabels: { Arc: 'Arc', Ethereum: 'Ethereum', Avalanche: 'Avalanche', Optimism: 'OP Mainnet', Arbitrum: 'Arbitrum', Base: 'Base', Polygon: 'Polygon' },
+    testCreators: [],
   },
   testnet: {
     name: 'testnet',
@@ -128,11 +132,34 @@ export const NETWORKS: Record<ArcNetwork, NetworkConfig> = {
       Base: 'Base Sepolia',
       Polygon: 'Polygon Amoy',
     },
+    // The creators of the 17 testnet Fundits made up to 2026-10-19 (factory campaignAt 0 to 16, then creator()).
+    // The last one is the shared e2e account (app/.env.testnet.passkey), which makes a Fundit on every e2e run.
+    testCreators: [
+      '0xb6ac54f822867adaaa39daa8cc97c6e0a17a2402',
+      '0x2a867fff6723425c9c835bd6c8f1d3d8ac527de3',
+      '0x78a17c50438ed6a6d23f28f49a22bc3f8fd52e5e',
+      '0x5c1fb554513ff998fec2f261fabfc28c78b0a118',
+      '0x1144af50d22eca5f90e597d8516b6c4fb992b0df',
+      '0x52b5774b28d87dc8cf2013ae95b553f22bee7a0a',
+      '0x395c0a4f2a199715c256044cbfd729e72be7d011',
+      '0x428aa8db92caa2685492a965efc98038efafe0ba',
+      '0x4650a9094f7b272f5c333c0271417bdb496b0a62',
+      '0xe96c0e2d65c5729183bf11f5570d1665e1025ece',
+      '0xf72749d19d56a0c3dff0d5d26421932413d75c4b',
+      '0x2027e82b18579a6372ded3ad8fddf902a6fe1ff1',
+      '0xdc4b270642f033bc5368b6dd0caaa097ec02418f',
+      '0x7c02697536a6c484139ceb1473e3f809f41fddce',
+      '0xf785b29641bfe11c7d5b58f315743df6dbf4fbd0',
+      '0xcee03a83809543bfd2a379e145df305d2b508f2e',
+      '0xd35e225662def377baaa2c61c42749e55a8a934c',
+    ],
   },
 }
 
 // The network this build runs on (VITE_ARC_NETWORK, mainnet by default).
 export const NETWORK: NetworkConfig = NETWORKS[parseArcNetwork(env.VITE_ARC_NETWORK)]
+
+export const TEST_CREATORS: readonly string[] = NETWORK.testCreators
 
 export type NetworkTagLabel = 'Testnet' | 'Beta'
 

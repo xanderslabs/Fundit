@@ -4,7 +4,7 @@ import { CampaignGrid, LoadError } from '../components/CampaignGrid'
 import { Button, ButtonLink, PageHeader } from '../components/ui'
 import { campaignsQuery, PAGE_SIZE } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
-import { type CampaignView, uniqueByAddress } from '../lib/campaigns'
+import { type CampaignView, publicFundits, uniqueByAddress } from '../lib/campaigns'
 import './Explore.css'
 
 type Sort = 'newest' | 'raised' | 'closest'
@@ -46,7 +46,8 @@ export function Explore() {
   const results = useQueries({
     queries: Array.from({ length: pages }, (_, i) => campaignsQuery(BigInt(i) * PAGE_SIZE)),
   })
-  const loaded = uniqueByAddress(results.flatMap((r) => r.data ?? []))
+  // Test Fundits stay out of public lists (TEST_CREATORS). Their own pages still open.
+  const loaded = publicFundits(uniqueByAddress(results.flatMap((r) => r.data ?? [])))
   const firstPending = results[0]?.isPending ?? true
   const failed = results.find((r) => r.isError)
   const last = results[results.length - 1]

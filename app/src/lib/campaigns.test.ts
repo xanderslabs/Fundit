@@ -1,5 +1,5 @@
 import type { Address } from 'viem'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { TOKENS } from '../config'
 import {
   type CampaignView,
@@ -7,10 +7,18 @@ import {
   fetchCampaignPage,
   fetchFeatured,
   myCampaigns,
+  isTestFundit,
+  publicFundits,
   type ReadClient,
   type Summary,
   uniqueByAddress,
 } from './campaigns'
+
+// One test account, written in lower case as in config.ts.
+vi.mock('../config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../config')>()),
+  TEST_CREATORS: ['0x2222222222222222222222222222222222222222'],
+}))
 
 const A = '0x00000000000000000000000000000000000000a1' as Address
 const B = '0x00000000000000000000000000000000000000b2' as Address
@@ -156,5 +164,29 @@ describe('myCampaigns', () => {
     } as unknown as ReadClient
     const mine = await myCampaigns(client, ME)
     expect(mine.map((v) => v.address)).toEqual([A])
+  })
+})
+
+// Fundits made by test accounts would read as real fundraisers on a public list. They stay reachable by link.
+describe('test data on public lists', () => {
+  const TESTER = '0x2222222222222222222222222222222222222222' as Address
+  const view = (address: Address, creator: Address): CampaignView => ({ address, summary: { ...summary('x'), creator }, symbol: 'USDC' })
+
+  it('leaves out Fundits whose creator is a test account, in any letter case, and keeps the order', () => {
+    const real1 = view(A, '0x1111111111111111111111111111111111111111')
+    const test = view(B, '0x2222222222222222222222222222222222222222')
+    const testMixed = view(C, '0x2222222222222222222222222222222222222222'.toUpperCase().replace('0X', '0x') as Address)
+    const real2 = view(ZERO, '0x3333333333333333333333333333333333333333')
+    expect(publicFundits([real1, test, testMixed, real2])).toEqual([real1, real2])
+    expect(isTestFundit(test)).toBe(true)
+    expect(isTestFundit(testMixed)).toBe(true)
+    expect(isTestFundit(real1)).toBe(false)
+  })
+
+  it('still reads a test Fundit by its address, so a direct link works', async () => {
+    const client = fakeClient({ campaigns: [A], summaries: { [A]: { ...summary('test'), creator: TESTER } } })
+    const got = await fetchCampaign(client, A)
+    expect(got).not.toBe('not-a-campaign')
+    expect((got as CampaignView).summary.creator).toBe(TESTER)
   })
 })

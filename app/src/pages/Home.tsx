@@ -6,6 +6,7 @@ import { CampaignGrid, LoadError } from '../components/CampaignGrid'
 import { ButtonLink } from '../components/ui'
 import { CHAIN_NAMES } from '../config'
 import { useCampaigns, useFeatured } from '../hooks/useCampaigns'
+import { isTestFundit, publicFundits } from '../lib/campaigns'
 import { useSender } from '../hooks/useSender'
 import './Home.css'
 
@@ -148,6 +149,8 @@ function CreateFunditButton() {
 export function Home() {
   const featured = useFeatured()
   const newest = useCampaigns(0n)
+  // Test Fundits stay out of public lists (TEST_CREATORS). Their own pages still open.
+  const featuredView = featured.data && !isTestFundit(featured.data) ? featured.data : null
   const signedIn = useSender() !== null
 
   return (
@@ -186,11 +189,11 @@ export function Home() {
         </ul>
       </section>
 
-      {featured.data && (
+      {featuredView && (
         <section className="section featured" aria-labelledby="featured">
           <h2 id="featured">Featured Fundit</h2>
           <div className="featured-card">
-            <CampaignCard view={featured.data} featured />
+            <CampaignCard view={featuredView} featured />
           </div>
         </section>
       )}
@@ -206,7 +209,7 @@ export function Home() {
           <LoadError onRetry={() => newest.refetch()} />
         ) : (
           <CampaignGrid
-            views={newest.data?.slice(0, NEWEST_COUNT)}
+            views={newest.data && publicFundits(newest.data).slice(0, NEWEST_COUNT)}
             loading={newest.isPending}
             empty={
               signedIn ? (

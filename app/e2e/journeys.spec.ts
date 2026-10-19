@@ -103,6 +103,10 @@ test.beforeAll(async ({ browser }) => {
   checkRpId(shared, test.info().project.use.baseURL!)
   account = getAddress(shared.account)
   username = shared.username
+  // The run makes a Fundit. Its creator must be on the testnet test-creator list, so it stays off Home and Explore.
+  if (!NET.testCreators.includes(account.toLowerCase())) {
+    throw new Error(`Add the shared e2e account ${account} (lower case) to testCreators for testnet in src/config.ts.`)
+  }
   await checkChain()
   funder = funderAddress()
   funderStart = await usdcBalance(funder)

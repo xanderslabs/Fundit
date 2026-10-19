@@ -1,8 +1,11 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
+import type { Address } from 'viem'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SOCIAL_LINKS } from '../config'
+import type { CampaignView } from '../lib/campaigns'
 import type { Sender } from '../lib/sender'
 import { Home } from './Home'
 
@@ -12,10 +15,12 @@ vi.mock('../config', async (importOriginal) => ({
   get CROSSCHAIN_ENABLED() {
     return flags.crosschain
   },
+  TEST_CREATORS: ['0x2222222222222222222222222222222222222222'],
 }))
+const lists = vi.hoisted(() => ({ featured: null as unknown, newest: [] as unknown[] }))
 vi.mock('../hooks/useCampaigns', () => ({
-  useFeatured: () => ({ data: null }),
-  useCampaigns: () => ({ data: [], isPending: false, isError: false, refetch: () => {} }),
+  useFeatured: () => ({ data: lists.featured }),
+  useCampaigns: () => ({ data: lists.newest, isPending: false, isError: false, refetch: () => {} }),
 }))
 const state: { sender: Sender | null } = { sender: null }
 vi.mock('../hooks/useSender', () => ({ useSender: () => state.sender }))
@@ -32,6 +37,8 @@ const ME: Sender = { kind: 'passkey', address: '0x111111111111111111111111111111
 
 afterEach(() => {
   cleanup()
+  lists.featured = null
+  lists.newest = []
   flags.crosschain = false
   state.sender = null
   openWallet.mockReset()
@@ -39,16 +46,44 @@ afterEach(() => {
 })
 
 const ui = () => (
-  <MemoryRouter>
-    <Routes>
-      <Route index element={<Home />} />
-      <Route path="/create" element={<p>Create page</p>} />
-    </Routes>
-  </MemoryRouter>
+  <QueryClientProvider client={new QueryClient()}>
+    <MemoryRouter>
+      <Routes>
+        <Route index element={<Home />} />
+        <Route path="/create" element={<p>Create page</p>} />
+      </Routes>
+    </MemoryRouter>
+  </QueryClientProvider>
 )
 
 function renderHome() {
   return render(ui())
+}
+
+
+// Fundits for the public lists. TESTER is on the test-creator list; the others are real.
+const TESTER = '0x2222222222222222222222222222222222222222'
+function fundit(n: number, title: string, creator: string): CampaignView {
+  return {
+    address: `0x${n.toString(16).padStart(40, '0')}` as Address,
+    symbol: 'USDC',
+    summary: {
+      creator: creator as Address,
+      token: '0x3600000000000000000000000000000000000000',
+      goal: 10_000_000n,
+      raised: 0n,
+      available: 0n,
+      withdrawn: 0n,
+      closed: false,
+      donationFeeBps: 100,
+      withdrawFeeBps: 100,
+      createdAt: 0n,
+      createdAtBlock: 1n,
+      backup: '0x0000000000000000000000000000000000000000',
+      recoveryReadyAt: 0n,
+      meta: { title, description: '', imageUrl: '', links: [] },
+    },
+  }
 }
 
 const faq = () => screen.getByRole('region', { name: 'Questions people ask' })
@@ -197,6 +232,33 @@ describe('Home FAQ', () => {
     expect(text).toMatch(/sign in with a passkey/)
     expect(text).toMatch(/Fundit account/)
     expect(text).not.toMatch(/MetaMask|WalletConnect/)
+  })
+})
+
+// Test Fundits read as real fundraisers to a visitor. Home leaves them out of Featured and Newest.
+describe('Home hides test Fundits', () => {
+  it('leaves Fundits by test accounts out of Newest', () => {
+    lists.newest = [fundit(1, 'Real garden', '0x1111111111111111111111111111111111111111'), fundit(2, 'E2E testnet garden', TESTER)]
+    renderHome()
+    const newest = screen.getByRole('region', { name: 'Newest Fundits' })
+    expect(within(newest).getByText('Real garden')).toBeTruthy()
+    expect(within(newest).queryByText('E2E testnet garden')).toBeNull()
+  })
+
+  it('shows the empty state when every Fundit is a test one', () => {
+    lists.newest = [fundit(2, 'E2E testnet garden', TESTER)]
+    renderHome()
+    expect(screen.getByText('No Fundits yet. Sign in to start the first one, or look around.')).toBeTruthy()
+  })
+
+  it('shows no Featured section for a test Fundit, and shows a real one', () => {
+    lists.featured = fundit(2, 'E2E featured', TESTER)
+    renderHome()
+    expect(screen.queryByRole('region', { name: 'Featured Fundit' })).toBeNull()
+    cleanup()
+    lists.featured = fundit(1, 'Real featured', '0x1111111111111111111111111111111111111111')
+    renderHome()
+    expect(within(screen.getByRole('region', { name: 'Featured Fundit' })).getByText('Real featured')).toBeTruthy()
   })
 })
 

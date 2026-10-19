@@ -261,3 +261,15 @@ describe('networkTag', () => {
     expect(networkTag('mainnet', 'true')).toBeNull()
   })
 })
+
+// Test Fundits stay off public lists. The list is matched against lower-case creators, so every entry must be one.
+describe('testCreators', () => {
+  it('lists the 17 testnet creators and the shared e2e account, in lower case, and nothing on mainnet', () => {
+    const list = NETWORKS.testnet.testCreators
+    expect(list).toHaveLength(17)
+    for (const a of list) expect(a).toMatch(/^0x[0-9a-f]{40}$/)
+    expect(new Set(list).size).toBe(list.length)
+    expect(list).toContain('0xd35e225662def377baaa2c61c42749e55a8a934c')
+    expect(NETWORKS.mainnet.testCreators).toEqual([])
+  })
+})

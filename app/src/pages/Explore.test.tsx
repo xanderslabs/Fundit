@@ -1,16 +1,66 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
+import type { Address } from 'viem'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { CampaignView } from '../lib/campaigns'
 import { Explore } from './Explore'
 
+vi.mock('../config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../config')>()),
+  TEST_CREATORS: ['0x2222222222222222222222222222222222222222'],
+}))
 vi.mock('../hooks/useSender', () => ({ useSender: () => null }))
+const page = vi.hoisted(() => ({ views: [] as unknown[] }))
 vi.mock('../hooks/useCampaigns', () => ({
   PAGE_SIZE: 24n,
-  campaignsQuery: (offset: bigint) => ({ queryKey: ['campaigns', offset.toString()], queryFn: async () => [] }),
+  campaignsQuery: (offset: bigint) => ({ queryKey: ['campaigns', offset.toString()], queryFn: async () => page.views }),
 }))
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  page.views = []
+})
+
+// Fundits for the public lists. TESTER is on the test-creator list; the others are real.
+const TESTER = '0x2222222222222222222222222222222222222222'
+function fundit(n: number, title: string, creator: string): CampaignView {
+  return {
+    address: `0x${n.toString(16).padStart(40, '0')}` as Address,
+    symbol: 'USDC',
+    summary: {
+      creator: creator as Address,
+      token: '0x3600000000000000000000000000000000000000',
+      goal: 10_000_000n,
+      raised: 0n,
+      available: 0n,
+      withdrawn: 0n,
+      closed: false,
+      donationFeeBps: 100,
+      withdrawFeeBps: 100,
+      createdAt: 0n,
+      createdAtBlock: 1n,
+      backup: '0x0000000000000000000000000000000000000000',
+      recoveryReadyAt: 0n,
+      meta: { title, description: '', imageUrl: '', links: [] },
+    },
+  }
+}
+
+describe('Explore hides test Fundits', () => {
+  it('lists real Fundits and leaves out those made by test accounts', async () => {
+    page.views = [fundit(1, 'Real garden', '0x1111111111111111111111111111111111111111'), fundit(2, 'E2E testnet garden', TESTER)]
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <Explore />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    expect(await screen.findByText('Real garden')).toBeTruthy()
+    expect(screen.queryByText('E2E testnet garden')).toBeNull()
+  })
+})
 
 // The native arrow sat half outside the box. Every dropdown uses the .select look, whose chevron stays inside.
 describe('Dropdowns', () => {

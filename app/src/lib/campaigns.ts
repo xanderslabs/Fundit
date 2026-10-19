@@ -2,7 +2,7 @@ import type { Address, ContractFunctionReturnType, PublicClient } from 'viem'
 import { isAddressEqual, zeroAddress } from 'viem'
 import { campaignAbi } from '../abi/campaign'
 import { factoryAbi } from '../abi/factory'
-import { FACTORY_ADDRESS, TOKENS, type TokenSymbol } from '../config'
+import { FACTORY_ADDRESS, TEST_CREATORS, TOKENS, type TokenSymbol } from '../config'
 
 export type Summary = ContractFunctionReturnType<typeof campaignAbi, 'view', 'summary'>
 
@@ -48,6 +48,15 @@ export function uniqueByAddress(views: CampaignView[]): CampaignView[] {
     seen.add(key)
     return true
   })
+}
+
+// A Fundit made by a test account (TEST_CREATORS in config.ts). Public lists leave it out; its link still works.
+export function isTestFundit(view: CampaignView): boolean {
+  return TEST_CREATORS.includes(view.summary.creator.toLowerCase())
+}
+
+export function publicFundits(views: CampaignView[]): CampaignView[] {
+  return views.filter((v) => !isTestFundit(v))
 }
 
 // Any address in a URL is untrusted. Only the factory's own campaigns are read.
