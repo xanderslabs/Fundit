@@ -14,6 +14,7 @@
     "lint:css": "stylelint \"src/**/*.css\"",
     "e2e": "playwright test",
     "e2e:make-account": "playwright test --config playwright.make-account.config.ts",
+    "e2e:recovery": "playwright test --config playwright.recovery.config.ts",
     "abis": "node scripts/gen-abis.mjs"
   },
   "dependencies": {

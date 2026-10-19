@@ -41,6 +41,16 @@ vi.mock('../config', async (importOriginal) => ({
   CIRCLE_CLIENT_KEY: 'test-key',
 }))
 
+// The passkey on this device: x = 3, y = 4, as a 64-byte public key.
+const LIVE_CRED = vi.hoisted(() => ({ id: 'cred-live', publicKey: `0x${'0'.repeat(63)}3${'0'.repeat(63)}4`, raw: {} }))
+// Circle's answer to circle_getAddressMapping for an owner it has no record of (seen on the live API, 2026-10-19).
+const NO_MAPPING = vi.hoisted(
+  () => () =>
+    Object.assign(new Error('Invalid parameters were provided to the RPC method.'), {
+      code: -32602,
+      details: "Cannot find target wallet to identifier map  in the system. Either the specified identifier doesn't exist or it's not accessible to the caller.",
+    }),
+)
 // A fake of the lazily loaded SDK module. toWebAuthnCredential is the passkey prompt.
 const kit = vi.hoisted(() => {
   const bundler = { waitForUserOperationReceipt: vi.fn(), estimateUserOperationGas: vi.fn(), sendUserOperation: vi.fn() }
@@ -60,10 +70,11 @@ const kit = vi.hoisted(() => {
     sdk: {
       recoveryActions: vi.fn(() => ({ registerRecoveryAddress, estimateRegisterRecoveryAddressGas, executeRecovery, estimateExecuteRecoveryGas })),
       getAddressMapping: vi.fn(),
-      toWebAuthnCredential: vi.fn(async () => ({ id: 'cred-live', publicKey: '0x', raw: {} })),
+      toWebAuthnCredential: vi.fn(async (): Promise<{ id: string; publicKey: string; raw: object }> => LIVE_CRED),
       toPasskeyTransport: vi.fn(() => ({})),
       toModularTransport: vi.fn(() => ({})),
-      toCircleSmartAccount: vi.fn(async () => ({ address: '0x00000000000000000000000000000000000000cc' })),
+      // The passkey's own address, unless the caller names the account (a recovered or mapped one).
+      toCircleSmartAccount: vi.fn(async (p: { address?: string }) => ({ address: p.address ?? '0x00000000000000000000000000000000000000cc' })),
       // 1,000 gwei, about Circle's fee on Arc testnet.
       getUserOperationGasPrice: vi.fn(async () => {
         const tier = { maxFeePerGas: '1000000000000', maxPriorityFeePerGas: '960000000000' }
@@ -136,6 +147,14 @@ function bundler(over: Partial<PasskeyBundler<typeof ACCOUNT>> = {}) {
   }
   return Object.assign(b, over) as typeof b
 }
+
+// Every passkey starts with no account mapped to it at Circle, so a login derives the passkey's own account.
+beforeEach(() => {
+  kit.sdk.toWebAuthnCredential.mockReset()
+  kit.sdk.toWebAuthnCredential.mockResolvedValue(LIVE_CRED)
+  kit.sdk.getAddressMapping.mockReset()
+  kit.sdk.getAddressMapping.mockRejectedValue(NO_MAPPING())
+})
 
 afterEach(() => {
   vi.useRealTimers()
@@ -318,6 +337,124 @@ describe('useSender', () => {
   it('never returns a wagmi sender: a connected wallet alone is signed out', () => {
     const { result } = renderHook(() => useSender())
     expect(result.current).toBeNull()
+  })
+})
+
+// A passkey added to an existing account (by recovery) is not that account's own address. Circle's address
+// mapping says which account it opens, and the owners on Arc confirm it. Only "no mapping" may open a new account:
+// a failed lookup must never put the person in an empty account that looks like their money is gone.
+describe('which account a passkey opens', () => {
+  const RECOVERED = getAddress('0x00000000000000000000000000000000000000Ab') as Address
+  const OTHER = getAddress('0x00000000000000000000000000000000000000Cd') as Address
+  const passkeyOwner = (x: bigint, y: bigint) => ({ weight: 1n, credType: 0, addr: '0x0000000000000000000000000000000000000000', publicKeyX: x, publicKeyY: y })
+  const LOOKUP = { owner: { type: 'WEBAUTHOWNER', identifier: { publicKeyX: '3', publicKeyY: '4' } } }
+
+  beforeEach(() => {
+    kit.sdk.toCircleSmartAccount.mockClear()
+    kit.bundler.estimateUserOperationGas.mockReset()
+    kit.bundler.estimateUserOperationGas.mockResolvedValue(GAS)
+    kit.bundler.sendUserOperation.mockReset()
+    kit.bundler.sendUserOperation.mockResolvedValue(OP_HASH)
+    kit.bundler.waitForUserOperationReceipt.mockReset()
+    kit.bundler.waitForUserOperationReceipt.mockResolvedValue(receipt(true))
+  })
+  afterEach(() => {
+    code.clear()
+    owners.data = []
+    owners.fail = false
+    localStorage.clear()
+  })
+
+  // The recovered account is deployed and lists this passkey among its owners.
+  function recovered(account: Address = RECOVERED) {
+    kit.sdk.getAddressMapping.mockResolvedValue([{ walletAddress: account }])
+    code.set(account.toLowerCase(), '0x6001')
+    owners.data = [passkeyOwner(9n, 9n), passkeyOwner(3n, 4n)]
+  }
+
+  it('signs a recovered passkey in to the recovered account', async () => {
+    recovered()
+    expect(await loginPasskey()).toEqual({ address: RECOVERED })
+    expect(kit.sdk.getAddressMapping).toHaveBeenCalledWith(expect.anything(), LOOKUP)
+    expect(kit.sdk.toCircleSmartAccount).toHaveBeenLastCalledWith(expect.objectContaining({ address: RECOVERED }))
+    expect(readPasskeySession()).toEqual({ address: RECOVERED, credentialId: 'cred-live' })
+  })
+
+  // After a reload the signer is gone. The send asks for the passkey again and must sign for the recovered account,
+  // not refuse with "That passkey opens a different wallet".
+  it('sends from the recovered account after a reload', async () => {
+    recovered()
+    const stored = { address: RECOVERED, credentialId: 'cred-live' }
+    savePasskeySession(stored)
+    const res = await storedPasskeySender(stored).send([A])
+    expect(res.status).toBe('success')
+    expect(kit.bundler.sendUserOperation.mock.calls[0]![0].account.address).toBe(RECOVERED)
+  })
+
+  it('still refuses to sign for an account other than the one the page shows', async () => {
+    recovered()
+    const stored = { address: OTHER, credentialId: 'cred-live' }
+    await expect(storedPasskeySender(stored).send([A])).rejects.toThrow('That passkey opens a different wallet.')
+    expect(kit.bundler.sendUserOperation).not.toHaveBeenCalled()
+  })
+
+  it('opens the passkey\'s own new account when Circle has no mapping for it', async () => {
+    expect(await loginPasskey()).toEqual({ address: '0x00000000000000000000000000000000000000cc' })
+    expect(kit.sdk.getAddressMapping).toHaveBeenCalledWith(expect.anything(), LOOKUP)
+    expect((kit.sdk.toCircleSmartAccount.mock.calls.at(-1)![0] as { address?: string }).address).toBeUndefined()
+  })
+
+  // A mapping is an off-chain record. executeRecovery writes it before its user operation, so a recovery that never
+  // landed leaves a mapping to an account this passkey does not own.
+  it('ignores a mapped account that does not list this passkey as an owner on Arc', async () => {
+    recovered()
+    owners.data = [passkeyOwner(9n, 9n)]
+    expect(await loginPasskey()).toEqual({ address: '0x00000000000000000000000000000000000000cc' })
+  })
+
+  it('ignores a mapped account that is not deployed', async () => {
+    kit.sdk.getAddressMapping.mockResolvedValue([{ walletAddress: RECOVERED }])
+    expect(await loginPasskey()).toEqual({ address: '0x00000000000000000000000000000000000000cc' })
+  })
+
+  it('refuses when the passkey owns more than one deployed account', async () => {
+    recovered()
+    kit.sdk.getAddressMapping.mockResolvedValue([{ walletAddress: RECOVERED }, { walletAddress: OTHER }])
+    code.set(OTHER.toLowerCase(), '0x6001')
+    await expect(loginPasskey()).rejects.toThrow('more than one Fundit account')
+    expect(readPasskeySession()).toBeNull()
+  })
+
+  it.each([
+    ['the mapping lookup fails', () => kit.sdk.getAddressMapping.mockRejectedValue(new TypeError('Failed to fetch'))],
+    ['the owners on Arc cannot be read', () => {
+      recovered()
+      owners.fail = true
+    }],
+  ])('shows a plain error and opens no account when %s', async (_name, fail) => {
+    fail()
+    const err = await loginPasskey().catch((e: unknown) => e)
+    expect(explainError(err)).toBe("We couldn't check which account this passkey opens. Check your connection and try again.")
+    expect(kit.sdk.toCircleSmartAccount).not.toHaveBeenCalled()
+    expect(readPasskeySession()).toBeNull()
+    // A retry once the network is back opens the right account.
+    owners.fail = false
+    recovered()
+    expect(await loginPasskey()).toEqual({ address: RECOVERED })
+  })
+
+  it('sends nothing after a reload when the lookup fails', async () => {
+    kit.sdk.getAddressMapping.mockRejectedValue(new TypeError('Failed to fetch'))
+    const stored = { address: RECOVERED, credentialId: 'cred-live' }
+    savePasskeySession(stored)
+    await expect(storedPasskeySender(stored).send([A])).rejects.toThrow("We couldn't check which account this passkey opens.")
+    expect(kit.bundler.sendUserOperation).not.toHaveBeenCalled()
+  })
+
+  // A new passkey cannot own anything yet, so sign-up does not ask Circle.
+  it('does not look up a passkey made at sign-up', async () => {
+    await registerPasskey('ana.phone')
+    expect(kit.sdk.getAddressMapping).not.toHaveBeenCalled()
   })
 })
 
@@ -696,7 +833,7 @@ describe('recoverWithPhrase', () => {
     expect(kit.executeRecovery).toHaveBeenCalledTimes(1)
     const args = kit.executeRecovery.mock.calls[0]![0]
     expect(args.credential).toBe(NEW_CRED)
-    expect(args.account.address).toBe('0x00000000000000000000000000000000000000cc')
+    expect(args.account.address).toBe(RECOVERED)
     expect(args.paymaster).toBeUndefined()
     expect(args).toMatchObject({ callGasLimit: 125_003n, preVerificationGas: 50_000n, verificationGasLimit: 70_000n })
     expect(res).toEqual({ status: 'recovered', session: { address: RECOVERED, credentialId: 'cred-new' } })
@@ -786,7 +923,35 @@ describe('recoverWithPhrase', () => {
   it('refuses when no Fundit account uses this recovery key', async () => {
     kit.sdk.getAddressMapping.mockResolvedValue([])
     await expect(recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).rejects.toThrow("We couldn't find a Fundit account for this recovery key.")
+    // Circle answers an unknown key with an error, not an empty list.
+    kit.sdk.getAddressMapping.mockRejectedValue(NO_MAPPING())
+    await expect(recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).rejects.toThrow("We couldn't find a Fundit account for this recovery key.")
     expect(kit.sdk.toWebAuthnCredential).not.toHaveBeenCalled()
+  })
+
+  // executeRecovery (Circle's SDK) maps the new passkey's x and y, as decimal strings, to the account before it
+  // adds the passkey as an owner. Login looks the passkey up the same way, so after a reload, or a fresh sign-in
+  // on this device, the new passkey opens the recovered account and not an empty account of its own.
+  it('signs in to the recovered account with the new passkey after the recovery', async () => {
+    const NEW_KEY = { ...NEW_CRED, publicKey: `0x04${'0'.repeat(63)}7${'0'.repeat(63)}8` }
+    kit.sdk.toWebAuthnCredential.mockResolvedValue(NEW_KEY)
+    // What Circle holds once executeRecovery has run: the recovery key and the new passkey both map to the account.
+    kit.sdk.getAddressMapping.mockImplementation(async (_client: unknown, { owner }: { owner: { type: string; identifier: Record<string, string> } }) => {
+      if (owner.type === 'EOAOWNER') return [{ walletAddress: RECOVERED }]
+      if (owner.identifier.publicKeyX === '7' && owner.identifier.publicKeyY === '8') return [{ walletAddress: RECOVERED }]
+      throw NO_MAPPING()
+    })
+    owners.data = [{ weight: 1n, credType: 0, addr: '0x0000000000000000000000000000000000000000', publicKeyX: 7n, publicKeyY: 8n }]
+    try {
+      expect(await recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).toMatchObject({ status: 'recovered' })
+      // Fundit never calls createAddressMapping itself: the SDK's executeRecovery does (see the module comment).
+      expect(kit.sdk).not.toHaveProperty('createAddressMapping')
+      clearPasskeySession()
+      expect(await loginPasskey()).toEqual({ address: RECOVERED })
+      expect(readPasskeySession()).toEqual({ address: RECOVERED, credentialId: 'cred-new' })
+    } finally {
+      owners.data = []
+    }
   })
 
   // The account pays the fee. Below the buffer, the person is told to fund the account first, and no passkey

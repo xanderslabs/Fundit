@@ -237,13 +237,74 @@ function readBundler(): Promise<ReceiptBundler> {
   return receiptBundler
 }
 
-async function connect(lib: Sdk, credential: Credential, key: string): Promise<Live> {
+// Which account a passkey opens. A passkey made at sign-up owns only its own new account. A passkey added to an
+// existing account (by recovery) does not: its own address would be a new, empty account. Circle keeps an address
+// mapping from each owner to its account; executeRecovery in Circle's SDK writes it for the new passkey, as x and y
+// in decimal (dist/index.mjs, executeRecovery). The mapping is an off-chain record written before the recovery's
+// user operation, so a mapped account counts only when it is deployed on Arc and lists this passkey as an owner.
+// undefined means none: the passkey's own account. A failed lookup throws, so it never opens a new account instead.
+const LOOKUP_FAILED = "We couldn't check which account this passkey opens. Check your connection and try again."
+const MANY_ACCOUNTS = "This passkey opens more than one Fundit account, so Fundit can't pick one. Sign in another way, or contact hello@fundit.fun."
+
+async function passkeyAccount({ sdk }: Sdk, client: unknown, publicKey: Hex): Promise<Address | undefined> {
+  const key = publicKeyXY(publicKey)
+  if (!key) throw new PlainError(LOOKUP_FAILED)
+  let owned: Address[]
+  try {
+    const wallets = await mappedWallets(sdk, client, {
+      type: sdk.OwnerIdentifierType.WebAuthn,
+      identifier: { publicKeyX: key.x.toString(), publicKeyY: key.y.toString() },
+    })
+    const isOwner = await Promise.all(
+      wallets.map(async (w) => {
+        const owners = await readOwners(w)
+        return !!owners && owners.ownersData.some((o) => o.publicKeyX === key.x && o.publicKeyY === key.y)
+      }),
+    )
+    owned = wallets.filter((_, i) => isOwner[i])
+  } catch (err) {
+    throw new PlainError(LOOKUP_FAILED, { cause: err })
+  }
+  if (owned.length > 1) throw new PlainError(MANY_ACCOUNTS)
+  return owned[0]
+}
+
+// Circle answers circle_getAddressMapping for an owner it has no record of with an error (-32602 and this text,
+// seen on the live API on 2026-10-19), not an empty list. Only that answer means "no mapping".
+const NO_MAPPING = /Cannot find target wallet to identifier map/i
+function isNoMapping(e: unknown): boolean {
+  let cur = e
+  for (let i = 0; cur && typeof cur === 'object' && i < 20; i++) {
+    const x = cur as { message?: unknown; details?: unknown; cause?: unknown }
+    if ([x.message, x.details].some((v) => typeof v === 'string' && NO_MAPPING.test(v))) return true
+    cur = x.cause
+  }
+  return false
+}
+
+type MappingOwner = Parameters<Sdk['sdk']['getAddressMapping']>[1]['owner']
+// The accounts Circle maps this owner to, without repeats. Empty when Circle has no mapping. Rejects on any other error.
+async function mappedWallets(sdk: Sdk['sdk'], client: unknown, owner: MappingOwner): Promise<Address[]> {
+  let mappings: { walletAddress: string }[]
+  try {
+    mappings = await sdk.getAddressMapping(client as never, { owner })
+  } catch (err) {
+    if (isNoMapping(err)) return []
+    throw err
+  }
+  return [...new Set(mappings.map((m) => m.walletAddress.toLowerCase()))].map((w) => getAddress(w))
+}
+
+async function connect(lib: Sdk, credential: Credential, key: string, mode: 'Register' | 'Login'): Promise<Live> {
   const { sdk, aa } = lib
   const { transport, client } = clients(lib, key)
+  // A passkey made just now cannot own an account yet, so only a login asks Circle.
+  const address = mode === 'Login' ? await passkeyAccount(lib, client, credential.publicKey) : undefined
   type Params = Parameters<typeof sdk.toCircleSmartAccount>[0]
   const account = await sdk.toCircleSmartAccount({
     client: client as unknown as Params['client'],
     owner: aa.toWebAuthnAccount({ credential: credential as never }) as unknown as Params['owner'],
+    ...(address && { address }),
   })
   return {
     credentialId: credential.id,
@@ -279,7 +340,7 @@ async function credentialFor(mode: 'Register' | 'Login', opts: { username?: stri
     mode: mode === 'Register' ? lib.sdk.WebAuthnMode.Register : lib.sdk.WebAuthnMode.Login,
     ...opts,
   })
-  return connect(lib, credential, key)
+  return connect(lib, credential, key, mode)
 }
 
 function setLive(next: Live) {
@@ -334,7 +395,8 @@ export function logoutPasskey() {
   clearPasskeySession()
 }
 
-// The signing account for the stored session. After a reload this asks for the same passkey once.
+// The signing account for the stored session. After a reload this asks for the same passkey once. connect finds
+// the account the passkey opens (a recovered account too), and the check below compares against that.
 async function ensureLive(stored: StoredPasskey): Promise<Live> {
   if (live && live.credentialId === stored.credentialId) return live
   const next = await credentialFor('Login', { credentialId: stored.credentialId })
@@ -917,10 +979,7 @@ export async function recoverWithPhrase(p: { phrase: string; username: string })
   const recovery = lib.viem.mnemonicToAccount(phrase)
   const { transport, client } = clients(lib, key)
 
-  type Lookup = Parameters<typeof sdk.getAddressMapping>
-  const lookup: Lookup[1] = { owner: { type: sdk.OwnerIdentifierType.EOA, identifier: { address: recovery.address } } }
-  const mappings = await sdk.getAddressMapping(client as unknown as Lookup[0], lookup)
-  let wallets = [...new Set(mappings.map((m) => m.walletAddress.toLowerCase()))].map((w) => getAddress(w))
+  let wallets = await mappedWallets(sdk, client, { type: sdk.OwnerIdentifierType.EOA, identifier: { address: recovery.address } })
   if (wallets.length === 0) throw new PlainError("We couldn't find a Fundit account for this recovery key. Check the words and try again.")
   if (wallets.length > 1) {
     // Circle can also hold a wallet made for the key itself. The account that added the key is deployed on Arc.

@@ -134,6 +134,23 @@ To check the suite compiles and lists its steps without spending anything:
 E2E_BASE_URL=https://fundit.fun npx --prefix app playwright test --list
 ```
 
+## Recovery journey
+
+`recovery.spec.ts` checks recovery with the recovery key. `npm run e2e` skips it. Run it on its own after a
+deploy:
+
+```shell
+E2E_BASE_URL=https://fundit.fun npm --prefix app run e2e:recovery
+```
+
+It signs up a new throwaway account (`e2e-recover-<milliseconds>`) with a fresh virtual passkey, funds it
+with 1.5 USDC from the funder and saves a recovery key. Then it signs out, clears storage and moves to a new
+browser context with a new virtual authenticator, so the first passkey is gone. It recovers the account with
+the 12 words, reloads and sends 0.01 USDC to the funder, signs out and signs in again with the new passkey.
+The account address must stay the same and its balance must not be zero. At the end it sends what is left
+back to the funder. Before the recovery it tops the account up to 1 USDC if needed. A run costs about 1.5
+USDC in gas, and Circle counts one more active wallet each run.
+
 ## Cost
 
 The shared account keeps its money, so the funder sends only what a run is missing. The account should hold

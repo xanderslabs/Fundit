@@ -12,6 +12,8 @@ const BASE_URL = process.env.E2E_BASE_URL ? checkE2EBaseUrl(process.env.E2E_BASE
 
 export default defineConfig({
   testDir: './e2e',
+  // The recovery journey signs up a new account each run. It runs on its own with npm run e2e:recovery.
+  testIgnore: 'recovery.spec.ts',
   workers: 1,
   fullyParallel: false,
   retries: 0,
