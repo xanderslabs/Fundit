@@ -175,6 +175,21 @@ describe('AddBackupPasskey', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: 'Later' }))
     expect(onLater).toHaveBeenCalledTimes(1)
   })
+
+  // One main action fills the card. With Later beside it they share one row: Later first, the main action last,
+  // neither full width, so Later is not pushed onto its own line.
+  it('puts Later and Show my recovery key side by side in one row', async () => {
+    const { unmount } = render(ui())
+    const alone = (await screen.findByRole('button', { name: 'Show my recovery key' })) as HTMLButtonElement
+    expect(alone.className).toContain('ui-btn-block')
+    unmount()
+    render(ui({ onLater: () => {} }))
+    const show = await screen.findByRole('button', { name: 'Show my recovery key' })
+    const row = show.parentElement!
+    expect(row.className).toContain('ui-actions')
+    expect([...row.children].map((b) => b.textContent)).toEqual(['Later', 'Show my recovery key'])
+    expect(show.className).not.toContain('ui-btn-block')
+  })
 })
 
 describe('a stuck backup', () => {

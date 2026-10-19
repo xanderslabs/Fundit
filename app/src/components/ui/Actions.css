@@ -1,0 +1,16 @@
+.ui-actions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.ui-actions > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* A narrow phone: full width each, the primary (last) on top. */
+@media (max-width: 400px) {
+  .ui-actions {
+    flex-direction: column-reverse;
+  }
+}

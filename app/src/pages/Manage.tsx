@@ -7,7 +7,7 @@ import { erc20Abi } from '../abi/erc20'
 import { SignInButton } from '../components/AccountMenu'
 import { PendingBridgeTracker } from '../components/PendingBridgeTracker'
 import { TxStatus, useTx } from '../components/TxStatus'
-import { AddressChip, AmountInput, Button, EmptyState, Field, PageHeader, Panel, StatusBox } from '../components/ui'
+import { Actions, AddressChip, AmountInput, Button, EmptyState, Field, PageHeader, Panel, StatusBox } from '../components/ui'
 import { ARC_DOMAIN, CHAIN_LABELS, TOKENS } from '../config'
 import { useCampaign } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
@@ -555,12 +555,18 @@ function BackupSection({ view, sender }: { view: CampaignView; sender: Sender })
             <input autoComplete="off" spellCheck={false} placeholder="0x..." value={text} onChange={(e) => setText(e.target.value)} />
           </Field>
         </fieldset>
-        <Button type="submit" block disabled={raw === '' || error !== undefined || tx.locked}>
-          Save backup
-        </Button>
-        {hasBackup && (
-          <Button variant="secondary" className="manage-remove-backup" disabled={tx.locked} onClick={() => void setBackup(zeroAddress, 'Remove backup')}>
-            Remove backup
+        {hasBackup ? (
+          <Actions>
+            <Button variant="secondary" disabled={tx.locked} onClick={() => void setBackup(zeroAddress, 'Remove backup')}>
+              Remove backup
+            </Button>
+            <Button type="submit" disabled={raw === '' || error !== undefined || tx.locked}>
+              Save backup
+            </Button>
+          </Actions>
+        ) : (
+          <Button type="submit" block disabled={raw === '' || error !== undefined || tx.locked}>
+            Save backup
           </Button>
         )}
         <TxStatus tx={tx} noun="transaction" successText="Saved." startOverWarning={RETRY_WARNING} />

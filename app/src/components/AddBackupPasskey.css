@@ -29,12 +29,6 @@
   gap: var(--space-3);
 }
 
-.backup-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-}
-
 /* The 12 words as a numbered grid. */
 .recovery-phrase {
   display: grid;

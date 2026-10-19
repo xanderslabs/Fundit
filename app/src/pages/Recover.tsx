@@ -4,7 +4,7 @@ import type { Address } from 'viem'
 import { SignInButton } from '../components/AccountMenu'
 import { AddressQr } from '../components/AddressTools'
 import { usernameError } from '../components/PasskeyLogin'
-import { AddressChip, Button, ButtonLink, Card, Field, PageHeader, StatusBox } from '../components/ui'
+import { Actions, AddressChip, Button, ButtonLink, Card, Field, PageHeader, StatusBox } from '../components/ui'
 import { explainError } from '../lib/errors'
 import {
   checkPendingRecovery,
@@ -155,16 +155,20 @@ export function Recover() {
           <>
             <p>Your recovery is still confirming. Check again in a minute.</p>
             {stuck && <p>This is taking longer than usual. You can start over with your recovery key.</p>}
-            <div className="backup-actions">
-              <Button disabled={busy} onClick={check}>
-                Check again
-              </Button>
-              {stuck && (
+            {stuck ? (
+              <Actions>
                 <Button variant="secondary" disabled={busy} onClick={startOver}>
                   Start over
                 </Button>
-              )}
-            </div>
+                <Button disabled={busy} onClick={check}>
+                  Check again
+                </Button>
+              </Actions>
+            ) : (
+              <Button block disabled={busy} onClick={check}>
+                Check again
+              </Button>
+            )}
           </>
         ) : (
           <form className="recover-form" onSubmit={submit} noValidate>

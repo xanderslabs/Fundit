@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { explainError } from '../lib/errors'
 import { ADD_MONEY_PATH } from '../lib/urls'
-import { Button, Field } from './ui'
+import { Actions, Button, Field } from './ui'
 import './AddBackupPasskey.css'
 import './Form.css'
 import {
@@ -180,17 +180,20 @@ export function AddBackupPasskey({ stored, onLater, onDone, headingId, inDialog 
     setError(null)
   }
 
-  const pendingActions = (
-    <div className="backup-actions">
-      <Button disabled={busy} onClick={() => void check()}>
-        Check again
+  const checkAgain = (
+    <Button block={!stuck} disabled={busy} onClick={() => void check()}>
+      Check again
+    </Button>
+  )
+  const pendingActions = stuck ? (
+    <Actions>
+      <Button variant="secondary" disabled={busy} onClick={startOver}>
+        Start over
       </Button>
-      {stuck && (
-        <Button variant="secondary" disabled={busy} onClick={startOver}>
-          Start over
-        </Button>
-      )}
-    </div>
+      {checkAgain}
+    </Actions>
+  ) : (
+    checkAgain
   )
 
   let body
@@ -253,17 +256,20 @@ export function AddBackupPasskey({ stored, onLater, onDone, headingId, inDialog 
       </p>
     )
   } else {
-    body = (
-      <div className="backup-actions">
-        <Button block disabled={busy || funded === null} onClick={() => void show()}>
-          Show my recovery key
+    const showKey = (
+      <Button block={!onLater} disabled={busy || funded === null} onClick={() => void show()}>
+        Show my recovery key
+      </Button>
+    )
+    body = onLater ? (
+      <Actions>
+        <Button variant="secondary" disabled={busy} onClick={onLater}>
+          Later
         </Button>
-        {onLater && (
-          <Button variant="secondary" disabled={busy} onClick={onLater}>
-            Later
-          </Button>
-        )}
-      </div>
+        {showKey}
+      </Actions>
+    ) : (
+      showKey
     )
   }
 

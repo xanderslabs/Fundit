@@ -26,10 +26,6 @@
 }
 
 .manage-add-link,
-.manage-remove-backup {
-  align-self: flex-start;
-}
-
 .manage-current {
   display: flex;
   flex-wrap: wrap;

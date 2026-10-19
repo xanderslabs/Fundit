@@ -1,3 +1,4 @@
+export { Actions } from './Actions'
 export { AddressChip } from './AddressChip'
 export { Badge } from './Badge'
 export { Banner } from './Banner'

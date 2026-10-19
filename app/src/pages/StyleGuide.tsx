@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import type { Address } from 'viem'
 import {
+  Actions,
   AddressChip,
   AmountInput,
   Badge,
@@ -321,7 +322,10 @@ export function StyleGuide() {
         </Dialog>
         <Dialog open={dialogOpen === 'md'} size="md" onClose={() => setDialogOpen(null)} title="Add a recovery key">
           <p>A recovery key is 12 words you write down and keep safe.</p>
-          <Button>Show my recovery key</Button>
+          <Actions>
+            <Button variant="secondary">Later</Button>
+            <Button>Show my recovery key</Button>
+          </Actions>
         </Dialog>
       </Section>
     </div>

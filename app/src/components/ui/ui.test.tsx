@@ -6,7 +6,7 @@ import { useState } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../App'
-import { AddressChip, AmountInput, Button, Card, Dialog, Field, Stat, TabPanel, Tabs } from './index'
+import { Actions, AddressChip, AmountInput, Button, Card, Dialog, Field, Stat, TabPanel, Tabs } from './index'
 
 // Only the routing matters for the style guide check, so the real layout (wallet code, top bar) stays out.
 vi.mock('../Layout', async () => {
@@ -51,6 +51,18 @@ function parse(text: string): { rules: { selector: string; body: string }[]; med
 const ADDRESS = '0x1234567890abcdef1234567890abcdef12345678' as const
 
 describe('ui components', () => {
+  it('Actions renders the secondary first and the primary last, in one row', () => {
+    render(
+      <Actions>
+        <Button variant="secondary">Later</Button>
+        <Button>Show my recovery key</Button>
+      </Actions>,
+    )
+    const row = screen.getByRole('button', { name: 'Later' }).parentElement!
+    expect(row.className).toBe('ui-actions')
+    expect([...row.children].map((b) => b.textContent)).toEqual(['Later', 'Show my recovery key'])
+  })
+
   // Every button style comes from one component. A button that is busy cannot be pressed twice, so a send can
   // never go out twice.
   it('Button renders variants and is disabled while loading', async () => {
@@ -395,6 +407,18 @@ describe('ui components', () => {
 })
 
 describe('ui styles', () => {
+  // A main action and a secondary one sit side by side: secondary at the start, primary at the end, equal widths.
+  // On a narrow phone they stack full width with the primary on top, so the main action stays first to reach.
+  it('Actions keeps a pair in one row and stacks it, primary on top, below 400px', () => {
+    const { rules, media } = parse(css('Actions.css'))
+    const row = rules.find((r) => r.selector === '.ui-actions')!
+    expect(row.body).toMatch(/display\s*:\s*flex/)
+    expect(row.body).not.toMatch(/flex-wrap\s*:\s*wrap/)
+    expect(rules.find((r) => r.selector === '.ui-actions > *')!.body).toMatch(/flex\s*:\s*1 1 0/)
+    const narrow = media.find((m) => /max-width\s*:\s*400px/.test(m.query))!
+    expect(parse(narrow.body).rules.find((r) => r.selector === '.ui-actions')!.body).toMatch(/flex-direction\s*:\s*column-reverse/)
+  })
+
   // Each interactive part needs a visible ring for keyboard users, in the one focus colour.
   it('every interactive ui component has a focus-visible style', () => {
     const all = cssFiles.flatMap((f) => parse(css(f)).rules)
