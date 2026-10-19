@@ -255,4 +255,15 @@ describe('waitForResult', () => {
     })
     expect(await waitForResult(c, H1, 1000)).toEqual({ status: 'reverted', hash: H1, completed: 0, error: REVERTED })
   })
+
+  // A slow or failing replay is not a reason. Adding "the network took too long" would blame the wrong thing.
+  it('adds no network text to a revert whose replay fails', async () => {
+    const c = client({
+      waitForTransactionReceipt: async () => receipt(H1, 'reverted'),
+      getTransaction: async () => {
+        throw new Error('The request timed out.')
+      },
+    })
+    expect(await waitForResult(c, H1, 1000)).toEqual({ status: 'reverted', hash: H1, completed: 0, error: REVERTED })
+  })
 })

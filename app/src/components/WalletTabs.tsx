@@ -316,7 +316,7 @@ function WalletDepositForm({ account, bridging }: { account: Address; bridging: 
         {held !== undefined
           ? `Your wallet holds ${formatAmount(held, symbol)} on Arc.`
           : funds.isError
-            ? 'Could not read your wallet balance.'
+            ? 'Could not read your wallet balance. Check your connection.'
             : 'Reading your wallet balance...'}{' '}
         It also pays a small network fee in USDC.
       </p>

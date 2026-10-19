@@ -97,9 +97,13 @@ describe('useTx with TxStatus', () => {
         </>
       )
     }
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
     render(<Many />)
     await userEvent.setup().click(screen.getByRole('button', { name: 'Go' }))
-    expect(await screen.findByText(/useTx: several calls need a passkey sender/)).toBeTruthy()
+    // A coding mistake, so the person sees the plain fallback and the console gets the detail.
+    expect(await screen.findByText("That didn't work. Check your connection and try again.")).toBeTruthy()
+    expect(String(log.mock.calls[0]?.[0])).toMatch(/useTx: several calls need a passkey sender/)
+    log.mockRestore()
     expect(send).not.toHaveBeenCalled()
   })
 })

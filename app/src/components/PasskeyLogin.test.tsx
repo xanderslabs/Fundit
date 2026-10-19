@@ -221,7 +221,7 @@ describe('Sign in', () => {
     const user = await openCreate()
     await user.type(screen.getByLabelText('Username'), name)
     await user.click(screen.getByRole('button', { name: 'Create account' }))
-    expect(screen.getByRole('alert').textContent).toBe('Use 5 to 50 letters, numbers or _ @ . : + - (no spaces).')
+    expect(screen.getByRole('alert').textContent).toBe('Use 5 to 50 letters, numbers or _ @ . : + - with no spaces.')
     expect(registerPasskey).not.toHaveBeenCalled()
   })
 
@@ -250,7 +250,23 @@ describe('Sign in', () => {
     const user = await openCreate()
     await user.type(screen.getByLabelText('Username'), 'ana-phone')
     await user.click(screen.getByRole('button', { name: 'Create account' }))
-    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Use 5 to 50 letters, numbers or _ @ . : + - (no spaces).')
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Use 5 to 50 letters, numbers or _ @ . : + - with no spaces.')
+  })
+
+  // Circle refuses a taken name with -32024 before the browser makes a passkey, so there is no passkey to sign in
+  // with and no hint about one. viem shows it as "An unknown RPC error occurred.", which must never reach the page.
+  it("maps Circle's taken-username error to plain words, with no passkey hint", async () => {
+    const circle = new RpcRequestError({
+      body: { method: 'rp_getRegistrationOptions' },
+      error: { code: -32024, message: 'The username is duplicated.' },
+      url: 'https://modular-sdk.circle.com/v1/rpc/w3s/buidl',
+    })
+    registerPasskey.mockRejectedValue(new UnknownRpcError(circle))
+    renderControl()
+    const user = await openCreate()
+    await user.type(screen.getByLabelText('Username'), 'ana-phone')
+    await user.click(screen.getByRole('button', { name: 'Create account' }))
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', "That username is taken. Pick another one, or sign in if it's yours.")
   })
 
   // Sign-up can fail after the browser already saved the passkey. The person must be able to use it.

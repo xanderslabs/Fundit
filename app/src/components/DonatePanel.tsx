@@ -18,7 +18,7 @@ import type { CampaignView } from '../lib/campaigns'
 import { arcClient } from '../lib/clients'
 import { BALANCES_KEY, balancesKey, fetchAccountBalances } from '../lib/deposit'
 import { buildDonateCalls, donationBreakdown, fetchDonorFunds } from '../lib/donate'
-import { explainError, needsAddMoney } from '../lib/errors'
+import { CANCELLED, explainError, needsAddMoney } from '../lib/errors'
 import { bpsToPercent, formatAmount, formatExact, parseAmount } from '../lib/format'
 import { addAtLeast } from '../lib/passkey'
 import type { TxResult } from '../lib/sender'
@@ -183,7 +183,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
       return
     }
     if (res.status === 'reverted') setPhase({ kind: 'error', message: res.error, hash: res.hash })
-    else setPhase({ kind: 'error', message: 'You cancelled the request.' })
+    else setPhase({ kind: 'error', message: CANCELLED })
   }
 
   async function donate() {
@@ -252,7 +252,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
           return
         case 'rejected':
           // waitForResult never returns this, but the approval is not known to be mined, so start clean.
-          setPhase({ kind: 'error', message: 'The approval was not confirmed.', hash })
+          setPhase({ kind: 'error', message: "The approval was not confirmed, so nothing was given. Try again.", hash })
       }
     } catch (err) {
       // The check itself failed, so the transaction is still unknown. Stay blocked rather than invite a second send.

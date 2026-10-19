@@ -90,7 +90,7 @@ describe('AccountWithdraw', () => {
     renderForm()
     await screen.findByText(/You have 1.00 USDC/)
     await fill('0.5', ACCOUNT.toLowerCase())
-    expect(screen.getByText('Choose a different address.')).toBeTruthy()
+    expect(screen.getByText("That address can't receive this. Choose a different address.")).toBeTruthy()
     expect((submitButton() as HTMLButtonElement).disabled).toBe(true)
 
     await userEvent.clear(screen.getByLabelText('Recipient'))
@@ -158,7 +158,7 @@ describe('AccountWithdraw', () => {
     await userEvent.selectOptions(screen.getByLabelText('Currency'), 'EURC')
     await screen.findByText(/You have 5.00 EURC/)
     expect(screen.getAllByRole('option', { name: /Base|Arc/ }).map((o) => o.textContent)).toEqual(['Arc'])
-    expect(screen.getByText('EURC can only be sent on Arc.')).toBeTruthy()
+    expect(screen.getByText('EURC can only be sent on Arc. Choose Arc, or send USDC.')).toBeTruthy()
     await fill('5', FRIEND)
     await userEvent.click(submitButton())
     await screen.findByText('Your money was sent.')

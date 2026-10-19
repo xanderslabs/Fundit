@@ -29,7 +29,7 @@ const CLOSE_TEXT = 'Closing is permanent. Funds that arrive later can still be w
 const PASSKEY_WARNING = 'Your Fundit account may not exist on that chain. Send to an address you control there.'
 const CROSS_CHAIN_NOTE = 'Cross-chain payouts are new. Try a small amount first.'
 const FEE_CHANGED = 'The transfer fee changed. Check the new amount and confirm again.'
-const TOO_SMALL = 'This amount is too small to cover the transfer fee.'
+const TOO_SMALL = 'This amount is too small to cover the transfer fee. Try a larger amount.'
 const RETRY_WARNING = 'The earlier transaction may still go through. Try again anyway?'
 const QUOTE_DEBOUNCE_MS = 400
 

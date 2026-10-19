@@ -259,7 +259,7 @@ describe('donateCrossChain', () => {
       steps: [{ name: 'approve', state: 'error', errorCategory: 'user_rejected', errorMessage: 'User rejected the request.' }],
     })
     const err = await run().catch((e: unknown) => e)
-    expect(explainError(err)).toBe('You cancelled the request.')
+    expect(explainError(err)).toBe("You cancelled the request. Try again when you're ready.")
     expect(pendingBridges()).toEqual([])
   })
 
@@ -289,7 +289,7 @@ describe('donateCrossChain', () => {
       ],
     })
     const err = await run().catch((e: unknown) => e)
-    expect(explainError(err)).toBe('You cancelled the request.')
+    expect(explainError(err)).toBe("You cancelled the request. Try again when you're ready.")
   })
 
   // If the tab closes between the wallet sending and the burn event, the donor must still see something.

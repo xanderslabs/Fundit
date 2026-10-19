@@ -263,7 +263,7 @@ export function StyleGuide() {
           <p>Thank you. Your gift is on its way.</p>
         </StatusBox>
         <StatusBox tone="error">
-          <p>You cancelled the request.</p>
+          <p>You cancelled the request. Try again when you're ready.</p>
         </StatusBox>
       </Section>
 

@@ -239,7 +239,7 @@ describe('AddMoneyPanel', () => {
       core.switchChain.mockRejectedValue(new UserRejectedRequestError(new Error('User rejected')))
       renderPage()
       await fillDeposit('5')
-      expect(await screen.findByText('You cancelled the request.')).toBeTruthy()
+      expect(await screen.findByText("You cancelled the request. Try again when you're ready.")).toBeTruthy()
       expect(core.sendTransaction).not.toHaveBeenCalled()
       expect(passkeySend).not.toHaveBeenCalled()
     })

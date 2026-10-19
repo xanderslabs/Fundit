@@ -297,7 +297,7 @@ describe('Manage', () => {
     expect(await screen.findByText('0.20 USDC')).toBeTruthy()
     fees.high = 20_000000
     await user.click(button('Withdraw'))
-    const alert = await screen.findByText('This amount is too small to cover the transfer fee.', { selector: '.ui-status p' })
+    const alert = await screen.findByText('This amount is too small to cover the transfer fee. Try a larger amount.', { selector: '.ui-status p' })
     expect(alert.textContent).not.toMatch(/Something went wrong/)
     expect(send).not.toHaveBeenCalled()
   })

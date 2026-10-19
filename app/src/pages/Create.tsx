@@ -10,7 +10,7 @@ import { AmountInput, Button, ButtonLink, Card, Field, PageHeader, StatusBox } f
 import { EXPLORER_URL, FACTORY_ADDRESS, type TokenSymbol } from '../config'
 import { useFactoryFees } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
-import { explainError, needsAddMoney } from '../lib/errors'
+import { CANCELLED, explainError, needsAddMoney } from '../lib/errors'
 import { bpsToPercent } from '../lib/format'
 import type { Sender, TxResult } from '../lib/sender'
 import { byteLength, MAX_DESCRIPTION, MAX_LINKS, MAX_TITLE, validateCampaign } from '../lib/validate'
@@ -120,7 +120,7 @@ export function Create() {
         setPhase({ kind: 'timeout', hash: res.hash, userop: res.hashKind === 'userop' })
         return
       case 'rejected':
-        setPhase({ kind: 'error', message: 'You cancelled the request.' })
+        setPhase({ kind: 'error', message: CANCELLED })
     }
   }
 

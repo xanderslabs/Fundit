@@ -201,7 +201,7 @@ let live: Live | null = null
 let liveSession: StoredPasskey | null = null
 
 function clientKey(): string {
-  if (CIRCLE_CLIENT_KEY === '') throw new Error('Fundit accounts are not set up on this site yet.')
+  if (CIRCLE_CLIENT_KEY === '') throw new PlainError('Fundit accounts are not set up on this site yet. Try again later.')
   return CIRCLE_CLIENT_KEY
 }
 
@@ -340,7 +340,7 @@ async function ensureLive(stored: StoredPasskey): Promise<Live> {
   const next = await credentialFor('Login', { credentialId: stored.credentialId })
   // Never sign for a wallet other than the one the page shows.
   if (next.account.address.toLowerCase() !== stored.address.toLowerCase()) {
-    throw new Error('That passkey opens a different wallet. Sign out and sign in again.')
+    throw new PlainError('That passkey opens a different wallet. Sign out and sign in again.')
   }
   setLive(next)
   return next
@@ -690,7 +690,7 @@ export async function addBackupPasskey(stored: StoredPasskey, recoveryPhrase: st
       markBackupSaved(stored.address)
       return 'added'
     }
-    if (isUserRejection(err)) throw new PlainError('You cancelled the request. No backup was added.')
+    if (isUserRejection(err)) throw new PlainError("You cancelled the request. No backup was added. Try again when you're ready.")
     throw err
   }
   savePendingBackup({ account: stored.address, hash, hashKind: 'userop', createdAt: Date.now() })
@@ -926,7 +926,7 @@ export async function recoverWithPhrase(p: { phrase: string; username: string })
     // Circle can also hold a wallet made for the key itself. The account that added the key is deployed on Arc.
     const deployed = await Promise.all(wallets.map(async (w) => ((await arcClient.getCode({ address: w })) ?? '0x') !== '0x'))
     wallets = wallets.filter((_, i) => deployed[i])
-    if (wallets.length !== 1) throw new PlainError('This recovery key belongs to more than one account, so Fundit cannot pick one.')
+    if (wallets.length !== 1) throw new PlainError('This recovery key belongs to more than one account, so Fundit cannot pick one. Sign in with a passkey for the account instead.')
   }
   const account = wallets[0]!
 

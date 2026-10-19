@@ -219,7 +219,7 @@ function SendOutForm({ sender }: { sender: Sender }) {
               {held !== undefined
                 ? `You have ${formatAmount(held, symbol)} in your Fundit account.`
                 : balances.isError
-                  ? 'Could not read your balance.'
+                  ? 'Could not read your balance. Check your connection.'
                   : 'Reading your balance...'}
             </p>
             {parsed && !parsed.ok && (
@@ -245,7 +245,7 @@ function SendOutForm({ sender }: { sender: Sender }) {
             )}
           </div>
 
-          <Field label="Send to" id="send-out-dest" hint={symbol === 'EURC' ? 'EURC can only be sent on Arc.' : undefined}>
+          <Field label="Send to" id="send-out-dest" hint={symbol === 'EURC' ? 'EURC can only be sent on Arc. Choose Arc, or send USDC.' : undefined}>
             <select className="select" value={dest} onChange={(e) => setDest(e.target.value as PayoutDest)}>
               {destinations.map((d) => (
                 <option key={d} value={d}>

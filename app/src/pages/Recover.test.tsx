@@ -128,7 +128,7 @@ describe('Recover', () => {
   it("refuses a name Circle would reject, before starting a recovery", async () => {
     const user = renderPage()
     await fill(user, PHRASE, 'my phone')
-    expect(screen.getByText('Use 5 to 50 letters, numbers or _ @ . : + - (no spaces).')).toBeTruthy()
+    expect(screen.getByText('Use 5 to 50 letters, numbers or _ @ . : + - with no spaces.')).toBeTruthy()
     expect(recoverWithPhrase).not.toHaveBeenCalled()
   })
 

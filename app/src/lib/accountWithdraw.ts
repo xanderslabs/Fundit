@@ -10,9 +10,9 @@ import { ADDRESS_TYPO } from './validate'
 const FAST_THRESHOLD = 1000
 const STANDARD_THRESHOLD = 2000
 
-export const OWN_ADDRESS = 'Choose a different address.'
-export const EURC_ARC_ONLY = 'EURC can only be sent on Arc.'
-export const TOO_SMALL = 'This amount is too small to cover the transfer fee.'
+export const OWN_ADDRESS = "That address can't receive this. Choose a different address."
+export const EURC_ARC_ONLY = 'EURC can only be sent on Arc. Choose Arc, or send USDC.'
+export const TOO_SMALL = 'This amount is too small to cover the transfer fee. Try a larger amount.'
 
 // Circle's TokenMessengerV2, the same signature as contracts/src/interfaces/ITokenMessengerV2.sol.
 const tokenMessengerAbi = parseAbi([
@@ -41,7 +41,7 @@ export function buildAccountSendCalls(p: {
   if (p.maxFee === undefined) throw new Error('A fee quote is needed to send to another chain.')
   if (p.maxFee >= p.amount) throw new PlainError(TOO_SMALL)
   const chain = CCTP_CHAINS.find((c) => c.key === p.dest)!
-  if (p.fast && !chain.fast) throw new Error(`Fast transfers are not available to ${CHAIN_LABELS[chain.key]}.`)
+  if (p.fast && !chain.fast) throw new PlainError(`Fast transfers are not available to ${CHAIN_LABELS[chain.key]}. Choose Standard.`)
   const args = [
     p.amount,
     chain.domain,

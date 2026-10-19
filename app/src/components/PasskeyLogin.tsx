@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
-import { explainError, isInvalidUsername, isUserRejection, USERNAME_PATTERN, USERNAME_RULE } from '../lib/errors'
+import { explainError, isInvalidUsername, isUserRejection, USERNAME_PATTERN, USERNAME_RULE, USERNAME_TAKEN } from '../lib/errors'
 import { loginPasskey, registerPasskey } from '../lib/passkey'
 import { Button, Field } from './ui'
 import './Form.css'
@@ -53,9 +53,11 @@ export function PasskeyLogin({ onDone, onLeave, headingId }: { onDone?: () => vo
       onDone?.()
     } catch (err) {
       // Sign-up can fail after the browser saved the passkey. That passkey still opens the account.
-      // A refused name means Circle never asked the browser for a passkey.
-      const retry = registering && !isUserRejection(err) && !isInvalidUsername(err) ? ' If your browser saved a passkey, sign in with it.' : ''
-      setError(explainError(err) + retry)
+      // A refused or taken name means Circle never asked the browser for a passkey.
+      const message = explainError(err)
+      const refusedName = isInvalidUsername(err) || message === USERNAME_TAKEN
+      const retry = registering && !isUserRejection(err) && !refusedName ? ' If your browser saved a passkey, sign in with it.' : ''
+      setError(message + retry)
     } finally {
       setBusy(false)
     }

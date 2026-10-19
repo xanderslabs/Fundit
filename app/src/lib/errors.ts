@@ -1,4 +1,4 @@
-import { BaseError, decodeErrorResult, type Hex, UserRejectedRequestError } from 'viem'
+import { decodeErrorResult, type Hex, UserRejectedRequestError } from 'viem'
 import { campaignAbi } from '../abi/campaign'
 import { factoryAbi } from '../abi/factory'
 import { CCTP_CHAINS, CHAIN_LABELS, NETWORK } from '../config'
@@ -11,7 +11,7 @@ const ERROR_TEXT: Record<string, string> = {
   CampaignClosed: 'This Fundit is closed.',
   CannotSweepCampaignToken: "The Fundit's own token cannot be returned this way. Use withdraw instead.",
   FeeTooHighForAmount: 'This amount is too small to cover the fee. Try a larger amount.',
-  InsufficientBalance: 'There is not enough balance for this.',
+  InsufficientBalance: 'There is not enough balance for this. Try a smaller amount.',
   InvalidBackup: 'The backup address must be different from the organiser address.',
   InvalidGoal: 'The goal must be above 0.',
   InvalidMetadata: 'The title, description, image or links are over the limits. Check each field.',
@@ -22,10 +22,10 @@ const ERROR_TEXT: Record<string, string> = {
   NotCreator: 'Only the organiser can do this.',
   RecoveryNotReady: 'The 7-day recovery wait has not passed yet.',
   RecoveryPending: 'A recovery is already in progress.',
-  ReentrancyGuardReentrantCall: 'The Fundit refused a nested call.',
+  ReentrancyGuardReentrantCall: 'The Fundit refused this request. Try again in a moment.',
   SafeERC20FailedOperation: 'The token transfer failed. Check your balance and approval.',
   UnsupportedPayoutDomain: 'EURC can only be paid out on Arc.',
-  ZeroAddress: 'An address is missing.',
+  ZeroAddress: 'An address is missing. Check the address fields.',
   ZeroAmount: 'Enter an amount above 0.',
   // CampaignFactory
   CreationPaused: 'Creating new Fundits is paused right now. Try again later.',
@@ -40,8 +40,23 @@ const ERROR_TEXT: Record<string, string> = {
 }
 
 const ABI = [...campaignAbi, ...factoryAbi]
-const GENERIC = 'Something went wrong. Nothing was sent.'
-const MAX_DETAIL = 160
+
+// The one text for an error nothing below can name. The raw error goes to the console, never to the page.
+export const FALLBACK = "That didn't work. Check your connection and try again."
+export const CANCELLED = "You cancelled the request. Try again when you're ready."
+export const USERNAME_TAKEN = "That username is taken. Pick another one, or sign in if it's yours."
+const NO_PASSKEY = "That passkey didn't open a Fundit account. Try another passkey, or create an account."
+const PASSKEY_NOT_SAVED = "Your browser didn't save a passkey. Try again, or use another browser or device."
+const NO_PASSKEY_SUPPORT = "This browser can't use passkeys. Open Fundit in an up-to-date browser such as Chrome, Safari or Firefox."
+const PASSKEY_EXISTS = 'This device already has a passkey for this account. Sign in with it instead.'
+const PASSKEY_WRONG_SITE = "Passkeys can't be used on this page address. Open Fundit at its usual address and try again."
+const SETUP_FAILED = "We couldn't finish setting up your account. Try again in a moment."
+const NONCE_CLASH = 'Another transaction from your account is still going through. Wait a moment and try again.'
+const EXPIRED = 'The request expired before it went out. Nothing was sent. Try again.'
+const BAD_SIGNATURE = "Your passkey's signature was not accepted. Sign out, sign in again and try again."
+const RATE_LIMITED = 'Too many requests right now. Wait a minute and try again.'
+const TIMED_OUT = 'The network took too long to answer. Try again in a moment.'
+const NETWORK_DOWN = "Fundit couldn't reach the network. Check your connection and try again."
 
 // Every link in the error's cause chain, outermost first. Circle's kits wrap the original error as
 // cause: { trace: { rawError } }, so a link with no cause continues at its trace.rawError.
@@ -100,7 +115,7 @@ function kitText(e: unknown): string | null {
   return null
 }
 
-// A message written for the person, shown as it is. explainError adds no generic prefix to it.
+// A message written for the person, shown as it is.
 export class PlainError extends Error {}
 
 // NotAllowedError is what the browser throws when someone closes the passkey prompt.
@@ -117,7 +132,7 @@ export function isUserRejection(e: unknown): boolean {
 // refuses any other name with error -32025, "The username is invalid. It should be 5 to 50 characters and
 // contain only alphanumeric and _@.:+- characters.", which viem shows as "An unknown RPC error occurred."
 export const USERNAME_PATTERN = /^[A-Za-z0-9_@.:+-]{5,50}$/
-export const USERNAME_RULE = 'Use 5 to 50 letters, numbers or _ @ . : + - (no spaces).'
+export const USERNAME_RULE = 'Use 5 to 50 letters, numbers or _ @ . : + - with no spaces.'
 
 // The text of every link in the chain: message, details and viem's shortMessage.
 function texts(e: unknown): string[] {
@@ -175,29 +190,68 @@ function revertName(e: unknown): string | null {
   return null
 }
 
-function detail(e: unknown): string {
-  const text =
-    e instanceof BaseError ? e.shortMessage : e instanceof Error ? e.message : String((e as { message?: unknown })?.message ?? e)
-  const line = text.split('\n')[0]!.trim()
-  return line.length > MAX_DETAIL ? `${line.slice(0, MAX_DETAIL)}...` : line
+// Plain text for a custom error in our contracts, or null. lib/sender.ts adds it to a mined revert.
+export function revertText(e: unknown): string | null {
+  const name = revertName(e)
+  return name ? (ERROR_TEXT[name] ?? null) : null
 }
 
-// generic is the fallback text for an error we cannot name.
-export function explainError(e: unknown, generic = GENERIC): string {
-  if (isUserRejection(e)) return 'You cancelled the request.'
-  if (e instanceof PlainError) return e.message
+function names(e: unknown): string[] {
+  return chain(e).flatMap((x) => {
+    const { name } = x as { name?: unknown }
+    return typeof name === 'string' ? [name] : []
+  })
+}
+
+function codes(e: unknown): unknown[] {
+  return chain(e).flatMap((x) => {
+    const { code, status } = x as { code?: unknown; status?: unknown }
+    return [code, status]
+  })
+}
+
+// Circle's passkey RP and bundler, the browser's WebAuthn errors and the network, matched on the names, codes
+// and texts they send. Circle's RP codes: -32024 a taken username, -32025 an invalid one. Bundler codes
+// (ERC-4337): -32503 an expired operation, -32504 a throttled sender, -32507 a bad signature.
+function passkeyAndNetworkText(e: unknown): string | null {
+  const n = names(e)
+  const c = codes(e)
+  const t = texts(e)
+  const said = (re: RegExp) => t.some((x) => re.test(x))
+  if (c.includes(-32024) || said(/username is duplicated/i)) return USERNAME_TAKEN
   if (isInvalidUsername(e)) return USERNAME_RULE
+  if (n.includes('InvalidStateError')) return PASSKEY_EXISTS
+  if (n.includes('SecurityError')) return PASSKEY_WRONG_SITE
+  if (n.includes('NotSupportedError') || said(/Credential Management API not supported/i)) return NO_PASSKEY_SUPPORT
+  if (said(/No credential available|Login verification failed|credential (was )?not found/i)) return NO_PASSKEY
+  if (said(/No credential created|Credential creation failed/i)) return PASSKEY_NOT_SAVED
+  if (said(/Failed to register the (new WebAuthn credential|recovery address)/i)) return SETUP_FAILED
+  if (n.includes('InvalidAccountNonceError') || said(/\bAA25\b/)) return NONCE_CLASH
+  if (n.includes('UserOperationExpiredError') || c.includes(-32503) || said(/\bAA22\b/)) return EXPIRED
+  if (n.includes('SignatureCheckFailedError') || c.includes(-32507) || said(/\bAA24\b/)) return BAD_SIGNATURE
+  if (n.includes('LimitExceededRpcError') || c.includes(-32005) || c.includes(-32504) || c.includes(429) || said(/rate limit|too many requests/i))
+    return RATE_LIMITED
+  if (n.includes('TimeoutError') || n.includes('AbortError') || said(/timed out|took too long/i)) return TIMED_OUT
+  if (n.includes('HttpRequestError') || said(/Failed to fetch|NetworkError|Load failed|fetch failed/i)) return NETWORK_DOWN
+  return null
+}
+
+export function explainError(e: unknown): string {
+  if (isUserRejection(e)) return CANCELLED
+  if (e instanceof PlainError) return e.message
   if (isPrefundError(e)) return NO_NETWORK_FEE
   const kit = kitText(e)
   if (kit) return kit
-  const name = revertName(e)
-  if (name && ERROR_TEXT[name]) return ERROR_TEXT[name]
-  const d = detail(e)
-  return d ? `${generic} (${d})` : generic
+  const revert = revertText(e)
+  if (revert) return revert
+  const known = passkeyAndNetworkText(e)
+  if (known) return known
+  console.error(e)
+  return FALLBACK
 }
 
-// For adding money from another chain, which can fail after the wallet already approved something.
-// "Nothing was sent" may be untrue there.
+// For adding money from another chain, which can fail after the wallet already approved something. No text it
+// can return says "Nothing was sent" unless that is known (EXPIRED).
 export function explainAfterApproval(e: unknown): string {
-  return explainError(e, 'Something went wrong.')
+  return explainError(e)
 }

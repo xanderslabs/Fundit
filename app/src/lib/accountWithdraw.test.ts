@@ -49,22 +49,22 @@ describe('buildAccountSendCalls', () => {
   // Sending to itself only burns gas on Arc, and on another chain no one may control the account's address.
   it('refuses the account itself and the zero address', () => {
     const base = { token: USDC, amount: 1_000000n, dest: 'Arc' as const, fast: true, account: ACCOUNT }
-    expect(() => buildAccountSendCalls({ ...base, recipient: ACCOUNT.toLowerCase() as Address })).toThrow('Choose a different address.')
-    expect(() => buildAccountSendCalls({ ...base, recipient: zeroAddress })).toThrow('Choose a different address.')
+    expect(() => buildAccountSendCalls({ ...base, recipient: ACCOUNT.toLowerCase() as Address })).toThrow("That address can't receive this. Choose a different address.")
+    expect(() => buildAccountSendCalls({ ...base, recipient: zeroAddress })).toThrow("That address can't receive this. Choose a different address.")
   })
 
   // CCTP only moves USDC. A EURC burn would revert, or worse, so it never gets built.
   it('refuses EURC to another chain', () => {
     expect(() =>
       buildAccountSendCalls({ token: EURC, amount: 1_000000n, dest: 'Base', recipient: FRIEND, maxFee: 1n, fast: true, account: ACCOUNT }),
-    ).toThrow('EURC can only be sent on Arc.')
+    ).toThrow('EURC can only be sent on Arc. Choose Arc, or send USDC.')
   })
 
   // The fee comes out of the burned amount, so a fee at or above it would deliver nothing.
   it('refuses an amount that does not cover the transfer fee', () => {
     const p = { token: USDC, amount: 100_000n, dest: 'Base' as const, recipient: FRIEND, fast: true, account: ACCOUNT }
-    expect(() => buildAccountSendCalls({ ...p, maxFee: 100_000n })).toThrow('This amount is too small to cover the transfer fee.')
-    expect(() => buildAccountSendCalls({ ...p, maxFee: 200_000n })).toThrow('This amount is too small to cover the transfer fee.')
+    expect(() => buildAccountSendCalls({ ...p, maxFee: 100_000n })).toThrow('This amount is too small to cover the transfer fee. Try a larger amount.')
+    expect(() => buildAccountSendCalls({ ...p, maxFee: 200_000n })).toThrow('This amount is too small to cover the transfer fee. Try a larger amount.')
   })
 
   it('needs a fee quote for another chain', () => {

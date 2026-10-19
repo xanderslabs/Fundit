@@ -8,9 +8,9 @@ import {
 import { describe, expect, it, vi } from 'vitest'
 import { campaignAbi } from '../abi/campaign'
 import { factoryAbi } from '../abi/factory'
-import { explainAfterApproval, explainError, NeedsNetworkFee, needsAddMoney } from './errors'
+import { CANCELLED, explainAfterApproval, explainError, FALLBACK, NeedsNetworkFee, needsAddMoney, USERNAME_RULE } from './errors'
 
-const GENERIC = 'Something went wrong. Nothing was sent.'
+const GENERIC = FALLBACK
 
 type AbiError = Extract<(typeof campaignAbi)[number] | (typeof factoryAbi)[number], { type: 'error' }>
 
@@ -53,15 +53,19 @@ describe('explainError', () => {
 
   it('maps a wallet rejection to a cancel message', () => {
     const rejected = new BaseError('Request failed', { cause: new UserRejectedRequestError(new Error('User denied')) })
-    expect(explainError(rejected)).toBe('You cancelled the request.')
-    expect(explainError({ code: 4001, message: 'User rejected the request.' })).toBe('You cancelled the request.')
+    expect(explainError(rejected)).toBe("You cancelled the request. Try again when you're ready.")
+    expect(explainError({ code: 4001, message: 'User rejected the request.' })).toBe(CANCELLED)
   })
 
-  it('falls back to a generic message with a short detail', () => {
-    const text = explainError(new Error('network down'))
-    expect(text.startsWith(GENERIC)).toBe(true)
-    expect(text).toContain('network down')
-    expect(explainError(new Error('x'.repeat(1000))).length).toBeLessThan(250)
+  // The raw text helps debugging, so it goes to the console. The person only ever sees the fallback.
+  it('falls back to one plain message and logs the raw error, never showing it', () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const raw = new Error('An unknown RPC error occurred. Details: code -32603')
+    expect(explainError(raw)).toBe("That didn't work. Check your connection and try again.")
+    expect(log).toHaveBeenCalledWith(raw)
+    expect(explainError({})).toBe(FALLBACK)
+    expect(explainError(undefined)).toBe(FALLBACK)
+    log.mockRestore()
   })
   // Bridge Kit wraps wallet errors in a KitError whose cause is { trace: { rawError } }, not an Error chain.
   it('finds a wallet rejection under a KitError trace.rawError', () => {
@@ -69,7 +73,7 @@ describe('explainError', () => {
       name: 'ONCHAIN_UNKNOWN_BLOCKCHAIN_ERROR',
       cause: { trace: { chain: 'Base', rawError: new UserRejectedRequestError(new Error('x')) } },
     })
-    expect(explainError(kitError)).toBe('You cancelled the request.')
+    expect(explainError(kitError)).toBe("You cancelled the request. Try again when you're ready.")
   })
 
   // A balance problem is the donor's to fix. It needs plain words, not the generic "Nothing was sent." text.
@@ -117,7 +121,7 @@ describe('explainError', () => {
       type: 'ONCHAIN',
       cause: { trace: { chain: 'Base', rawError: Object.assign(new Error('User denied'), { code: 4001 }) } },
     })
-    expect(explainError(kitError)).toBe('You cancelled the request.')
+    expect(explainError(kitError)).toBe("You cancelled the request. Try again when you're ready.")
   })
 
   // The SDK falls back to placeholder names. The donor needs the real token to know what to top up.
@@ -132,7 +136,7 @@ describe('explainError', () => {
   // Closing the browser's passkey prompt throws a DOMException named NotAllowedError. It is a cancel.
   it('reads a closed passkey prompt as a cancel', () => {
     const cancel = Object.assign(new Error('The operation either timed out or was not allowed.'), { name: 'NotAllowedError' })
-    expect(explainError(new Error('Signing failed', { cause: cancel }))).toBe('You cancelled the request.')
+    expect(explainError(new Error('Signing failed', { cause: cancel }))).toBe("You cancelled the request. Try again when you're ready.")
   })
 
   // Bridge Kit names the chain Optimism. People know it as OP Mainnet, the name shown everywhere else.
@@ -148,12 +152,15 @@ describe('explainAfterApproval', () => {
   // Adding money from another chain can fail after the wallet already approved. "Nothing was sent"
   // would then be untrue, so the generic text stops at "Something went wrong."
   it('never says "Nothing was sent"', () => {
-    expect(explainAfterApproval(new Error('socket hang up'))).toBe('Something went wrong. (socket hang up)')
-    expect(explainAfterApproval({})).toBe('Something went wrong. ([object Object])')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(explainAfterApproval(new Error('socket hang up'))).toBe(FALLBACK)
+    expect(explainAfterApproval({})).toBe(FALLBACK)
+    expect(FALLBACK).not.toMatch(/Nothing was sent/)
+    vi.mocked(console.error).mockRestore()
   })
 
   it('keeps the specific texts', () => {
-    expect(explainAfterApproval(new UserRejectedRequestError(new Error('x')))).toBe('You cancelled the request.')
+    expect(explainAfterApproval(new UserRejectedRequestError(new Error('x')))).toBe(CANCELLED)
     const token = Object.assign(new Error('Insufficient USDC balance on Base'), { name: 'BALANCE_INSUFFICIENT_TOKEN' })
     expect(explainAfterApproval(token)).toBe('You do not have enough USDC on Base.')
   })
@@ -181,10 +188,13 @@ describe('Bridge Kit errors on testnet', () => {
 describe('network fee and username errors', () => {
   // -32025 is not known to mean only a bad username, so only Circle's own text maps to the rule.
   it('maps only the username text to the username rule, not any -32025', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     const other = Object.assign(new Error('The request is invalid.'), { code: -32025 })
     expect(explainError(other)).not.toContain('Use 5 to 50 letters')
+    vi.mocked(console.error).mockRestore()
     const username = Object.assign(new Error('The username is invalid. It should be 5 to 50 characters.'), { code: -32025 })
-    expect(explainError(username)).toBe('Use 5 to 50 letters, numbers or _ @ . : + - (no spaces).')
+    expect(explainError(username)).toBe('Use 5 to 50 letters, numbers or _ @ . : + - with no spaces.')
+    expect(USERNAME_RULE).not.toMatch(/[()]/)
   })
 
   it("says AA21 (didn't pay prefund) plainly and asks to add money", () => {
@@ -198,5 +208,41 @@ describe('network fee and username errors', () => {
     expect(explainError(err)).toBe('Your Fundit account needs at least 1.62 USDC for the network fee. Add money and try again.')
     expect(needsAddMoney(err)).toBe(true)
     expect(needsAddMoney(new Error('network down'))).toBe(false)
+  })
+})
+
+// Circle's passkey RP, its bundler and the network fail in ways people can act on. Each gets its own plain text,
+// matched on the code or text Circle and viem actually send.
+describe('Circle, passkey and network errors', () => {
+  // viem wraps Circle's JSON-RPC answer as "An unknown RPC error occurred." with the real text in details.
+  const rpc = (code: number, details: string) =>
+    Object.assign(new BaseError('An unknown RPC error occurred.', { details }), { code, cause: Object.assign(new Error(details), { code }) })
+  const named = (name: string, message = name) => Object.assign(new Error(message), { name })
+
+  it.each([
+    ['a taken username (-32024)', rpc(-32024, 'The username is duplicated.'), "That username is taken. Pick another one, or sign in if it's yours."],
+    ['a taken username by its text alone', new Error('The username is duplicated.'), "That username is taken. Pick another one, or sign in if it's yours."],
+    ['an invalid username (-32025)', rpc(-32025, 'The username is invalid. It should be 5 to 50 characters and contain only alphanumeric and _@.:+- characters.'), USERNAME_RULE],
+    ['a closed passkey prompt', named('NotAllowedError', 'The operation either timed out or was not allowed.'), CANCELLED],
+    ['no passkey for the account', new Error('No credential available.'), "That passkey didn't open a Fundit account. Try another passkey, or create an account."],
+    ['a failed login check', new Error('Login verification failed.'), "That passkey didn't open a Fundit account. Try another passkey, or create an account."],
+    ['a passkey the browser did not save', new Error('No credential created.'), "Your browser didn't save a passkey. Try again, or use another browser or device."],
+    ['a failed passkey creation', new Error('Credential creation failed.'), "Your browser didn't save a passkey. Try again, or use another browser or device."],
+    ['a browser without passkeys', new Error('Credential Management API not supported.'), "This browser can't use passkeys. Open Fundit in an up-to-date browser such as Chrome, Safari or Firefox."],
+    ['a passkey already on this device', named('InvalidStateError'), 'This device already has a passkey for this account. Sign in with it instead.'],
+    ['a passkey on the wrong site address', named('SecurityError'), "Passkeys can't be used on this page address. Open Fundit at its usual address and try again."],
+    ['a failed account registration', new Error('Failed to register the new WebAuthn credential. Please try again.'), "We couldn't finish setting up your account. Try again in a moment."],
+    ['a nonce clash (AA25)', new Error('UserOperation reverted during simulation with reason: AA25 invalid account nonce'), 'Another transaction from your account is still going through. Wait a moment and try again.'],
+    ['an expired operation (AA22)', new Error('AA22 expired or not due'), 'The request expired before it went out. Nothing was sent. Try again.'],
+    ['a rejected signature (AA24)', new Error('AA24 signature error'), "Your passkey's signature was not accepted. Sign out, sign in again and try again."],
+    ['a rate limit (-32005)', rpc(-32005, 'Limit exceeded'), 'Too many requests right now. Wait a minute and try again.'],
+    ['a throttled bundler (-32504)', rpc(-32504, 'throttled'), 'Too many requests right now. Wait a minute and try again.'],
+    ['an HTTP 429', Object.assign(new BaseError('HTTP request failed.'), { name: 'HttpRequestError', status: 429 }), 'Too many requests right now. Wait a minute and try again.'],
+    ['a timeout', named('TimeoutError', 'The request took too long to respond.'), 'The network took too long to answer. Try again in a moment.'],
+    ['a timed out read', new Error('Reading the account owners timed out.'), 'The network took too long to answer. Try again in a moment.'],
+    ['a network that is down', new TypeError('Failed to fetch'), "Fundit couldn't reach the network. Check your connection and try again."],
+    ['an HTTP request with no answer', Object.assign(new BaseError('HTTP request failed.'), { name: 'HttpRequestError' }), "Fundit couldn't reach the network. Check your connection and try again."],
+  ])('explains %s', (_label, err, text) => {
+    expect(explainError(err)).toBe(text)
   })
 })

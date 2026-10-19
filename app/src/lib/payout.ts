@@ -35,9 +35,9 @@ export function buildWithdrawCall(p: {
 }): Call {
   // Strict: pad() does not check the checksum, so a mistyped address would otherwise get the payout.
   if (!isAddress(p.recipient)) throw new PlainError(ADDRESS_TYPO)
-  if (isAddressEqual(p.recipient, zeroAddress)) throw new Error('Enter a recipient address.')
+  if (isAddressEqual(p.recipient, zeroAddress)) throw new PlainError('Enter a recipient address.')
   // On Arc the contract reverts. On another chain no one holds the campaign's address, so the money is lost.
-  if (isAddressEqual(p.recipient, p.campaign)) throw new Error('Choose a different recipient.')
+  if (isAddressEqual(p.recipient, p.campaign)) throw new PlainError('The Fundit cannot pay itself. Choose a different recipient.')
   const recipient = pad(p.recipient, { size: 32 })
   let args: readonly [bigint, number, `0x${string}`, bigint, number, `0x${string}`]
   if (p.dest === 'Arc') {
@@ -45,7 +45,7 @@ export function buildWithdrawCall(p: {
   } else {
     if (!p.fee) throw new Error('A fee quote is needed for a payout to another chain.')
     const chain = CCTP_CHAINS.find((c) => c.key === p.dest)!
-    if (p.fast && !chain.fast) throw new Error(`Fast transfers are not available to ${CHAIN_LABELS[chain.key]}.`)
+    if (p.fast && !chain.fast) throw new PlainError(`Fast transfers are not available to ${CHAIN_LABELS[chain.key]}. Choose Standard.`)
     args = [p.amount, chain.domain, recipient, p.fee.maxFee, p.fast ? FAST_THRESHOLD : STANDARD_THRESHOLD, FORWARD_HOOK_DATA]
   }
   return { to: p.campaign, data: encodeFunctionData({ abi: campaignAbi, functionName: 'withdraw', args }) }

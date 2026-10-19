@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { Link } from 'react-router'
 import type { Hex } from 'viem'
 import { EXPLORER_URL, TX_TIMEOUT_MS } from '../config'
-import { explainError, needsAddMoney, PlainError } from '../lib/errors'
+import { CANCELLED, explainError, needsAddMoney, PlainError } from '../lib/errors'
 import { arcReceipts, type Call, type Sender, type TxResult, waitForResult } from '../lib/sender'
 import { ADD_MONEY_PATH } from '../lib/urls'
 import { Button, StatusBox } from './ui'
@@ -68,7 +68,7 @@ export function useTx(onSuccess: (hash: Hex) => void) {
         setPhase({ kind: 'error', message: res.error, hash: res.hash })
         return
       case 'rejected':
-        setPhase({ kind: 'error', message: 'You cancelled the request.' })
+        setPhase({ kind: 'error', message: CANCELLED })
     }
   }
 

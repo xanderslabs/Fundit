@@ -2,6 +2,7 @@ import { type Address, encodeFunctionData, type PublicClient } from 'viem'
 import { campaignAbi } from '../abi/campaign'
 import { erc20Abi } from '../abi/erc20'
 import { MAX_MESSAGE_BYTES } from '../config'
+import { PlainError } from './errors'
 import type { Call } from './sender'
 import { byteLength } from './validate'
 
@@ -20,7 +21,7 @@ export type DonateParams = {
 // Gifts come from a Fundit account, a smart account, so they call donate on the campaign directly (Arc Memo
 // only accepts an EOA caller). The campaign pulls amount + tip from msg.sender, so the approval names the campaign.
 export function buildDonateCalls(p: DonateParams): Call[] {
-  if (byteLength(p.message) > MAX_MESSAGE_BYTES) throw new Error(`The message is over ${MAX_MESSAGE_BYTES} bytes.`)
+  if (byteLength(p.message) > MAX_MESSAGE_BYTES) throw new PlainError(`The message is over ${MAX_MESSAGE_BYTES} bytes. Shorten it and try again.`)
   const total = p.amount + p.tip
   const calls: Call[] = []
   if (p.allowance < total) {

@@ -1,6 +1,6 @@
 import { type Address, type Chain, createPublicClient, type EIP1193Provider, getAddress, type Hex, http, isAddress, isHex, parseUnits, UserRejectedRequestError } from 'viem'
 import { ARC_CHAIN_ID, ARC_DOMAIN, ARC_RPC_URL, NETWORK, CCTP_CHAINS, CHAIN_LABELS, type CctpChain, type CctpChainKey, storageKey } from '../config'
-import { isUserRejection } from './errors'
+import { isUserRejection, PlainError } from './errors'
 
 // One localStorage key holds everything that must survive a reload: cross-chain transfers on their way
 // to Arc (with a burn hash, or only 'submitted' when the wallet has sent but no burn hash is known yet),
@@ -275,7 +275,7 @@ function loadBridgeKit() {
 
 async function setup(p: CrossChainParams) {
   const chain = chainByKey(p.sourceKey)
-  if (p.fast && !chain.fast) throw new Error(`Fast transfers are not available from ${CHAIN_LABELS[chain.key]}.`)
+  if (p.fast && !chain.fast) throw new PlainError(`Fast transfers are not available from ${CHAIN_LABELS[chain.key]}. Choose Standard.`)
   const [kit, { adapter, watcher }] = await Promise.all([loadBridgeKit(), cachedAdapter(p.provider, p.account)])
   const params = {
     from: { adapter, chain: chain.bridgeKitChain },
@@ -299,7 +299,7 @@ export async function estimateCrossChain(p: CrossChainParams): Promise<bigint> {
   const est = await kit.estimate(params)
   let total = 0n
   for (const fee of est.fees) {
-    if (fee.amount === null || fee.token !== 'USDC') throw new Error('Could not estimate the transfer fees.')
+    if (fee.amount === null || fee.token !== 'USDC') throw new PlainError("We couldn't work out the transfer fees. Try again in a moment.")
     total += parseUnits(fee.amount, 6)
   }
   return total

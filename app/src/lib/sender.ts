@@ -1,6 +1,6 @@
 import { type Address, type Hex, type TransactionReceipt, WaitForTransactionReceiptTimeoutError } from 'viem'
 import { arcClient } from './clients'
-import { explainError } from './errors'
+import { revertText } from './errors'
 
 // No value field: Arc amounts always move through the ERC-20 interface, never msg.value.
 export type Call = { to: Address; data: Hex }
@@ -22,7 +22,7 @@ export type SendOptions = { label: string; onHash?: (hash: Hex, index: number) =
 
 // The single write path. Every action builds Calls and hands them to a Sender.
 // send() resolves to a TxResult. It throws only for a failure before anything is sent (for example a
-// gas estimate that reverts), so callers pass that to explainError.
+// gas estimate that reverts), so callers pass that to explainError (lib/errors.ts).
 export interface Sender {
   kind: 'eoa' | 'passkey'
   address: Address
@@ -47,7 +47,6 @@ export const arcReceipts: ReceiptClient = {
 }
 
 export const REVERTED = 'The transaction failed on chain. Nothing changed, but the network fee was spent.'
-const GENERIC_PREFIX = 'Something went wrong.'
 const REASON_TIMEOUT_MS = 10_000
 
 export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | 'timeout'> {
@@ -68,8 +67,9 @@ async function revertReason(client: ReceiptClient, receipt: TransactionReceipt):
     await withTimeout(replay(), REASON_TIMEOUT_MS)
     return REVERTED
   } catch (err) {
-    const text = explainError(err)
-    return text.startsWith(GENERIC_PREFIX) ? REVERTED : `${REVERTED} ${text}`
+    // Only a custom error from our contracts says why. A failed replay (a slow RPC, say) adds nothing.
+    const text = revertText(err)
+    return text ? `${REVERTED} ${text}` : REVERTED
   }
 }
 
