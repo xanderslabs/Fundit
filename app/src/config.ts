@@ -51,6 +51,9 @@ export type NetworkConfig = {
   // Accounts that made Fundits only to test the app, in lower case. Their Fundits are left out of public lists
   // (Home, Explore, Featured) but still open by their link.
   testCreators: readonly string[]
+  // The first block with Circle's weighted multisig plugin deployed (found with getCode on 2026-10-19). No account
+  // can have an owner before it, so ownership searches start here.
+  multisigPluginFrom: bigint
 }
 
 // Vite fills import.meta.env. The e2e suite also reads NETWORKS in Node, where there is none. Each value is read
@@ -100,6 +103,7 @@ export const NETWORKS: Record<ArcNetwork, NetworkConfig> = {
     // Optimism's own name for its chain is OP Mainnet.
     chainLabels: { Arc: 'Arc', Ethereum: 'Ethereum', Avalanche: 'Avalanche', Optimism: 'OP Mainnet', Arbitrum: 'Arbitrum', Base: 'Base', Polygon: 'Polygon' },
     testCreators: [],
+    multisigPluginFrom: 691_027n,
   },
   testnet: {
     name: 'testnet',
@@ -153,6 +157,7 @@ export const NETWORKS: Record<ArcNetwork, NetworkConfig> = {
       '0xcee03a83809543bfd2a379e145df305d2b508f2e',
       '0xd35e225662def377baaa2c61c42749e55a8a934c',
     ],
+    multisigPluginFrom: 3_321_764n,
   },
 }
 

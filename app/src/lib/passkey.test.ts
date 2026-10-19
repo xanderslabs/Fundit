@@ -105,6 +105,17 @@ const balance = vi.hoisted(() => ({ value: 1_000_000n }))
 const held = vi.hoisted(() => new Map<string, bigint>())
 // Owners data for single accounts (lower case), in place of owners.data for that account.
 const ownersFor = vi.hoisted(() => new Map<string, unknown[]>())
+// When the recovery key (0x...Ee) became an owner of each account (lower case), for reads at a past block and for
+// the plugin's OwnersAdded logs. HEAD is the latest block.
+const HEAD = 70_000_000n
+const history = vi.hoisted(() => ({
+  keyAdded: new Map<string, bigint>(),
+  pastReads: [] as { account: string; block: bigint }[],
+  logCalls: [] as { fromBlock: bigint; toBlock: bigint }[],
+  logsFail: false,
+  noEvent: false,
+}))
+const KEY_ID = `0x${'00'.repeat(10)}00000000000000000000000000000000000000ee`
 // The Circle factory's getAddress on Arc: the passkey's own account, worked out on chain from its public key.
 const factory = vi.hoisted(() => ({ address: '0x00000000000000000000000000000000000000cc', fail: false, reads: [] as unknown[] }))
 // The account's EntryPoint deposit, in native wei.
@@ -132,11 +143,26 @@ vi.mock('./clients', () => ({
       if (args.functionName !== 'ownershipInfoOf') return balance.value
       owners.reads.push(args)
       if (owners.fail) throw new Error('rpc down')
+      const at = (args as { blockNumber?: bigint }).blockNumber
+      if (at !== undefined) {
+        history.pastReads.push({ account: holder, block: at })
+        const added = history.keyAdded.get(holder)
+        const data = ownersFor.get(holder) ?? owners.data
+        return [[], added !== undefined && at >= added ? data : [], 1n]
+      }
       const only = ownersFor.get(holder)
       return only ? [[], only, 1n] : [owners.ids, owners.data, 1n]
     },
     getCode: ({ address }: { address: string }) =>
       owners.hang ? new Promise<undefined>(() => {}) : Promise.resolve(code.get(address.toLowerCase())),
+    getBlockNumber: async () => HEAD,
+    getLogs: async ({ args, fromBlock, toBlock }: { args: { account: string }; fromBlock: bigint; toBlock: bigint }) => {
+      history.logCalls.push({ fromBlock, toBlock })
+      if (history.logsFail) throw new Error('rpc down')
+      const added = history.keyAdded.get(args.account.toLowerCase())
+      if (history.noEvent || added === undefined || added < fromBlock || added > toBlock) return []
+      return [{ args: { account: args.account, owners: [KEY_ID] }, blockNumber: added }]
+    },
   },
 }))
 vi.mock('wagmi', () => ({
@@ -1091,6 +1117,76 @@ describe('recoverWithPhrase', () => {
     code.set(OTHER.toLowerCase(), '0x6001')
     await expect(recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).rejects.toThrow('more than one account')
     code.clear()
+  })
+
+  // The recovery key's address is public once it is on chain. Someone can add it as an owner of their own account
+  // (addOwners needs no signature from the key) and map it. They can only do that after the real account got the key,
+  // so the account that got it first is the person's. Order unknown means no guess.
+  describe('when the key owns more than one account', () => {
+    const ATTACKER = getAddress('0x00000000000000000000000000000000000000Cd') as Address
+    const keyOwner = { weight: 1n, credType: 0, addr: '0x00000000000000000000000000000000000000Ee', publicKeyX: 0n, publicKeyY: 0n }
+    const REFUSE = 'We found more than one account for this recovery key. Contact hello@fundit.fun so we can help you safely.'
+
+    beforeEach(() => {
+      for (const a of [ATTACKER, RECOVERED]) {
+        code.set(a.toLowerCase(), '0x6001')
+        ownersFor.set(a.toLowerCase(), [keyOwner])
+      }
+      // The attacker's account is listed first, deployed, and holds far more money.
+      kit.sdk.getAddressMapping.mockResolvedValue([{ walletAddress: ATTACKER }, { walletAddress: RECOVERED }])
+      held.set(ATTACKER.toLowerCase(), 500_000_000n)
+      history.keyAdded.set(RECOVERED.toLowerCase(), 68_000_000n)
+      history.keyAdded.set(ATTACKER.toLowerCase(), 69_500_000n)
+    })
+    afterEach(() => {
+      ownersFor.clear()
+      held.clear()
+      history.keyAdded.clear()
+      history.pastReads = []
+      history.logCalls = []
+      history.logsFail = false
+      history.noEvent = false
+    })
+
+    it('recovers the account that got the key first, never one that added it later', async () => {
+      expect(await recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).toEqual({
+        status: 'recovered',
+        session: { address: RECOVERED, credentialId: 'cred-new' },
+      })
+      expect(kit.executeRecovery.mock.calls[0]![0].account.address).toBe(RECOVERED)
+    })
+
+    // Arc's getLogs takes at most 10,000 blocks; the order comes from reads at past blocks, so the work stays small.
+    it('stays within the RPC range limits', async () => {
+      await recoverWithPhrase({ phrase: PHRASE, username: 'ana' })
+      expect(history.logCalls.length).toBeGreaterThan(0)
+      for (const c of history.logCalls) expect(c.toBlock - c.fromBlock).toBeLessThan(10_000n)
+      expect(history.logCalls.length).toBeLessThanOrEqual(2)
+      for (const a of [ATTACKER, RECOVERED]) expect(history.pastReads.filter((r) => r.account === a.toLowerCase()).length).toBeLessThanOrEqual(40)
+    })
+
+    it.each([
+      ['both got the key in the same block', () => history.keyAdded.set(ATTACKER.toLowerCase(), 68_000_000n)],
+      ['the logs cannot be read', () => (history.logsFail = true)],
+      ['no OwnersAdded event confirms the block', () => (history.noEvent = true)],
+      ['the past reads fail', () => (owners.fail = true)],
+    ])('refuses with the plain message when %s', async (_name, setUp) => {
+      setUp()
+      try {
+        await expect(recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).rejects.toThrow(REFUSE)
+      } finally {
+        owners.fail = false
+      }
+      expect(kit.sdk.toWebAuthnCredential).not.toHaveBeenCalled()
+      expect(kit.executeRecovery).not.toHaveBeenCalled()
+    })
+
+    it('needs no history for a single account', async () => {
+      kit.sdk.getAddressMapping.mockResolvedValue([{ walletAddress: RECOVERED }])
+      expect((await recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).status).toBe('recovered')
+      expect(history.logCalls).toEqual([])
+      expect(history.pastReads).toEqual([])
+    })
   })
 
   // The recovery key's address is public on chain. Someone can add it to their own deployed account and map it, which
