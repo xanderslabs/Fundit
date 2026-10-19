@@ -5,7 +5,8 @@ import { EXPLORER_URL, TX_TIMEOUT_MS } from '../config'
 import { explainError, needsAddMoney, PlainError } from '../lib/errors'
 import { arcReceipts, type Call, type Sender, type TxResult, waitForResult } from '../lib/sender'
 import { ADD_MONEY_PATH } from '../lib/urls'
-
+import { Button, StatusBox } from './ui'
+import './Form.css'
 
 export type TxPhase =
   | { kind: 'idle' }
@@ -131,41 +132,42 @@ export function TxStatus({
   wallet?: boolean
 }) {
   const { phase } = tx
+  // status-error stays on the error box: the e2e suite finds a failed send by it.
   return (
-    <div className="tx-status" aria-live="polite">
+    <div className="tx-status form-status" aria-live="polite">
       {phase.kind === 'sending' && (
         <p>Confirm {wallet ? 'in your wallet' : 'with your passkey'}, then wait for the network. This can take a few seconds.</p>
       )}
       {phase.kind === 'checking' && <p>Checking the transaction again...</p>}
       {phase.kind === 'success' && (
-        <div className="status-box status-success">
+        <StatusBox tone="success">
           <p>
             <strong>{successText}</strong>
           </p>
           <p>
             <ExplorerLink hash={phase.hash} />
           </p>
-        </div>
+        </StatusBox>
       )}
       {phase.kind === 'timeout' && (
-        <div className="status-box">
+        <StatusBox>
           <p>
             <strong>Your {noun} is not confirmed yet.</strong> It may still go through. Check it before you try again.
           </p>
           <p>{phase.userop ? PASSKEY_PROCESSING : <ExplorerLink hash={phase.hash} />}</p>
-          {phase.note && <p className="field-error">{phase.note}</p>}
-          <div className="donate-actions">
-            <button type="button" className="btn btn-outline" onClick={() => tx.checkAgain(phase.hash, phase.userop)}>
+          {phase.note && <p className="form-error">{phase.note}</p>}
+          <div className="form-actions">
+            <Button variant="secondary" onClick={() => tx.checkAgain(phase.hash, phase.userop)}>
               Check again
-            </button>
-            <button type="button" className="btn btn-outline" onClick={() => tx.startOver(startOverWarning)}>
+            </Button>
+            <Button variant="secondary" onClick={() => tx.startOver(startOverWarning)}>
               Start over
-            </button>
+            </Button>
           </div>
-        </div>
+        </StatusBox>
       )}
       {phase.kind === 'error' && (
-        <div className="status-box status-error">
+        <StatusBox tone="error" className="status-error">
           <p>
             {phase.message}
             {phase.addMoney && (
@@ -180,7 +182,7 @@ export function TxStatus({
               <ExplorerLink hash={phase.hash} />
             </p>
           )}
-        </div>
+        </StatusBox>
       )}
     </div>
   )

@@ -17,6 +17,8 @@ import type { Sender } from '../lib/sender'
 import { ADD_MONEY_PATH } from '../lib/urls'
 import { ADDRESS_TYPO, parseTypedAddress } from '../lib/validate'
 import { TxStatus, useTx } from './TxStatus'
+import { AmountInput, Button, Field, Panel } from './ui'
+import './Form.css'
 
 const FEE_CHANGED = 'The transfer fee changed. Check the new amount and confirm again.'
 const OVER_HELD = 'That is more than your Fundit account holds.'
@@ -183,41 +185,37 @@ function SendOutForm({ sender }: { sender: Sender }) {
   }
 
   return (
-    <section className="panel manage-section" aria-labelledby="send-out-heading">
-      <h2 id="send-out-heading">Send money out</h2>
-      <p className="hint">Send money from your Fundit account to any address you choose. You confirm with your passkey once.</p>
-      <form className="create-form" onSubmit={submit} noValidate>
-        <fieldset className="manage-fields" disabled={tx.locked}>
-          <div className="form-field">
-            <label htmlFor="send-out-token">Currency</label>
-            <select id="send-out-token" className="select" value={symbol} onChange={(e) => chooseSymbol(e.target.value as TokenSymbol)}>
+    <Panel
+      title="Send money out"
+      headingId="send-out-heading"
+      description="Send money from your Fundit account to any address you choose. You confirm with your passkey once."
+    >
+      <form className="form" onSubmit={submit} noValidate>
+        <fieldset className="form-fields" disabled={tx.locked}>
+          <Field label="Currency" id="send-out-token">
+            <select className="select" value={symbol} onChange={(e) => chooseSymbol(e.target.value as TokenSymbol)}>
               <option value="USDC">USDC</option>
               <option value="EURC">EURC</option>
             </select>
-          </div>
+          </Field>
 
-          <div className="form-field">
-            <label htmlFor="send-out-amount">Amount</label>
-            <div className="link-row">
-              <input
-                id="send-out-amount"
-                inputMode="decimal"
-                autoComplete="off"
-                placeholder="0"
-                value={amountText}
-                onChange={(e) => setAmountText(e.target.value)}
-                aria-invalid={(parsed && !parsed.ok) || overHeld || overMax ? true : undefined}
-              />
-              <button
-                type="button"
-                className="btn btn-outline"
-                disabled={!max}
-                onClick={() => max !== undefined && setAmountText(formatUnits(max, 6))}
-              >
+          <div className="form-group">
+            <div className="form-row">
+              <Field label="Amount" id="send-out-amount">
+                <AmountInput
+                  id="send-out-amount"
+                  currency={symbol}
+                  placeholder="0"
+                  value={amountText}
+                  onChange={(e) => setAmountText(e.target.value)}
+                  aria-invalid={(parsed && !parsed.ok) || overHeld || overMax ? true : undefined}
+                />
+              </Field>
+              <Button variant="secondary" disabled={!max} onClick={() => max !== undefined && setAmountText(formatUnits(max, 6))}>
                 Max
-              </button>
+              </Button>
             </div>
-            <p className="hint">
+            <p className="form-hint">
               {held !== undefined
                 ? `You have ${formatAmount(held, symbol)} in your Fundit account.`
                 : balances.isError
@@ -225,64 +223,66 @@ function SendOutForm({ sender }: { sender: Sender }) {
                   : 'Reading your balance...'}
             </p>
             {parsed && !parsed.ok && (
-              <p className="field-error" role="alert">
+              <p className="form-error" role="alert">
                 {parsed.error}
               </p>
             )}
             {overHeld && (
-              <p className="field-error" role="alert">
+              <p className="form-error" role="alert">
                 {OVER_HELD}
               </p>
             )}
             {overMax && !noGas && reserve !== undefined && (
-              <p className="field-error" role="alert">
+              <p className="form-error" role="alert">
                 {keepGas(reserve)}
               </p>
             )}
             {noGas && reserve !== undefined && (
-              <p className="field-error" role="alert">
+              <p className="form-error" role="alert">
                 {addAtLeast(reserve)}{' '}
                 <Link to={ADD_MONEY_PATH}>Add money</Link>
               </p>
             )}
           </div>
 
-          <div className="form-field">
-            <label htmlFor="send-out-dest">Send to</label>
-            <select id="send-out-dest" className="select" value={dest} onChange={(e) => setDest(e.target.value as PayoutDest)}>
+          <Field label="Send to" id="send-out-dest" hint={symbol === 'EURC' ? 'EURC can only be sent on Arc.' : undefined}>
+            <select className="select" value={dest} onChange={(e) => setDest(e.target.value as PayoutDest)}>
               {destinations.map((d) => (
                 <option key={d} value={d}>
                   {CHAIN_LABELS[d]}
                 </option>
               ))}
             </select>
-            {symbol === 'EURC' && <p className="hint">EURC can only be sent on Arc.</p>}
-          </div>
+          </Field>
 
           {chain && (
-            <fieldset className="form-field">
-              <legend>Speed</legend>
+            <fieldset className="form-group">
+              <legend className="form-legend">Speed</legend>
               {chain.fast && (
-                <label className="choice">
+                <label className="form-choice">
                   <input type="radio" name="send-out-speed" checked={fast} onChange={() => setFastChoice(true)} />
-                  <span>
-                    Fast <span className="hint">About a minute. Costs a little more.</span>
+                  <span className="form-choice-text">
+                    Fast <span className="form-hint">About a minute. Costs a little more.</span>
                   </span>
                 </label>
               )}
-              <label className="choice">
+              <label className="form-choice">
                 <input type="radio" name="send-out-speed" checked={!fast} onChange={() => setFastChoice(false)} />
-                <span>
-                  Standard <span className="hint">Can take 15 minutes or more.</span>
+                <span className="form-choice-text">
+                  Standard <span className="form-hint">Can take 15 minutes or more.</span>
                 </span>
               </label>
             </fieldset>
           )}
 
-          <div className="form-field">
-            <label htmlFor="send-out-recipient">Recipient</label>
+          <Field
+            label="Recipient"
+            id="send-out-recipient"
+            hint={crossChain ? `Make sure you control this address on ${CHAIN_LABELS[dest]}.` : 'The address that gets the money on Arc.'}
+            error={recipientError}
+            alert
+          >
             <input
-              id="send-out-recipient"
               autoComplete="off"
               spellCheck={false}
               placeholder="0x..."
@@ -290,32 +290,24 @@ function SendOutForm({ sender }: { sender: Sender }) {
               onChange={(e) => setRecipientText(e.target.value)}
               aria-invalid={recipientError ? true : undefined}
             />
-            <p className="hint">
-              {crossChain ? `Make sure you control this address on ${CHAIN_LABELS[dest]}.` : 'The address that gets the money on Arc.'}
-            </p>
-            {recipientError && (
-              <p className="field-error" role="alert">
-                {recipientError}
-              </p>
-            )}
-          </div>
+          </Field>
         </fieldset>
 
         {crossChain && amount !== null && !overHeld && !overMax && (
-          <dl className="donate-breakdown" aria-label="Breakdown">
+          <dl className="form-breakdown" aria-label="Breakdown">
             <div>
               <dt>Transfer fee (at most)</dt>
               <dd>{quote ? formatAmount(quote.maxFee, 'USDC') : fee.isError ? 'Not available' : 'Loading...'}</dd>
             </div>
-            <div className="donate-total">
+            <div className="form-total">
               <dt>Arrives on {CHAIN_LABELS[dest]}</dt>
               <dd>{arrives !== null && !tooSmall ? `At least ${formatAmount(arrives, 'USDC')}` : '-'}</dd>
             </div>
           </dl>
         )}
-        {tooSmall && <p className="field-error">{TOO_SMALL}</p>}
-        {blocked && <p className="field-error">{ONE_AT_A_TIME}</p>}
-        {crossChain && fee.isError && <p className="field-error">Could not get a fee quote from Circle. Try again in a moment.</p>}
+        {tooSmall && <p className="form-error">{TOO_SMALL}</p>}
+        {blocked && <p className="form-error">{ONE_AT_A_TIME}</p>}
+        {crossChain && fee.isError && <p className="form-error">Could not get a fee quote from Circle. Try again in a moment.</p>}
 
         <TxStatus
           tx={tx}
@@ -324,12 +316,12 @@ function SendOutForm({ sender }: { sender: Sender }) {
           startOverWarning="The earlier transfer may still go through. If it does and you send again, the money goes out twice. Start over anyway?"
         />
         {tx.phase.kind !== 'timeout' && (
-          <button type="submit" className="btn" disabled={!canSubmit}>
+          <Button type="submit" disabled={!canSubmit}>
             {tx.busy ? 'Sending...' : 'Send'}
-          </button>
+          </Button>
         )}
       </form>
-      {inFlight && <p className="hint">A transfer you sent to another chain is on its way. Follow it in the Account tab.</p>}
-    </section>
+      {inFlight && <p className="form-hint">A transfer you sent to another chain is on its way. Follow it in the Account tab.</p>}
+    </Panel>
   )
 }

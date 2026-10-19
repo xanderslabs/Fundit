@@ -5,6 +5,8 @@ import { campaignAbi } from '../abi/campaign'
 import { useSender } from '../hooks/useSender'
 import type { CampaignView } from '../lib/campaigns'
 import { TxStatus, useTx } from './TxStatus'
+import { Banner, Button } from './ui'
+import './BackupBanner.css'
 
 const MINUTE_MS = 60_000
 
@@ -48,40 +50,42 @@ export function BackupBanner({ view }: { view: CampaignView }) {
   const send = (functionName: 'initiateRecovery' | 'completeRecovery', label: string) =>
     tx.run(sender, () => ({ to: campaign, data: encodeFunctionData({ abi: campaignAbi, functionName }) }), label)
 
+  const action = !pending ? (
+    <Button disabled={tx.locked} onClick={() => send('initiateRecovery', 'Start recovery')}>
+      Start recovery
+    </Button>
+  ) : !waiting ? (
+    <Button disabled={tx.locked} onClick={() => send('completeRecovery', 'Complete recovery')}>
+      Complete recovery
+    </Button>
+  ) : undefined
+
   return (
-    <section className="panel backup-banner" aria-label="Backup recovery">
-      <h2>You are the backup for this Fundit</h2>
-      {!pending && (
-        <>
-          <p>
-            If the organiser has lost their wallet, you can start a recovery. After a 7-day wait you can become the
-            organiser. The organiser can cancel during those 7 days.
-          </p>
-          <button type="button" className="btn" disabled={tx.locked} onClick={() => send('initiateRecovery', 'Start recovery')}>
-            Start recovery
-          </button>
-        </>
-      )}
-      {waiting && (
-        <p>
-          Recovery has started. You can complete it in {formatWait((readyAtMs - now) / 1000)}, on{' '}
-          {new Date(readyAtMs).toLocaleString()}.
-        </p>
-      )}
-      {pending && !waiting && (
-        <>
-          <p>The 7-day wait is over. Complete the recovery to become the organiser.</p>
-          <button type="button" className="btn" disabled={tx.locked} onClick={() => send('completeRecovery', 'Complete recovery')}>
-            Complete recovery
-          </button>
-        </>
-      )}
-      <TxStatus
-        tx={tx}
-        noun="transaction"
-        successText="Done. The page will update in a moment."
-        startOverWarning="The earlier transaction may still go through. Try again anyway?"
-      />
+    <section className="backup-banner" aria-label="Backup recovery">
+      <Banner tone="attention" action={action}>
+        <div className="backup-banner-body">
+          <h2 className="backup-banner-title">You are the backup for this Fundit</h2>
+          {!pending && (
+            <p>
+              If the organiser has lost their wallet, you can start a recovery. After a 7-day wait you can become the
+              organiser. The organiser can cancel during those 7 days.
+            </p>
+          )}
+          {waiting && (
+            <p>
+              Recovery has started. You can complete it in {formatWait((readyAtMs - now) / 1000)}, on{' '}
+              {new Date(readyAtMs).toLocaleString()}.
+            </p>
+          )}
+          {pending && !waiting && <p>The 7-day wait is over. Complete the recovery to become the organiser.</p>}
+          <TxStatus
+            tx={tx}
+            noun="transaction"
+            successText="Done. The page will update in a moment."
+            startOverWarning="The earlier transaction may still go through. Try again anyway?"
+          />
+        </div>
+      </Banner>
     </section>
   )
 }

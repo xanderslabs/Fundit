@@ -5,11 +5,7 @@
   "ignoreFiles": [
     "src/styles/base.css",
     "src/styles/campaigns.css",
-    "src/styles/create.css",
-    "src/styles/donate.css",
-    "src/styles/embed.css",
-    "src/styles/manage.css",
-    "src/styles/share.css"
+    "src/styles/embed.css"
   ],
   "rules": {
     "scale-unlimited/declaration-strict-value": [

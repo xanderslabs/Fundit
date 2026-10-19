@@ -1,0 +1,226 @@
+/* The parts the money forms share (Create, Manage, Add money, Send money out) that Field does not cover:
+   radio groups, link rows, the amount with Max, the fee breakdown, form-level errors and the status area. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+/* A fieldset that only groups, so disabling it locks every control inside during a send. */
+.form-fields,
+.form-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.form-fields {
+  gap: var(--space-5);
+}
+
+.form-group {
+  gap: var(--space-2);
+}
+
+/* Matches the Field label. */
+.form-legend {
+  margin-bottom: var(--space-2);
+  padding: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  line-height: var(--text-sm-line);
+}
+
+.form-hint,
+.form-error {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-line);
+  overflow-wrap: anywhere;
+}
+
+.form-hint {
+  color: var(--text-muted);
+}
+
+.form-error {
+  color: var(--danger-ink);
+  font-weight: var(--weight-medium);
+}
+
+.form-error a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.form-counter {
+  font-variant-numeric: tabular-nums;
+}
+
+.form-counter-over {
+  color: var(--danger-ink);
+  font-weight: var(--weight-bold);
+}
+
+/* A radio choice with an optional line of help under its name. */
+.form-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition:
+    background-color var(--duration) var(--ease),
+    border-color var(--duration) var(--ease);
+}
+
+.form-choice:hover {
+  background: var(--surface);
+}
+
+.form-choice:has(input:checked) {
+  border-color: var(--text);
+}
+
+.form-choice:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.form-choice input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: var(--space-1) 0 0;
+  accent-color: var(--text);
+}
+
+.form-choice-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.form-choice-text .form-hint {
+  font-weight: var(--weight-regular);
+}
+
+.form-fields:disabled .form-choice {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* An input with a button on its right: a link with Remove, or an amount with Max. The button lines up with the
+   input, not the label above it, and is as tall as the input. */
+.form-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.form-row > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.form-row > .ui-input[aria-invalid='true'] {
+  border-color: var(--danger-ink);
+}
+
+.form-row > .ui-btn {
+  flex: none;
+  min-height: calc(var(--text-md-line) + 2 * var(--space-3) + 2px);
+}
+
+.form-links {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.form-link {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Where the money goes. Figures line up on the right. */
+.form-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-line);
+}
+
+.form-breakdown div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.form-breakdown dt,
+.form-breakdown dd {
+  margin: 0;
+}
+
+.form-breakdown dd {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.form-total {
+  margin-top: var(--space-1);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+  font-weight: var(--weight-bold);
+}
+
+/* Transaction progress and results. */
+.form-status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* TxStatus takes no room in the form's gaps while it is empty. */
+.tx-status:empty {
+  display: none;
+}
+
+.form-status > p {
+  margin: 0;
+}
+
+/* Transfers on their way to a Fundit account, and payouts on their way to another chain. */
+.bridge-tracker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .form-choice {
+    transition: none;
+  }
+}

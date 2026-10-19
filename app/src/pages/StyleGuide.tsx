@@ -186,7 +186,7 @@ export function StyleGuide() {
           <Field id="sg-amount" label="Amount" hint="Up to 5,000 USDC">
             <AmountInput id="sg-amount" value={amount} onChange={(e) => setAmount(e.target.value)} currency="USDC" />
           </Field>
-          <Field id="sg-amount-error" label="Amount" error="Enter an amount above 0.">
+          <Field id="sg-amount-error" label="Amount" error="Enter an amount above 0." alert>
             <AmountInput id="sg-amount-error" value="0" onChange={() => {}} currency="USDC" />
           </Field>
           <Field id="sg-disabled" label="Disabled">
@@ -266,6 +266,9 @@ export function StyleGuide() {
         </Row>
         <Row label="with explorer">
           <AddressChip address={ADDRESS} explorer />
+        </Row>
+        <Row label="full">
+          <AddressChip address={ADDRESS} full />
         </Row>
         <Card>
           <div className="sg-account">

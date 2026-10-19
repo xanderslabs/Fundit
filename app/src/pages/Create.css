@@ -1,0 +1,72 @@
+/* Start a Fundit: the form, and the page after the Fundit is created. */
+.create {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: var(--page-narrow);
+  margin: 0 auto;
+}
+
+.create > .ui-page-header {
+  margin-bottom: var(--space-5);
+}
+
+.create-form textarea {
+  min-height: 160px;
+  resize: vertical;
+}
+
+/* The second line of a hint, under the byte counter. */
+.create-hint-line {
+  display: block;
+}
+
+.create-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: 360px;
+}
+
+.create-preview .campaign-image {
+  border-radius: var(--radius-md);
+}
+
+.create-add-link {
+  align-self: flex-start;
+}
+
+/* Goal and currency side by side, stacked on a phone. */
+.create-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-5);
+}
+
+.create-fees {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.create-fees-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  line-height: var(--text-lg-line);
+  letter-spacing: var(--tracking-heading);
+}
+
+.create-fees ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding-left: var(--space-5);
+}
+
+@media (max-width: 640px) {
+  .create-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

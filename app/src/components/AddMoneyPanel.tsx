@@ -22,9 +22,12 @@ import { formatAmount, formatExact, parseAmount } from '../lib/format'
 import { fetchForwardFee } from '../lib/iris'
 import { shortAddress } from '../lib/names'
 import { wagmiSender } from '../lib/sender'
-import { AddressQr, CopyAddress } from './AddressTools'
+import { AddressQr } from './AddressTools'
 import { Tabs } from './Tabs'
 import { TxStatus, useTx } from './TxStatus'
+import { AddressChip, AmountInput, Button, Field, StatusBox } from './ui'
+import './AddMoneyPanel.css'
+import './Form.css'
 
 const BALANCE_POLL_MS = 15_000
 const QUOTE_DEBOUNCE_MS = 400
@@ -137,98 +140,84 @@ function BridgeToAccount({ recipient, onBusyChange }: { recipient: Address; onBu
     }
   }
 
-  if (blocked) return <p className="hint">{BRIDGE_PENDING}</p>
+  if (blocked) return <p className="form-hint">{BRIDGE_PENDING}</p>
 
   return (
-    <form className="donate-form" onSubmit={(e) => void submit(e)} noValidate>
-      <fieldset className="donate-fields" disabled={busy}>
-        <div className="form-field">
-          <label htmlFor="fund-source">From</label>
-          <select id="fund-source" className="select" value={sourceKey} onChange={(e) => setSourceKey(e.target.value as CctpChainKey)}>
+    <form className="form" onSubmit={(e) => void submit(e)} noValidate>
+      <fieldset className="form-fields" disabled={busy}>
+        <Field label="From" id="fund-source">
+          <select className="select" value={sourceKey} onChange={(e) => setSourceKey(e.target.value as CctpChainKey)}>
             {CCTP_CHAINS.map((c) => (
               <option key={c.key} value={c.key}>
                 {CHAIN_LABELS[c.key]}
               </option>
             ))}
           </select>
-        </div>
-        <div className="form-field">
-          <label htmlFor="fund-amount">Amount</label>
-          <div className="donate-amount">
-            <input
-              id="fund-amount"
-              inputMode="decimal"
-              autoComplete="off"
-              placeholder="25"
-              value={amountText}
-              onChange={(e) => setAmountText(e.target.value)}
-              aria-invalid={parsed && !parsed.ok ? true : undefined}
-            />
-            <span className="donate-symbol">USDC</span>
-          </div>
-          {parsed && !parsed.ok && (
-            <p className="field-error" role="alert">
-              {parsed.error}
-            </p>
-          )}
-        </div>
-        <fieldset className="form-field">
-          <legend>Speed</legend>
-          <div className="donate-options">
-            {chain.fast && (
-              <label className="donate-option">
-                <input type="radio" name="fund-speed" checked={fast} onChange={() => setFastChoice(true)} />
-                <span>Fast</span>
-              </label>
-            )}
-            <label className="donate-option">
-              <input type="radio" name="fund-speed" checked={!fast} onChange={() => setFastChoice(false)} />
-              <span>Standard</span>
+        </Field>
+        <Field label="Amount" id="fund-amount" error={parsed && !parsed.ok ? parsed.error : undefined} alert>
+          <AmountInput
+            id="fund-amount"
+            currency="USDC"
+            placeholder="25"
+            value={amountText}
+            onChange={(e) => setAmountText(e.target.value)}
+            aria-invalid={parsed && !parsed.ok ? true : undefined}
+          />
+        </Field>
+        <fieldset className="form-group">
+          <legend className="form-legend">Speed</legend>
+          {chain.fast && (
+            <label className="form-choice">
+              <input type="radio" name="fund-speed" checked={fast} onChange={() => setFastChoice(true)} />
+              <span>Fast</span>
             </label>
-          </div>
+          )}
+          <label className="form-choice">
+            <input type="radio" name="fund-speed" checked={!fast} onChange={() => setFastChoice(false)} />
+            <span>Standard</span>
+          </label>
         </fieldset>
       </fieldset>
 
       {amount !== null && (
-        <dl className="donate-breakdown" aria-label="Breakdown">
+        <dl className="form-breakdown" aria-label="Breakdown">
           <div>
             <dt>Transfer fees</dt>
             <dd>{quote !== undefined ? formatAmount(quote, 'USDC') : fee.isError ? 'Not available' : 'Checking...'}</dd>
           </div>
-          <div className="donate-total">
+          <div className="form-total">
             <dt>Arrives in your Fundit account</dt>
             <dd>{arrives !== null && !tooSmall ? `At least ${formatAmount(arrives, 'USDC')}` : '-'}</dd>
           </div>
         </dl>
       )}
-      {fee.isError && <p className="field-error">Could not get a fee quote. Try again in a moment.</p>}
-      {tooSmall && <p className="field-error">This amount does not cover the transfer fees. Try a larger amount.</p>}
-      <p className="hint">The transfer fees come out of the amount. You also pay network gas on {CHAIN_LABELS[sourceKey]}.</p>
+      {fee.isError && <p className="form-error">Could not get a fee quote. Try again in a moment.</p>}
+      {tooSmall && <p className="form-error">This amount does not cover the transfer fees. Try a larger amount.</p>}
+      <p className="form-hint">The transfer fees come out of the amount. You also pay network gas on {CHAIN_LABELS[sourceKey]}.</p>
 
-      <div className="donate-status" aria-live="polite">
+      {/* status-error stays on the error box: the e2e suite finds a failed send by it. */}
+      <div className="form-status" aria-live="polite">
         {busy && <p>Confirm in your wallet. It may ask you to switch network and approve USDC first.</p>}
         {phase.kind === 'sent' && (
-          <div className="status-box status-success">
+          <StatusBox tone="success">
             <p>
               <strong>Your USDC is on its way.</strong> Follow it in the Account tab.
             </p>
-          </div>
+          </StatusBox>
         )}
         {phase.kind === 'error' && (
-          <div className="status-box status-error">
+          <StatusBox tone="error" className="status-error">
             <p>{phase.message}</p>
-          </div>
+          </StatusBox>
         )}
       </div>
 
       {wallet ? (
-        <button type="submit" className="btn" disabled={!canSubmit}>
+        <Button type="submit" disabled={!canSubmit}>
           {busy ? 'Sending...' : 'Bridge USDC'}
-        </button>
+        </Button>
       ) : modal.available ? (
-        <button type="button" className="btn" onClick={() => void modal.connect()}>
-          Connect the wallet that holds the USDC
-        </button>
+        <Button onClick={() => void modal.connect()}>Connect the wallet that holds the USDC</Button>
       ) : (
         <p>{NO_WALLETS}</p>
       )}
@@ -271,14 +260,14 @@ function WalletDeposit({ account, bridging }: { account: Address; bridging: bool
   if (external === null) {
     if (!modal.available) return <p>{NO_WALLETS}</p>
     return (
-      <button type="button" className="btn wallet-connect" onClick={() => void modal.connect()}>
+      <Button className="wallet-connect" onClick={() => void modal.connect()}>
         Connect a wallet
-      </button>
+      </Button>
     )
   }
 
   return (
-    <form className="donate-form" onSubmit={submit} noValidate>
+    <form className="form" onSubmit={submit} noValidate>
       <div className="wallet-connected">
         <p>
           Connected: <strong>{connector?.name ?? 'Wallet'}</strong>{' '}
@@ -287,50 +276,42 @@ function WalletDeposit({ account, bridging }: { account: Address; bridging: bool
           </code>
         </p>
         {/* To switch wallets, disconnect this one and connect another. */}
-        <button type="button" className="btn btn-outline" disabled={tx.locked || bridging} onClick={() => disconnect()}>
+        <Button variant="secondary" disabled={tx.locked || bridging} onClick={() => disconnect()}>
           Disconnect
-        </button>
+        </Button>
       </div>
-      <fieldset className="donate-fields" disabled={tx.locked}>
-        <div className="form-field">
-          <label htmlFor="deposit-token">Currency</label>
-          <select id="deposit-token" className="select" value={symbol} onChange={(e) => setSymbol(e.target.value as TokenSymbol)}>
+      <fieldset className="form-fields" disabled={tx.locked}>
+        <Field label="Currency" id="deposit-token">
+          <select className="select" value={symbol} onChange={(e) => setSymbol(e.target.value as TokenSymbol)}>
             <option value="USDC">USDC</option>
             <option value="EURC">EURC</option>
           </select>
-        </div>
-        <div className="form-field">
-          <label htmlFor="deposit-amount">Amount</label>
-          <div className="donate-amount">
-            <input
-              id="deposit-amount"
-              inputMode="decimal"
-              autoComplete="off"
-              placeholder="25"
-              value={amountText}
-              onChange={(e) => setAmountText(e.target.value)}
-              aria-invalid={(parsed && !parsed.ok) || tooMuch || noGas ? true : undefined}
-            />
-            <span className="donate-symbol">{symbol}</span>
-          </div>
-          {parsed && !parsed.ok && (
-            <p className="field-error" role="alert">
-              {parsed.error}
-            </p>
-          )}
-          {tooMuch && (
-            <p className="field-error" role="alert">
-              That is more than this wallet holds on Arc.
-            </p>
-          )}
-          {noGas && (
-            <p className="field-error" role="alert">
-              Leave at least {formatExact(PASSKEY_GAS_BUFFER, 'USDC')} in this wallet for the network fee.
-            </p>
-          )}
-        </div>
+        </Field>
+        <Field
+          label="Amount"
+          id="deposit-amount"
+          alert
+          error={
+            parsed && !parsed.ok
+              ? parsed.error
+              : tooMuch
+                ? 'That is more than this wallet holds on Arc.'
+                : noGas
+                  ? `Leave at least ${formatExact(PASSKEY_GAS_BUFFER, 'USDC')} in this wallet for the network fee.`
+                  : undefined
+          }
+        >
+          <AmountInput
+            id="deposit-amount"
+            currency={symbol}
+            placeholder="25"
+            value={amountText}
+            onChange={(e) => setAmountText(e.target.value)}
+            aria-invalid={(parsed && !parsed.ok) || tooMuch || noGas ? true : undefined}
+          />
+        </Field>
       </fieldset>
-      <p className="hint">
+      <p className="form-hint">
         {held !== undefined
           ? `Your wallet holds ${formatAmount(held, symbol)} on Arc.`
           : funds.isError
@@ -345,9 +326,9 @@ function WalletDeposit({ account, bridging }: { account: Address; bridging: bool
         successText="Money added to your Fundit account."
         startOverWarning="The earlier transfer may still go through. If it does and you send again, you will add the money twice. Start over anyway?"
       />
-      <button type="submit" className="btn" disabled={!canSubmit}>
+      <Button type="submit" disabled={!canSubmit}>
         {tx.busy ? 'Sending...' : 'Add to my Fundit account'}
-      </button>
+      </Button>
     </form>
   )
 }
@@ -366,9 +347,9 @@ export function AddMoneyPanel({ account }: { account: Address }) {
           <p>Send USDC or EURC on Arc to this address from any wallet or exchange.</p>
           <div className="deposit-address">
             <AddressQr address={account} label="QR code of your Fundit account address" />
-            <CopyAddress address={account} />
+            <AddressChip address={account} full />
           </div>
-          <p className="hint">This address is on Arc only. Money sent to it on another chain will not arrive.</p>
+          <p className="form-hint">This address is on Arc only. Money sent to it on another chain will not arrive.</p>
         </div>
       ),
     },
@@ -377,7 +358,7 @@ export function AddMoneyPanel({ account }: { account: Address }) {
       label: 'From a wallet',
       content: (
         <div className="deposit-tab">
-          <p className="hint">Send USDC or EURC from a regular wallet on Arc.</p>
+          <p className="form-hint">Send USDC or EURC from a regular wallet on Arc.</p>
           <WalletDeposit account={account} bridging={bridging} />
         </div>
       ),
@@ -389,7 +370,7 @@ export function AddMoneyPanel({ account }: { account: Address }) {
             label: 'From another chain',
             content: (
               <div className="deposit-tab">
-                <p className="hint">Move USDC from a wallet on another chain. Circle delivers it to your Fundit account on Arc.</p>
+                <p className="form-hint">Move USDC from a wallet on another chain. Circle delivers it to your Fundit account on Arc.</p>
                 <BridgeToAccount recipient={account} onBusyChange={setBridging} />
               </div>
             ),
@@ -400,7 +381,7 @@ export function AddMoneyPanel({ account }: { account: Address }) {
   return (
     <>
       <Tabs label="Ways to add money" tabs={tabs} keepMounted className="deposit-tabs" />
-      <p className="hint">Card and bank coming soon.</p>
+      <p className="form-hint">Card and bank coming soon.</p>
     </>
   )
 }

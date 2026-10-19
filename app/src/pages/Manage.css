@@ -1,0 +1,44 @@
+/* Manage a Fundit: the organiser's money and settings. */
+.manage {
+  width: 100%;
+  max-width: var(--page);
+  margin: 0 auto;
+}
+
+.manage .ui-page-subtitle a {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.manage-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-5);
+}
+
+.manage-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.manage-add-link,
+.manage-close {
+  align-self: flex-start;
+}
+
+.manage-current {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+@media (max-width: 860px) {
+  .manage-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

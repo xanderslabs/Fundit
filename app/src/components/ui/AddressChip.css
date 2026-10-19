@@ -26,6 +26,12 @@
   white-space: nowrap;
 }
 
+.ui-address-full {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .ui-address-copy,
 .ui-address-link {
   padding: var(--space-1) var(--space-3);

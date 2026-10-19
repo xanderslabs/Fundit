@@ -6,11 +6,10 @@ import { SignInButton, useSignOut } from '../components/AccountMenu'
 import { AccountWithdraw } from '../components/AccountWithdraw'
 import { AddBackupPasskey } from '../components/AddBackupPasskey'
 import { AddMoneyPanel } from '../components/AddMoneyPanel'
-import { CopyAddress } from '../components/AddressTools'
 import { CampaignGrid, LoadError } from '../components/CampaignGrid'
 import { PendingBridgeTracker } from '../components/PendingBridgeTracker'
 import { ShareDialog } from '../components/SharePanel'
-import { AddressChip, Banner, Button, ButtonLink, Card, EmptyState, Stat, TabPanel, Tabs } from '../components/ui'
+import { AddressChip, Banner, Button, ButtonLink, Card, EmptyState, Panel, Stat, TabPanel, Tabs } from '../components/ui'
 import { EXPLORER_URL } from '../config'
 import { blockTimes } from '../hooks/useActivity'
 import { useCampaign } from '../hooks/useCampaigns'
@@ -200,8 +199,8 @@ function AccountTab({
           </p>
         )}
         <p className="dash-muted">Your Fundit account address on Arc:</p>
-        {/* The full address here, so it can be checked character by character. CopyAddress moves with Add money (Task 6). */}
-        <CopyAddress address={address} />
+        {/* The full address here, so it can be checked character by character. */}
+        <AddressChip address={address} full />
         <a className="dash-link" href={`${EXPLORER_URL}/address/${address}`} target="_blank" rel="noopener noreferrer">
           View on the Arc explorer
         </a>
@@ -297,7 +296,7 @@ function DashPanel({ id, label, open, onClose, children }: { id: string; label: 
         }
       }}
     >
-      <button type="button" className="share-close dash-panel-close" aria-label={`Close ${label}`} onClick={onClose}>
+      <button type="button" className="dash-panel-close" aria-label={`Close ${label}`} onClick={onClose}>
         <CloseIcon />
       </button>
       {children}
@@ -369,11 +368,9 @@ function Dashboard({ sender, stored }: { sender: Sender; stored: StoredPasskey }
 
       <DashPanel id="dash-panel-add" label="Add money" open={open === 'add'} onClose={() => close('add')}>
         {opened.add && (
-          <section className="panel manage-section" aria-labelledby="dash-add-heading">
-            <h2 id="dash-add-heading">Add money</h2>
-            <p className="hint">Network fees on Arc are paid in USDC from your balance, so keep a little extra.</p>
+          <Panel title="Add money" headingId="dash-add-heading" description="Network fees on Arc are paid in USDC from your balance, so keep a little extra.">
             <AddMoneyPanel account={address} />
-          </section>
+          </Panel>
         )}
       </DashPanel>
       <DashPanel id="dash-panel-send" label="Send" open={open === 'send'} onClose={() => close('send')}>

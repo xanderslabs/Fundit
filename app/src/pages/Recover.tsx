@@ -2,10 +2,10 @@ import { type ClipboardEvent, type FormEvent, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import type { Address } from 'viem'
 import { SignInButton } from '../components/AccountMenu'
-import { AddressQr, CopyAddress } from '../components/AddressTools'
+import { AddressQr } from '../components/AddressTools'
 import { AddBackupPasskey } from '../components/AddBackupPasskey'
 import { usernameError } from '../components/PasskeyLogin'
-import { Button, Card, Field, PageHeader, StatusBox } from '../components/ui'
+import { AddressChip, Button, Card, Field, PageHeader, StatusBox } from '../components/ui'
 import { explainError } from '../lib/errors'
 import {
   checkPendingRecovery,
@@ -199,7 +199,7 @@ export function Recover() {
                 <p>{needsFunds.message}</p>
                 <div className="recover-fund-body">
                   <AddressQr address={needsFunds.account} label="QR code of your account address" />
-                  <CopyAddress address={needsFunds.account} />
+                  <AddressChip address={needsFunds.account} full />
                 </div>
               </StatusBox>
             )}

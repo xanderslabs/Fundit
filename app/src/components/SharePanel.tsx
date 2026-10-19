@@ -1,8 +1,8 @@
-import { type KeyboardEvent, type MouseEvent, useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { createPoster, downloadBlob, posterFilename } from '../lib/poster'
 import { qrMatrix, qrPath } from '../lib/qr'
 import { embedSnippet, funditUrl, shareMessage, shareTargets } from '../lib/share'
-import { Button } from './ui'
+import { Button, Dialog } from './ui'
 import './SharePanel.css'
 
 type Props = { address: string; title: string; isCreator: boolean }
@@ -168,46 +168,15 @@ export function SharePanel({ address, title, isCreator, headingId }: Props & { h
   )
 }
 
-// A Share button that opens the panel in a modal dialog. The native dialog keeps focus inside and closes on
-// Escape; focus goes back to the button when it closes.
+// A Share button that opens the panel in a modal dialog. Dialog keeps focus inside, closes on Escape, the
+// backdrop and Close, and gives focus back to the button.
 export function ShareDialog(props: Props) {
   const [open, setOpen] = useState(false)
-  const dialog = useRef<HTMLDialogElement>(null)
-  const trigger = useRef<HTMLButtonElement>(null)
-  const closeButton = useRef<HTMLButtonElement>(null)
   const headingId = useId()
-
-  useEffect(() => {
-    const d = dialog.current
-    if (!open || !d || d.open) return
-    if (typeof d.showModal === 'function') d.showModal()
-    else d.setAttribute('open', '')
-    closeButton.current?.focus()
-  }, [open])
-
-  function close() {
-    const d = dialog.current
-    if (d?.open && typeof d.close === 'function') d.close()
-    else d?.removeAttribute('open')
-    setOpen(false)
-    trigger.current?.focus()
-  }
-
-  function onKeyDown(e: KeyboardEvent<HTMLDialogElement>) {
-    if (e.key !== 'Escape') return
-    e.preventDefault()
-    close()
-  }
-
-  // A click on the backdrop lands on the dialog element itself.
-  function onClick(e: MouseEvent<HTMLDialogElement>) {
-    if (e.target === dialog.current) close()
-  }
 
   return (
     <>
       <Button
-        ref={trigger}
         variant="secondary"
         aria-haspopup="dialog"
         aria-label={`Share ${props.title.trim() || 'this Fundit'}`}
@@ -215,18 +184,9 @@ export function ShareDialog(props: Props) {
       >
         Share
       </Button>
-      {open && (
-        <dialog ref={dialog} className="share-dialog" aria-labelledby={headingId} onKeyDown={onKeyDown} onClick={onClick} onClose={close}>
-          <div className="share-dialog-body">
-            <button ref={closeButton} type="button" className="share-close" aria-label="Close" onClick={close}>
-              <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-                <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              </svg>
-            </button>
-            <SharePanel {...props} headingId={headingId} />
-          </div>
-        </dialog>
-      )}
+      <Dialog open={open} onClose={() => setOpen(false)} labelledBy={headingId} size="md">
+        <SharePanel {...props} headingId={headingId} />
+      </Dialog>
     </>
   )
 }

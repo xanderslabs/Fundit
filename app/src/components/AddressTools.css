@@ -1,0 +1,6 @@
+/* The QR code of an address. Fixed size, so it scans from a phone held at arm's length. */
+.fund-qr {
+  flex: none;
+  width: 200px;
+  height: 200px;
+}

@@ -1,0 +1,18 @@
+/* Shown on a Fundit page to its backup address only. */
+.backup-banner-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.backup-banner-body > p {
+  margin: 0;
+}
+
+.backup-banner-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  line-height: var(--text-lg-line);
+  letter-spacing: var(--tracking-heading);
+}

@@ -283,6 +283,25 @@ describe('ui components', () => {
   })
 
   // A field that cannot be changed must look different, not only refuse input.
+  // A form error that appears while the person types must be read out, and a quiet one must not interrupt.
+  it('Field alert gives the error role alert, and only then', () => {
+    const { rerender } = render(
+      <Field id="to" label="Recipient" error="Enter a valid address.">
+        <input />
+      </Field>,
+    )
+    expect(screen.queryByRole('alert')).toBeNull()
+    rerender(
+      <Field id="to" label="Recipient" error="Enter a valid address." alert>
+        <input />
+      </Field>,
+    )
+    const alert = screen.getByRole('alert')
+    expect(alert.textContent).toBe('Enter a valid address.')
+    expect(alert.id).toBe('to-error')
+    expect(screen.getByLabelText('Recipient').getAttribute('aria-describedby')).toBe('to-error')
+  })
+
   it('Field shows a disabled control as disabled', () => {
     const rule = parse(css('Field.css')).rules.find((r) => r.selector.includes(':disabled'))
     expect(rule?.selector).toMatch(/\.ui-input:disabled/)
@@ -345,6 +364,22 @@ describe('ui components', () => {
     const link = screen.getByRole('link', { name: /explorer/i })
     expect(link.getAttribute('href')).toMatch(new RegExp(`/address/${ADDRESS}$`))
     expect(link.getAttribute('rel')).toContain('noopener')
+  })
+
+  // Before money is sent to an address, the person must be able to compare every character of it.
+  it('AddressChip full shows the whole address and still copies it', async () => {
+    const user = userEvent.setup()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    render(<AddressChip address={ADDRESS} full />)
+    expect(screen.getByText(ADDRESS).classList.contains('ui-address-full')).toBe(true)
+    expect(screen.queryByText('0x1234...5678')).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Copy address' }))
+    expect(writeText).toHaveBeenCalledWith(ADDRESS)
+    // The whole address wraps inside its box instead of widening the page.
+    const rule = parse(css('AddressChip.css')).rules.find((r) => r.selector === '.ui-address-full')
+    expect(rule?.body).toMatch(/overflow-wrap\s*:\s*anywhere/)
+    expect(rule?.body).toMatch(/white-space\s*:\s*normal/)
   })
 
   it('AddressChip says so when the copy fails', async () => {

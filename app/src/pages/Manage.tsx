@@ -7,6 +7,7 @@ import { erc20Abi } from '../abi/erc20'
 import { SignInButton } from '../components/AccountMenu'
 import { PendingBridgeTracker } from '../components/PendingBridgeTracker'
 import { TxStatus, useTx } from '../components/TxStatus'
+import { AddressChip, AmountInput, Button, Field, PageHeader, Panel, StatusBox } from '../components/ui'
 import { ARC_DOMAIN, CHAIN_LABELS, TOKENS } from '../config'
 import { useCampaign } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
@@ -21,6 +22,8 @@ import { buildWithdrawCall, destDomain, netAfterWithdrawFee, type PayoutDest, pa
 import type { Sender } from '../lib/sender'
 import { ADDRESS_TYPO, byteLength, MAX_DESCRIPTION, MAX_LINKS, MAX_TITLE, parseTypedAddress, validateCampaign } from '../lib/validate'
 import { NotFound } from './NotFound'
+import '../components/Form.css'
+import './Manage.css'
 
 const CLOSE_TEXT = 'Closing is permanent. Funds that arrive later can still be withdrawn.'
 const PASSKEY_WARNING = 'Your Fundit account may not exist on that chain. Send to an address you control there.'
@@ -45,7 +48,7 @@ function useRefresh(campaign: Address) {
 function FieldError({ id, message }: { id: string; message?: string }) {
   if (!message) return null
   return (
-    <p id={id} className="field-error" role="alert">
+    <p id={id} className="form-error" role="alert">
       {message}
     </p>
   )
@@ -75,76 +78,69 @@ function EditSection({ view, sender }: { view: CampaignView; sender: Sender }) {
   }
 
   return (
-    <section className="panel manage-section" aria-labelledby="edit-heading">
-      <h2 id="edit-heading">Edit details</h2>
-      {closed && <p className="hint">This Fundit is closed, so its details can no longer be changed.</p>}
-      <form className="create-form" onSubmit={submit} noValidate>
-        <fieldset className="manage-fields" disabled={closed || tx.locked}>
-          <div className="form-field">
-            <label htmlFor="edit-title">Title</label>
-            <input id="edit-title" value={title} onChange={(e) => setTitle(e.target.value)} aria-describedby="edit-title-error" />
-            <span className="counter">
-              {byteLength(title.trim())} of {MAX_TITLE} bytes
-            </span>
-            <FieldError id="edit-title-error" message={errors.title} />
-          </div>
-          <div className="form-field">
-            <label htmlFor="edit-description">Description</label>
-            <textarea id="edit-description" rows={6} value={description} onChange={(e) => setDescription(e.target.value)} />
-            <span className="counter">
-              {byteLength(description)} of {MAX_DESCRIPTION} bytes
-            </span>
-            <FieldError id="edit-description-error" message={errors.description} />
-          </div>
-          <div className="form-field">
-            <label htmlFor="edit-image">Image link (optional)</label>
-            <input id="edit-image" type="url" inputMode="url" placeholder="https://" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} />
-            <FieldError id="edit-image-error" message={errors.imageUrl} />
-          </div>
-          <div className="form-field">
-            <span className="manage-label">Links (optional)</span>
-            {links.map((link, i) => (
-              <div className="link-row" key={i}>
-                <div className="link-input">
-                  <input
-                    type="url"
-                    inputMode="url"
-                    placeholder="https://"
-                    aria-label={`Link ${i + 1}`}
-                    value={link}
-                    onChange={(e) => setLinks((rows) => rows.map((r, j) => (j === i ? e.target.value : r)))}
-                  />
+    <Panel title="Edit details" headingId="edit-heading">
+      {closed && <p className="form-hint">This Fundit is closed, so its details can no longer be changed.</p>}
+      <form className="form" onSubmit={submit} noValidate>
+        <fieldset className="form-fields" disabled={closed || tx.locked}>
+          <Field label="Title" id="edit-title" hint={<span className="form-counter">{byteLength(title.trim())} of {MAX_TITLE} bytes</span>} error={errors.title} alert>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} />
+          </Field>
+          <Field
+            label="Description"
+            id="edit-description"
+            hint={<span className="form-counter">{byteLength(description)} of {MAX_DESCRIPTION} bytes</span>}
+            error={errors.description}
+            alert
+          >
+            <textarea rows={6} value={description} onChange={(e) => setDescription(e.target.value)} />
+          </Field>
+          <Field label="Image link (optional)" id="edit-image" error={errors.imageUrl} alert>
+            <input type="url" inputMode="url" placeholder="https://" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} />
+          </Field>
+          <fieldset className="form-group">
+            <legend className="form-legend">Links (optional)</legend>
+            <div className="form-links">
+              {links.map((link, i) => (
+                <div className="form-link" key={i}>
+                  <div className="form-row">
+                    <input
+                      className="ui-input"
+                      type="url"
+                      inputMode="url"
+                      placeholder="https://"
+                      aria-label={`Link ${i + 1}`}
+                      value={link}
+                      onChange={(e) => setLinks((rows) => rows.map((r, j) => (j === i ? e.target.value : r)))}
+                    />
+                    <Button
+                      variant="secondary"
+                      aria-label={`Remove link ${i + 1}`}
+                      onClick={() => setLinks((rows) => (rows.length === 1 ? [''] : rows.filter((_, j) => j !== i)))}
+                    >
+                      Remove
+                    </Button>
+                  </div>
                   <FieldError id={`edit-link-${i}-error`} message={errors[`link-${i}`]} />
                 </div>
-                <button
-                  type="button"
-                  className="btn btn-outline"
-                  aria-label={`Remove link ${i + 1}`}
-                  onClick={() => setLinks((rows) => (rows.length === 1 ? [''] : rows.filter((_, j) => j !== i)))}
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
+              ))}
+            </div>
             {links.length < MAX_LINKS && (
-              <button type="button" className="btn btn-outline" onClick={() => setLinks((rows) => [...rows, ''])}>
+              <Button variant="secondary" className="manage-add-link" onClick={() => setLinks((rows) => [...rows, ''])}>
                 Add a link
-              </button>
+              </Button>
             )}
             <FieldError id="edit-links-error" message={errors.links} />
-          </div>
-          <div className="form-field">
-            <label htmlFor="edit-goal">Goal</label>
-            <input id="edit-goal" inputMode="decimal" autoComplete="off" value={goal} onChange={(e) => setGoal(e.target.value)} />
-            <FieldError id="edit-goal-error" message={errors.goal} />
-          </div>
+          </fieldset>
+          <Field label="Goal" id="edit-goal" error={errors.goal} alert>
+            <AmountInput id="edit-goal" currency={symbol} value={goal} onChange={(e) => setGoal(e.target.value)} />
+          </Field>
         </fieldset>
         <TxStatus tx={tx} noun="edit" successText="Your changes are saved." startOverWarning={RETRY_WARNING} />
-        <button type="submit" className="btn" disabled={!canSubmit}>
+        <Button type="submit" disabled={!canSubmit}>
           {tx.busy ? 'Saving...' : 'Save changes'}
-        </button>
+        </Button>
       </form>
-    </section>
+    </Panel>
   )
 }
 
@@ -245,35 +241,29 @@ function WithdrawSection({ view, sender }: { view: CampaignView; sender: Sender 
   }
 
   return (
-    <section className="panel manage-section" aria-labelledby="withdraw-heading">
-      <h2 id="withdraw-heading">Withdraw</h2>
+    <Panel title="Withdraw" headingId="withdraw-heading">
       <p>
         Available: <strong>{formatAmount(available, symbol)}</strong>
       </p>
-      {available === 0n && <p className="hint">There is nothing to withdraw yet.</p>}
-      <form className="create-form" onSubmit={submit} noValidate>
-        <fieldset className="manage-fields" disabled={tx.locked}>
-          <div className="form-field">
-            <label htmlFor="withdraw-amount">Amount</label>
-            <div className="link-row">
-              <input
-                id="withdraw-amount"
-                inputMode="decimal"
-                autoComplete="off"
-                placeholder="0"
-                value={amountText}
-                onChange={(e) => setAmountText(e.target.value)}
-                aria-invalid={(parsed && !parsed.ok) || overAvailable ? true : undefined}
-                aria-describedby="withdraw-amount-error"
-              />
-              <button
-                type="button"
-                className="btn btn-outline"
-                disabled={available === 0n}
-                onClick={() => setAmountText(formatUnits(available, 6))}
-              >
+      {available === 0n && <p className="form-hint">There is nothing to withdraw yet.</p>}
+      <form className="form" onSubmit={submit} noValidate>
+        <fieldset className="form-fields" disabled={tx.locked}>
+          <div className="form-group">
+            <div className="form-row">
+              <Field label="Amount" id="withdraw-amount">
+                <AmountInput
+                  id="withdraw-amount"
+                  currency={symbol}
+                  placeholder="0"
+                  value={amountText}
+                  onChange={(e) => setAmountText(e.target.value)}
+                  aria-invalid={(parsed && !parsed.ok) || overAvailable ? true : undefined}
+                  aria-describedby="withdraw-amount-error"
+                />
+              </Field>
+              <Button variant="secondary" disabled={available === 0n} onClick={() => setAmountText(formatUnits(available, 6))}>
                 Max
-              </button>
+              </Button>
             </div>
             <FieldError
               id="withdraw-amount-error"
@@ -287,64 +277,58 @@ function WithdrawSection({ view, sender }: { view: CampaignView; sender: Sender 
             />
           </div>
 
-          <div className="form-field">
-            <label htmlFor="withdraw-dest">Send to</label>
-            <select id="withdraw-dest" className="select" value={dest} onChange={(e) => setDest(e.target.value as PayoutDest)}>
-              {destinations.map((d) => (
-                <option key={d} value={d}>
-                  {CHAIN_LABELS[d]}
-                </option>
-              ))}
-            </select>
-            {symbol === 'EURC' && destinations.length === 1 && <p className="hint">EURC can only be paid out on Arc.</p>}
-            {crossChain && <p className="hint">{CROSS_CHAIN_NOTE}</p>}
+          <div className="form-group">
+            <Field label="Send to" id="withdraw-dest">
+              <select className="select" value={dest} onChange={(e) => setDest(e.target.value as PayoutDest)}>
+                {destinations.map((d) => (
+                  <option key={d} value={d}>
+                    {CHAIN_LABELS[d]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            {symbol === 'EURC' && destinations.length === 1 && <p className="form-hint">EURC can only be paid out on Arc.</p>}
+            {crossChain && <p className="form-hint">{CROSS_CHAIN_NOTE}</p>}
             {crossChain && sender.kind === 'passkey' && (
-              <p className="field-error" role="alert">
+              <p className="form-error" role="alert">
                 {PASSKEY_WARNING}
               </p>
             )}
           </div>
 
           {chain && (
-            <fieldset className="form-field">
-              <legend>Speed</legend>
+            <fieldset className="form-group">
+              <legend className="form-legend">Speed</legend>
               {chain.fast && (
-                <label className="choice">
+                <label className="form-choice">
                   <input type="radio" name="withdraw-speed" checked={fast} onChange={() => setFastChoice(true)} />
-                  <span>
-                    Fast <span className="hint">About a minute. Costs a little more.</span>
+                  <span className="form-choice-text">
+                    Fast <span className="form-hint">About a minute. Costs a little more.</span>
                   </span>
                 </label>
               )}
-              <label className="choice">
+              <label className="form-choice">
                 <input type="radio" name="withdraw-speed" checked={!fast} onChange={() => setFastChoice(false)} />
-                <span>
-                  Standard <span className="hint">Can take 15 minutes or more.</span>
+                <span className="form-choice-text">
+                  Standard <span className="form-hint">Can take 15 minutes or more.</span>
                 </span>
               </label>
             </fieldset>
           )}
 
-          <div className="form-field">
-            <label htmlFor="withdraw-recipient">Recipient</label>
-            <input
-              id="withdraw-recipient"
-              autoComplete="off"
-              spellCheck={false}
-              value={recipientText ?? sender.address}
-              onChange={(e) => setRecipientText(e.target.value)}
-              aria-invalid={recipientError ? true : undefined}
-              aria-describedby="withdraw-recipient-hint withdraw-recipient-error"
-            />
-            <p id="withdraw-recipient-hint" className="hint">
-              {crossChain ? `The address that gets the USDC on ${CHAIN_LABELS[dest]}.` : 'The address that gets the funds on Arc.'}
-            </p>
-            <FieldError id="withdraw-recipient-error" message={recipientError} />
-          </div>
+          <Field
+            label="Recipient"
+            id="withdraw-recipient"
+            hint={crossChain ? `The address that gets the USDC on ${CHAIN_LABELS[dest]}.` : 'The address that gets the funds on Arc.'}
+            error={recipientError}
+            alert
+          >
+            <input autoComplete="off" spellCheck={false} value={recipientText ?? sender.address} onChange={(e) => setRecipientText(e.target.value)} />
+          </Field>
         </fieldset>
 
         {amount !== null && net !== null && !overAvailable && (
-          <dl className="donate-breakdown" aria-label="Breakdown">
+          <dl className="form-breakdown" aria-label="Breakdown">
             <div>
               <dt>Fundit fee ({bpsToPercent(summary.withdrawFeeBps)})</dt>
               <dd>{formatAmount(amount - net, symbol)}</dd>
@@ -355,21 +339,21 @@ function WithdrawSection({ view, sender }: { view: CampaignView; sender: Sender 
                   <dt>Transfer fee (at most)</dt>
                   <dd>{quote ? formatAmount(quote.maxFee, symbol) : fee.isError ? 'Not available' : 'Loading...'}</dd>
                 </div>
-                <div className="donate-total">
+                <div className="form-total">
                   <dt>Arrives on {CHAIN_LABELS[dest]}</dt>
                   <dd>{arrives !== null && !tooSmall ? `At least ${formatAmount(arrives, symbol)}` : '-'}</dd>
                 </div>
               </>
             ) : (
-              <div className="donate-total">
+              <div className="form-total">
                 <dt>You receive</dt>
                 <dd>{formatAmount(net, symbol)}</dd>
               </div>
             )}
           </dl>
         )}
-        {tooSmall && <p className="field-error">{TOO_SMALL}</p>}
-        {crossChain && fee.isError && <p className="field-error">Could not get a fee quote from Circle. Try again in a moment.</p>}
+        {tooSmall && <p className="form-error">{TOO_SMALL}</p>}
+        {crossChain && fee.isError && <p className="form-error">Could not get a fee quote from Circle. Try again in a moment.</p>}
 
         <TxStatus
           tx={tx}
@@ -378,13 +362,13 @@ function WithdrawSection({ view, sender }: { view: CampaignView; sender: Sender 
           startOverWarning="The earlier withdrawal may still go through. If it does and you withdraw again, you will take out funds twice. Start over anyway?"
         />
         {tx.phase.kind !== 'timeout' && (
-          <button type="submit" className="btn" disabled={!canSubmit}>
+          <Button type="submit" disabled={!canSubmit}>
             {tx.busy ? 'Withdrawing...' : 'Withdraw'}
-          </button>
+          </Button>
         )}
       </form>
       <PendingBridgeTracker campaign={campaign} account={sender.address} kind="payout" />
-    </section>
+    </Panel>
   )
 }
 
@@ -430,33 +414,22 @@ function RescueSection({ view, sender }: { view: CampaignView; sender: Sender })
   }
 
   return (
-    <section className="panel manage-section" aria-labelledby="rescue-heading">
-      <h2 id="rescue-heading">Rescue tokens sent by mistake</h2>
+    <Panel title="Rescue tokens sent by mistake" headingId="rescue-heading">
       {amount > 0n && (
-        <form className="create-form" onSubmit={submit} noValidate>
+        <form className="form" onSubmit={submit} noValidate>
           <p>
             Someone sent {shown} to this Fundit. It only accepts {symbol}, so this money is not part of what was raised. You can
             send it to any address on Arc.
           </p>
-          <fieldset className="manage-fields" disabled={tx.locked}>
-            <div className="form-field">
-              <label htmlFor="rescue-recipient">Send to</label>
-              <input
-                id="rescue-recipient"
-                autoComplete="off"
-                spellCheck={false}
-                value={recipientText ?? sender.address}
-                onChange={(e) => setRecipientText(e.target.value)}
-                aria-invalid={recipientError ? true : undefined}
-                aria-describedby="rescue-recipient-error"
-              />
-              <FieldError id="rescue-recipient-error" message={recipientError} />
-            </div>
+          <fieldset className="form-fields" disabled={tx.locked}>
+            <Field label="Send to" id="rescue-recipient" error={recipientError} alert>
+              <input autoComplete="off" spellCheck={false} value={recipientText ?? sender.address} onChange={(e) => setRecipientText(e.target.value)} />
+            </Field>
           </fieldset>
           {tx.phase.kind !== 'timeout' && (
-            <button type="submit" className="btn" disabled={!canSubmit}>
+            <Button type="submit" disabled={!canSubmit}>
               {tx.busy ? 'Sending...' : `Rescue ${shown}`}
-            </button>
+            </Button>
           )}
         </form>
       )}
@@ -466,7 +439,7 @@ function RescueSection({ view, sender }: { view: CampaignView; sender: Sender })
         successText={sentText}
         startOverWarning="The earlier rescue may still go through. Start over anyway?"
       />
-    </section>
+    </Panel>
   )
 }
 
@@ -480,8 +453,7 @@ function CloseSection({ view, sender }: { view: CampaignView; sender: Sender }) 
   }
 
   return (
-    <section className="panel manage-section" aria-labelledby="close-heading">
-      <h2 id="close-heading">Close this Fundit</h2>
+    <Panel title="Close this Fundit" headingId="close-heading">
       {view.summary.closed ? (
         <p>This Fundit is closed. It no longer takes donations.</p>
       ) : (
@@ -490,13 +462,13 @@ function CloseSection({ view, sender }: { view: CampaignView; sender: Sender }) 
           <p>
             <strong>{CLOSE_TEXT}</strong>
           </p>
-          <button type="button" className="btn btn-danger" disabled={tx.locked} onClick={close}>
+          <Button variant="danger" className="manage-close" disabled={tx.locked} onClick={close}>
             Close this Fundit
-          </button>
+          </Button>
         </>
       )}
       <TxStatus tx={tx} noun="transaction" successText="The Fundit is closed." startOverWarning={RETRY_WARNING} />
-    </section>
+    </Panel>
   )
 }
 
@@ -528,80 +500,76 @@ function BackupSection({ view, sender }: { view: CampaignView; sender: Sender })
   }
 
   return (
-    <section className="panel manage-section" aria-labelledby="backup-heading">
-      <h2 id="backup-heading">Backup address</h2>
-      <p className="hint">
-        If you lose your Fundit account, the backup address can ask to take over the Fundit. It becomes the organiser
-        after a 7-day wait, and you can cancel from your Fundit account during those 7 days.
-      </p>
-      <p>
-        Current backup: <span className="manage-address">{hasBackup ? summary.backup : 'None'}</span>
-      </p>
+    <Panel
+      title="Backup address"
+      headingId="backup-heading"
+      description="If you lose your Fundit account, the backup address can ask to take over the Fundit. It becomes the organiser after a 7-day wait, and you can cancel from your Fundit account during those 7 days."
+    >
+      <div className="manage-current">
+        <span>Current backup:</span>
+        {hasBackup ? <AddressChip address={summary.backup} full /> : <span>None</span>}
+      </div>
 
       {pending && (
-        <div className="status-box">
+        <StatusBox>
           <p>
             <strong>Your backup started a recovery.</strong> It can take over on{' '}
             {new Date(Number(summary.recoveryReadyAt) * 1000).toLocaleString()}. If you did not expect this, cancel it now.
           </p>
-          <button
-            type="button"
-            className="btn"
-            disabled={tx.locked}
-            onClick={() =>
-              void tx.run(
-                sender,
-                () => ({ to: campaign, data: encodeFunctionData({ abi: campaignAbi, functionName: 'cancelRecovery' }) }),
-                'Cancel recovery',
-              )
-            }
-          >
-            Cancel recovery
-          </button>
-        </div>
+          <div className="form-actions">
+            <Button
+              disabled={tx.locked}
+              onClick={() =>
+                void tx.run(
+                  sender,
+                  () => ({ to: campaign, data: encodeFunctionData({ abi: campaignAbi, functionName: 'cancelRecovery' }) }),
+                  'Cancel recovery',
+                )
+              }
+            >
+              Cancel recovery
+            </Button>
+          </div>
+        </StatusBox>
       )}
 
-      <form className="create-form" onSubmit={submit} noValidate>
-        <fieldset className="manage-fields" disabled={tx.locked}>
-          <div className="form-field">
-            <label htmlFor="backup-new">New backup address</label>
-            <input
-              id="backup-new"
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="0x..."
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              aria-invalid={error ? true : undefined}
-              aria-describedby="backup-new-error"
-            />
-            <FieldError id="backup-new-error" message={error} />
-            {pending && <p className="hint">Changing or removing the backup also cancels the recovery.</p>}
-          </div>
+      <form className="form" onSubmit={submit} noValidate>
+        <fieldset className="form-fields" disabled={tx.locked}>
+          <Field
+            label="New backup address"
+            id="backup-new"
+            hint={pending ? 'Changing or removing the backup also cancels the recovery.' : undefined}
+            error={error}
+            alert
+          >
+            <input autoComplete="off" spellCheck={false} placeholder="0x..." value={text} onChange={(e) => setText(e.target.value)} />
+          </Field>
         </fieldset>
-        <div className="manage-actions">
-          <button type="submit" className="btn" disabled={raw === '' || error !== undefined || tx.locked}>
+        <div className="form-actions">
+          <Button type="submit" disabled={raw === '' || error !== undefined || tx.locked}>
             Save backup
-          </button>
+          </Button>
           {hasBackup && (
-            <button type="button" className="btn btn-outline" disabled={tx.locked} onClick={() => void setBackup(zeroAddress, 'Remove backup')}>
+            <Button variant="secondary" disabled={tx.locked} onClick={() => void setBackup(zeroAddress, 'Remove backup')}>
               Remove backup
-            </button>
+            </Button>
           )}
         </div>
         <TxStatus tx={tx} noun="transaction" successText="Saved." startOverWarning={RETRY_WARNING} />
       </form>
-    </section>
+    </Panel>
   )
 }
 
 function ConnectNotice() {
   return (
-    <section className="notice">
-      <h1>Manage this Fundit</h1>
-      <p>Sign in with the Fundit account that started this Fundit to manage it.</p>
-      <SignInButton />
-    </section>
+    <div className="manage">
+      <PageHeader
+        title="Manage this Fundit"
+        subtitle="Sign in with the Fundit account that started this Fundit to manage it."
+        actions={<SignInButton className="ui-btn ui-btn-primary ui-btn-lg" />}
+      />
+    </div>
   )
 }
 
@@ -615,20 +583,24 @@ export function Manage() {
 
   if (query.isError) {
     return (
-      <section className="notice">
-        <h1>Could not load this Fundit</h1>
-        <p>The Arc network did not answer. Check your connection and try again.</p>
-        <button type="button" className="btn" onClick={() => query.refetch()}>
-          Try again
-        </button>
-      </section>
+      <div className="manage">
+        <PageHeader
+          title="Could not load this Fundit"
+          subtitle="The Arc network did not answer. Check your connection and try again."
+          actions={
+            <Button variant="secondary" onClick={() => query.refetch()}>
+              Try again
+            </Button>
+          }
+        />
+      </div>
     )
   }
   if (query.isPending || !query.data) {
     return (
-      <section className="notice" aria-busy="true">
-        <p className="muted">Loading Fundit...</p>
-      </section>
+      <div className="manage" aria-busy="true">
+        <p className="form-hint">Loading Fundit...</p>
+      </div>
     )
   }
   const view = query.data
@@ -638,19 +610,22 @@ export function Manage() {
     return <Navigate to={`/c/${view.address}`} replace />
   }
 
+  // Two columns on a wide screen: the money and the backup on the left, the details and Close on the right. On a
+  // phone the columns stack in the same order, so Close this Fundit comes last.
   return (
-    <section className="manage">
-      <header className="page-head">
-        <h1>Manage this Fundit</h1>
-        <p className="muted">
-          <Link to={`/c/${view.address}`}>{view.summary.meta.title || 'Untitled Fundit'}</Link>
-        </p>
-      </header>
-      <WithdrawSection view={view} sender={sender} />
-      <RescueSection view={view} sender={sender} />
-      <EditSection view={view} sender={sender} />
-      <BackupSection view={view} sender={sender} />
-      <CloseSection view={view} sender={sender} />
-    </section>
+    <div className="manage">
+      <PageHeader title="Manage this Fundit" subtitle={<Link to={`/c/${view.address}`}>{view.summary.meta.title || 'Untitled Fundit'}</Link>} />
+      <div className="manage-grid">
+        <div className="manage-col">
+          <WithdrawSection view={view} sender={sender} />
+          <RescueSection view={view} sender={sender} />
+          <BackupSection view={view} sender={sender} />
+        </div>
+        <div className="manage-col">
+          <EditSection view={view} sender={sender} />
+          <CloseSection view={view} sender={sender} />
+        </div>
+      </div>
+    </div>
   )
 }

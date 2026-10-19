@@ -15,6 +15,8 @@ import {
   subscribePending,
 } from '../lib/bridge'
 import { fetchTransferStatus, type TransferStatus } from '../lib/iris'
+import { Button, StatusBox } from './ui'
+import './Form.css'
 
 const POLL_MS = 10_000
 // After this the transfer is overdue. Stop polling and point the person to the explorer.
@@ -133,7 +135,7 @@ function BridgeRow({ entry, destination, account }: { entry: PendingBridge | Pen
   const text = rowText(entry, destination)
   const what = text.what
   return (
-    <div className={status === 'minted' ? 'status-box status-success' : 'status-box'}>
+    <StatusBox tone={status === 'minted' ? 'success' : 'info'}>
       {status === 'minted' ? (
         <p>
           <strong>
@@ -167,13 +169,13 @@ function BridgeRow({ entry, destination, account }: { entry: PendingBridge | Pen
         </p>
       )}
       {done && (
-        <div className="donate-actions">
-          <button type="button" className="btn btn-outline" onClick={() => (status === 'minted' || window.confirm(DISMISS_UNKNOWN)) && clearBridge(burnTx)}>
+        <div className="form-actions">
+          <Button variant="secondary" onClick={() => (status === 'minted' || window.confirm(DISMISS_UNKNOWN)) && clearBridge(burnTx)}>
             Dismiss
-          </button>
+          </Button>
         </div>
       )}
-    </div>
+    </StatusBox>
   )
 }
 
@@ -188,7 +190,7 @@ function SubmittedRow({ entry }: { entry: PendingSubmitted }) {
     return () => clearTimeout(timer)
   }, [overdue, entry.createdAt])
   return (
-    <div className="status-box">
+    <StatusBox>
       {overdue ? (
         <p>
           <strong>{what} was not confirmed.</strong> Check your wallet's activity on {CHAIN_LABELS[chain.key]}.
@@ -199,13 +201,13 @@ function SubmittedRow({ entry }: { entry: PendingSubmitted }) {
         </p>
       )}
       {overdue && (
-        <div className="donate-actions">
-          <button type="button" className="btn btn-outline" onClick={() => window.confirm(DISMISS_UNKNOWN) && clearSubmitted(entry.id)}>
+        <div className="form-actions">
+          <Button variant="secondary" onClick={() => window.confirm(DISMISS_UNKNOWN) && clearSubmitted(entry.id)}>
             Dismiss
-          </button>
+          </Button>
         </div>
       )}
-    </div>
+    </StatusBox>
   )
 }
 

@@ -5,8 +5,22 @@ type ControlProps = { id?: string; 'aria-describedby'?: string; 'aria-invalid'?:
 
 // A label, an optional hint and error, and one control (input, select, textarea or AmountInput). The control
 // gets its id, and aria-describedby and aria-invalid are wired to the hint and error. Any aria-describedby the
-// control already has is kept.
-export function Field({ label, hint, error, id, children }: { label: string; hint?: ReactNode; error?: string; id: string; children: ReactNode }) {
+// control already has is kept. alert gives the error role="alert", so it is read out as soon as it shows.
+export function Field({
+  label,
+  hint,
+  error,
+  alert = false,
+  id,
+  children,
+}: {
+  label: string
+  hint?: ReactNode
+  error?: string
+  alert?: boolean
+  id: string
+  children: ReactNode
+}) {
   const hintId = `${id}-hint`
   const errorId = `${id}-error`
   const control = Children.only(children)
@@ -30,7 +44,7 @@ export function Field({ label, hint, error, id, children }: { label: string; hin
         </p>
       )}
       {error && (
-        <p id={errorId} className="ui-field-error">
+        <p id={errorId} className="ui-field-error" role={alert ? 'alert' : undefined}>
           {error}
         </p>
       )}
