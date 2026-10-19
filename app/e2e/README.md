@@ -13,6 +13,19 @@ testnet Circle client key now has `fundit.fun` as its passkey domain, so Circle 
 against the live testnet site with `E2E_BASE_URL=https://fundit.fun`. The suite stops at the start with this
 reason if the base URL does not match the stored passkey's rpId.
 
+Circle allows one passkey domain per environment, so a second credential for `localhost` cannot work and the
+suite does not offer one.
+
+### Known gap: e2e runs only after deploy
+
+Passkey e2e runs only after a deploy, against `https://fundit.fun`. It checks what is live, never a branch
+before it merges. Before deploy, the money paths are covered by unit tests only. These include the wallet
+deposit regression test (`src/components/WalletTabs.rerender.test.tsx`: a connected wallet survives My page
+re-renders and can still send), the sender tests (`src/lib/sender.test.ts`: switch to Arc before sending, and
+send nothing if the switch is refused) and the Add money panel tests. The suite's own wallet step only opens
+the From a wallet tab. It does not connect a wallet, so it would not catch a wallet bug like that one. After
+each deploy, run the suite once against `https://fundit.fun` as a smoke test.
+
 ## One shared account
 
 Every run uses the same Fundit account, so Circle's count of active wallets stays low. Its passkey lives in
@@ -34,6 +47,12 @@ The script signs up a new account named `e2e-shared-<milliseconds>` on the live 
 writes `app/.env.testnet.passkey` with mode `600`. If the file already exists, the script stops before it signs
 up anything and never overwrites the file: the account behind it would be lost with its money. To start again
 with a new account, move the old file away yourself first.
+
+The script writes the file as soon as the virtual authenticator holds the new passkey, before it reads the
+address, so a later failure cannot lose the private key. If it stops after that point,
+`E2E_ACCOUNT_ADDRESS` stays `0x0000000000000000000000000000000000000000`. The suite's first step then fails
+on the address. Sign in on fundit.fun with that passkey, read the address on **My page** and put it in the
+file.
 
 ## What a run does
 

@@ -1,6 +1,6 @@
 import { existsSync, writeFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
-import { getAddress } from 'viem'
+import { getAddress, zeroAddress } from 'viem'
 import { checkChain, checkEnv, NET, PASSKEY_PATH } from './arc'
 import { addVirtualAuthenticator } from './passkey'
 import { PASSKEY_FILE, serializeSharedPasskey } from './sharedPasskey'
@@ -29,23 +29,27 @@ test('makes the shared e2e passkey account', async ({ browser, baseURL }) => {
   await page.getByLabel('Username').fill(username)
   await page.getByRole('button', { name: 'Create account' }).click()
 
+  // Save the passkey as soon as the authenticator holds it, before anything else can fail: a lost private key
+  // would leave Circle with an orphan wallet. The address is filled in once the page shows it.
+  await expect.poll(async () => (await passkeys.credentials()).length, { timeout: 60_000 }).toBe(1)
+  const cred = (await passkeys.credentials())[0]!
+  const save = (account: `0x${string}`, flag: 'wx' | 'w') =>
+    writeFileSync(
+      PASSKEY_PATH,
+      serializeSharedPasskey({ credentialId: cred.credentialId, privateKey: cred.privateKey, userHandle: cred.userHandle ?? '', rpId: cred.rpId ?? '', account, username }),
+      { flag, mode: 0o600 },
+    )
+  // 'wx' fails if the file appeared since the check above, so a second run can never replace it.
+  save(zeroAddress, 'wx')
+  expect(cred.rpId).toBe('fundit.fun')
+  expect(cred.userHandle).toBeTruthy()
+
   await expect(page).toHaveURL(/\/me\?add=1$/, { timeout: 60_000 })
   const panel = page.getByRole('region', { name: 'Add money' })
   const shown = /0x[0-9a-fA-F]{40}/.exec(await panel.getByRole('tabpanel', { name: 'Your address' }).innerText())?.[0]
-  expect(shown).toBeTruthy()
+  expect(shown, `No address on the page. app/${PASSKEY_FILE} has the passkey; sign in with it to read the address.`).toBeTruthy()
   const account = getAddress(shown!)
-
-  const creds = await passkeys.credentials()
-  expect(creds).toHaveLength(1)
-  const cred = creds[0]!
-  expect(cred.rpId).toBe('fundit.fun')
-  expect(cred.userHandle).toBeTruthy()
-  // 'wx' fails if the file appeared since the check above, so a second run can never replace it.
-  writeFileSync(
-    PASSKEY_PATH,
-    serializeSharedPasskey({ credentialId: cred.credentialId, privateKey: cred.privateKey, userHandle: cred.userHandle!, rpId: cred.rpId!, account, username }),
-    { flag: 'wx', mode: 0o600 },
-  )
+  save(account, 'w')
   console.log(`Saved the shared e2e account ${account} (${username}) to app/${PASSKEY_FILE}: ${NET.explorerUrl}/address/${account}`)
   await context.close()
 })
