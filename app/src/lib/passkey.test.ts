@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react'
-import { type Address, decodeFunctionData, erc20Abi, getAddress, type Hex, type TransactionReceipt } from 'viem'
+import { type Address, decodeFunctionData, encodeAbiParameters, erc20Abi, getAddress, type Hex, keccak256, type TransactionReceipt } from 'viem'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { CIRCLE_MULTISIG_PLUGIN, ENTRY_POINT, storageKey, TX_TIMEOUT_MS } from '../config'
+import { CIRCLE_MSCA_FACTORY, CIRCLE_MULTISIG_PLUGIN, ENTRY_POINT, storageKey, TX_TIMEOUT_MS } from '../config'
 import { explainError, NeedsNetworkFee } from './errors'
 import { useSender } from '../hooks/useSender'
 import {
@@ -72,6 +72,7 @@ const kit = vi.hoisted(() => {
     sdk: {
       recoveryActions: vi.fn(() => ({ registerRecoveryAddress, estimateRegisterRecoveryAddressGas, executeRecovery, estimateExecuteRecoveryGas })),
       getAddressMapping: vi.fn(),
+      createAddressMapping: vi.fn(),
       toWebAuthnCredential: vi.fn(async (): Promise<{ id: string; publicKey: string; raw: object }> => LIVE_CRED),
       toPasskeyTransport: vi.fn(() => ({})),
       toModularTransport: vi.fn(() => ({})),
@@ -102,6 +103,10 @@ vi.mock('./passkeyKit', async () =>
 const balance = vi.hoisted(() => ({ value: 1_000_000n }))
 // Token balances for single accounts (lower case), in place of balance.value for that holder.
 const held = vi.hoisted(() => new Map<string, bigint>())
+// Owners data for single accounts (lower case), in place of owners.data for that account.
+const ownersFor = vi.hoisted(() => new Map<string, unknown[]>())
+// The Circle factory's getAddress on Arc: the passkey's own account, worked out on chain from its public key.
+const factory = vi.hoisted(() => ({ address: '0x00000000000000000000000000000000000000cc', fail: false, reads: [] as unknown[] }))
 // The account's EntryPoint deposit, in native wei.
 const deposit = vi.hoisted(() => ({ value: 0n }))
 // Circle's answer to circle_getUserOperationGasPrice with every tier at this max fee (wei per gas).
@@ -117,12 +122,18 @@ vi.mock('./clients', () => ({
   arcClient: {
     readContract: async (args: { functionName: string; address: string; args?: readonly unknown[] }) => {
       if (args.address === ENTRY_POINT) return deposit.value
+      if (args.functionName === 'getAddress') {
+        factory.reads.push(args)
+        if (factory.fail) throw new Error('rpc down')
+        return [factory.address, `0x${'0'.repeat(64)}`]
+      }
       const holder = String(args.args?.[0] ?? '').toLowerCase()
       if (args.functionName === 'balanceOf' && held.has(holder)) return held.get(holder)
       if (args.functionName !== 'ownershipInfoOf') return balance.value
       owners.reads.push(args)
       if (owners.fail) throw new Error('rpc down')
-      return [owners.ids, owners.data, 1n]
+      const only = ownersFor.get(holder)
+      return only ? [[], only, 1n] : [owners.ids, owners.data, 1n]
     },
     getCode: ({ address }: { address: string }) =>
       owners.hang ? new Promise<undefined>(() => {}) : Promise.resolve(code.get(address.toLowerCase())),
@@ -372,6 +383,7 @@ describe('which account a passkey opens', () => {
     held.clear()
     owners.data = []
     owners.fail = false
+    factory.reads = []
     localStorage.clear()
   })
 
@@ -435,10 +447,15 @@ describe('which account a passkey opens', () => {
     expect(kit.bundler.sendUserOperation.mock.calls[0]![0].account.address).toBe(RECOVERED)
   })
 
+  // Recoveries made before the record existed land here too. The message points them to the fix.
   it('refuses to sign for an account other than its own without a recovery record, even one it owns', async () => {
     mappedTo(OTHER)
     const stored = { address: OTHER, credentialId: 'cred-live' }
-    await expect(storedPasskeySender(stored).send([A])).rejects.toThrow('That passkey opens a different wallet.')
+    await expect(storedPasskeySender(stored).send([A])).rejects.toThrow(
+      'This device needs your recovery key once more to open this account. Sign out, then choose Recover it now.',
+    )
+    // A valid record for another account opens that one, never the session's.
+    code.set(RECOVERED.toLowerCase(), '0x6001')
     localStorage.setItem(RECORD, RECOVERED)
     await expect(storedPasskeySender(stored).send([A])).rejects.toThrow('That passkey opens a different wallet.')
     expect(kit.bundler.sendUserOperation).not.toHaveBeenCalled()
@@ -466,6 +483,62 @@ describe('which account a passkey opens', () => {
 
   // The record says this device recovered another account. If Arc cannot be read, opening the own account instead
   // would quietly show the wrong one, so the person gets the plain error and tries again.
+  // Two tabs share storage but not the signer. Tab 1 holds the own account's signer; tab 2 opens the recovered
+  // account. Tab 1 now shows the recovered account and must never sign for the own one.
+  it('never reuses a signer for an account other than the one the session shows', async () => {
+    mappedTo(RECOVERED)
+    expect(await loginPasskey()).toEqual({ address: OWN, recoveredElsewhere: true })
+    // The other tab: the record and the session for the recovered account.
+    localStorage.setItem(RECORD, RECOVERED)
+    const stored = { address: RECOVERED, credentialId: 'cred-live' }
+    savePasskeySession(stored)
+    expect((await storedPasskeySender(stored).send([A])).status).toBe('success')
+    expect(kit.bundler.sendUserOperation.mock.calls.map((c) => c[0].account.address)).toEqual([RECOVERED])
+  })
+
+  // The own account's address comes from Circle's API. It must be the one Circle's factory on Arc gives for this
+  // public key, or Circle could hand a passkey any account.
+  it('works out the own account on Arc from the public key, and refuses an address Circle gives that differs', async () => {
+    expect(await loginPasskey()).toEqual({ address: OWN })
+    const read = factory.reads.at(-1) as { address: string; args: readonly unknown[] }
+    expect(read.address).toBe(CIRCLE_MSCA_FACTORY)
+    expect(read.args[0]).toBe(keccak256(encodeAbiParameters([{ type: 'uint256' }, { type: 'uint256' }], [3n, 4n])))
+    expect(read.args[1]).toBe(`0x${'0'.repeat(64)}`)
+    clearPasskeySession()
+    factory.address = OTHER
+    try {
+      const err = await loginPasskey().catch((e: unknown) => e)
+      expect(explainError(err)).toBe('We could not confirm your account. Try again later.')
+      expect(readPasskeySession()).toBeNull()
+      await expect(registerPasskey('ana.phone')).rejects.toThrow('We could not confirm your account.')
+      expect(readPasskeySession()).toBeNull()
+    } finally {
+      factory.address = OWN
+    }
+  })
+
+  it('opens no account when the own account cannot be worked out on Arc', async () => {
+    factory.fail = true
+    try {
+      const err = await loginPasskey().catch((e: unknown) => e)
+      expect(explainError(err)).toBe("We couldn't check which account this passkey opens. Check your connection and try again.")
+      expect(readPasskeySession()).toBeNull()
+    } finally {
+      factory.fail = false
+    }
+  })
+
+  // A recovered account is always deployed (saving the recovery key deploys it), so no code there means the node
+  // could not answer, not that the record is wrong.
+  it('keeps the record and shows the plain error when the recovered account reads as not deployed', async () => {
+    mappedTo(RECOVERED)
+    code.clear()
+    localStorage.setItem(RECORD, RECOVERED)
+    const err = await loginPasskey().catch((e: unknown) => e)
+    expect(explainError(err)).toBe("We couldn't check which account this passkey opens. Check your connection and try again.")
+    expect(localStorage.getItem(RECORD)).toBe(RECOVERED)
+  })
+
   it.each([
     ['the owners of the recovered account cannot be read', () => {
       mappedTo(RECOVERED)
@@ -940,6 +1013,20 @@ describe('recoverWithPhrase', () => {
     expect(readPasskeyUsername(RECOVERED)).toBe('ana-slow')
   })
 
+  // The record is the proof that opens the account with this passkey. A recovery that reverted or has not confirmed
+  // proves nothing yet, so it leaves none.
+  it('writes the recovery record only once the recovery confirms', async () => {
+    const records = () => Object.keys(localStorage).filter((k) => k.startsWith(storageKey('passkey.recovered.')))
+    kit.bundler.waitForUserOperationReceipt.mockResolvedValueOnce(receipt(false))
+    await expect(recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).rejects.toThrow('The recovery did not go through')
+    expect(records()).toEqual([])
+    kit.bundler.waitForUserOperationReceipt.mockRejectedValueOnce(new Error('slow'))
+    expect((await recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).status).toBe('pending')
+    expect(records()).toEqual([])
+    expect((await checkPendingRecovery(RECOVERED)).status).toBe('recovered')
+    expect(localStorage.getItem(`${storageKey('passkey.recovered.')}cred-new`)).toBe(RECOVERED)
+  })
+
   // The recovery key that was just used is still an owner, so My page must not ask for one again. The browser's
   // flag is dropped and the owners on Arc decide: the old passkey, the recovery key and the new passkey.
   it('counts the recovery key after a recovery, so My page does not ask for one', async () => {
@@ -1006,6 +1093,25 @@ describe('recoverWithPhrase', () => {
     code.clear()
   })
 
+  // The recovery key's address is public on chain. Someone can add it to their own deployed account and map it, which
+  // used to block the recovery. Only an account that lists the key as an owner on Arc counts.
+  it('ignores a deployed account that maps the key but does not list it as an owner', async () => {
+    const OTHER = '0x00000000000000000000000000000000000000Cd'
+    const keyOwner = { weight: 1n, credType: 0, addr: '0x00000000000000000000000000000000000000Ee', publicKeyX: 0n, publicKeyY: 0n }
+    kit.sdk.getAddressMapping.mockResolvedValue([{ walletAddress: OTHER }, { walletAddress: RECOVERED }])
+    code.set(OTHER.toLowerCase(), '0x6001')
+    ownersFor.set(OTHER.toLowerCase(), [{ ...keyOwner, addr: '0x0000000000000000000000000000000000000Bad' }])
+    ownersFor.set(RECOVERED.toLowerCase(), [keyOwner])
+    try {
+      expect(await recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).toEqual({
+        status: 'recovered',
+        session: { address: RECOVERED, credentialId: 'cred-new' },
+      })
+    } finally {
+      ownersFor.clear()
+    }
+  })
+
   it('refuses when no Fundit account uses this recovery key', async () => {
     kit.sdk.getAddressMapping.mockResolvedValue([])
     await expect(recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).rejects.toThrow("We couldn't find a Fundit account for this recovery key.")
@@ -1015,9 +1121,9 @@ describe('recoverWithPhrase', () => {
     expect(kit.sdk.toWebAuthnCredential).not.toHaveBeenCalled()
   })
 
-  // executeRecovery (Circle's SDK) maps the new passkey's x and y, as decimal strings, to the account before it
-  // adds the passkey as an owner. Login looks the passkey up the same way, so after a reload, or a fresh sign-in
-  // on this device, the new passkey opens the recovered account and not an empty account of its own.
+  // executeRecovery (Circle's SDK) maps the new passkey's x and y to the account before it adds the passkey as an
+  // owner, so Fundit never calls createAddressMapping. The recovery also leaves a record on this device, so after a
+  // reload, or a fresh sign-in here, the new passkey opens the recovered account and not an empty account of its own.
   it('signs in to the recovered account with the new passkey after the recovery', async () => {
     const NEW_KEY = { ...NEW_CRED, publicKey: `0x04${'0'.repeat(63)}7${'0'.repeat(63)}8` }
     kit.sdk.toWebAuthnCredential.mockResolvedValue(NEW_KEY)
@@ -1031,7 +1137,7 @@ describe('recoverWithPhrase', () => {
     try {
       expect(await recoverWithPhrase({ phrase: PHRASE, username: 'ana' })).toMatchObject({ status: 'recovered' })
       // Fundit never calls createAddressMapping itself: the SDK's executeRecovery does (see the module comment).
-      expect(kit.sdk).not.toHaveProperty('createAddressMapping')
+      expect(kit.sdk.createAddressMapping).not.toHaveBeenCalled()
       clearPasskeySession()
       // This device recovered the account with the new passkey, so the login opens it.
       expect(await loginPasskey()).toEqual({ address: RECOVERED })

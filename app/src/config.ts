@@ -234,6 +234,11 @@ export const CIRCLE_CLIENT_KEY: string = env.VITE_CIRCLE_CLIENT_KEY ?? ''
 // (CIRCLE_WEIGHTED_WEB_AUTHN_MULTISIG_PLUGIN in @circle-fin/modular-wallets-core dist/index.js). Same address on
 // Arc mainnet and Arc testnet, checked on-chain.
 export const CIRCLE_MULTISIG_PLUGIN: Address = '0x0000000C984AFf541D6cE86Bb697e68ec57873C8'
+// The plugin's manifest hash and the factory that deploys every Circle Modular Wallets account
+// (CIRCLE_WEIGHTED_WEB_AUTHN_MULTISIG_PLUGIN.manifestHash and FACTORY in dist/index.mjs). The factory's getAddress
+// on Arc gave the shared e2e account's real address on both networks on 2026-10-19.
+export const CIRCLE_MULTISIG_MANIFEST_HASH: Hex = '0xa043327d77a74c1c55cfa799284b831fe09535a88b9f5fa4173d334e5ba0fd91'
+export const CIRCLE_MSCA_FACTORY: Address = '0x0000000DF7E6c9Dc387cAFc5eCBfa6c3a6179AdD'
 // Arc network fees are paid in USDC from the sender's own balance. A regular wallet adding USDC to a Fundit
 // account keeps this much free. It is also the least a Fundit account ever keeps back (see passkeyReserve).
 export const PASSKEY_GAS_BUFFER = 50_000n

@@ -1,9 +1,11 @@
 import { useSyncExternalStore } from 'react'
-import { type Address, decodeErrorResult, encodeFunctionData, getAddress, type Hex, isAddress, isHex, numberToHex, parseAbi, type TransactionReceipt, type Transport } from 'viem'
+import { type Address, decodeErrorResult, encodeAbiParameters, encodeFunctionData, getAddress, type Hex, isAddress, isHex, keccak256, numberToHex, pad, parseAbi, parseAbiParameters, type TransactionReceipt, type Transport } from 'viem'
 import { erc20Abi } from '../abi/erc20'
 import {
   ARC_CHAIN,
   CIRCLE_CLIENT_KEY,
+  CIRCLE_MSCA_FACTORY,
+  CIRCLE_MULTISIG_MANIFEST_HASH,
   CIRCLE_MULTISIG_PLUGIN,
   ENTRY_POINT,
   MODULAR_WALLETS_URL,
@@ -288,22 +290,49 @@ function checked<T>(p: Promise<T>): Promise<T> {
   })
 }
 
-// True when the passkey is an owner of this account on Arc: deployed, and listed by Circle's multisig plugin.
-async function ownsOnChain(account: Address, publicKey: Hex): Promise<boolean> {
-  const key = publicKeyXY(publicKey)
-  if (!key) return false
-  const owners = await readOwners(account)
-  return !!owners && owners.ownersData.some((o) => o.publicKeyX === key.x && o.publicKeyY === key.y)
-}
-
 // The recovered account this passkey may open on this device, or null. A record whose passkey no longer owns the
 // account on Arc is deleted.
+// A recovered account is always deployed (saving its recovery key deployed it), so a read with no code is a node
+// that could not answer: LOOKUP_FAILED, and the record stays.
 async function recoveredAccount(credentialId: string, publicKey: Hex, own: Address): Promise<Address | null> {
   const recorded = readRecovered(credentialId)
-  if (!recorded || same(recorded, own)) return null
-  if (await checked(ownsOnChain(recorded, publicKey))) return recorded
+  const key = publicKeyXY(publicKey)
+  if (!recorded || same(recorded, own) || !key) return null
+  const owners = await checked(readOwners(recorded))
+  if (!owners) throw new PlainError(LOOKUP_FAILED)
+  if (owners.ownersData.some((o) => o.publicKeyX === key.x && o.publicKeyY === key.y)) return recorded
   forgetRecovered(credentialId)
   return null
+}
+
+// The passkey's own account, worked out on Arc by Circle's factory from the public key, as toCircleSmartAccount
+// does locally (computeAddress in dist/index.mjs): sender keccak256(x, y), a zero salt, and the multisig plugin
+// installed with this key alone at weight 1 and threshold 1.
+const factoryAbi = parseAbi(['function getAddress(bytes32 sender, bytes32 salt, bytes initializingData) view returns (address addr, bytes32 mixedSalt)'])
+async function derivedAddress(publicKey: Hex): Promise<Address> {
+  const key = publicKeyXY(publicKey)
+  if (!key) throw new PlainError(UNCONFIRMED)
+  const sender = keccak256(encodeAbiParameters(parseAbiParameters('uint256, uint256'), [key.x, key.y]))
+  const install = encodeAbiParameters(parseAbiParameters('address[], uint256[], (uint256 x, uint256 y)[], uint256[], uint256'), [
+    [],
+    [],
+    [{ x: key.x, y: key.y }],
+    [1n],
+    1n,
+  ])
+  const init = encodeAbiParameters(parseAbiParameters('address[], bytes32[], bytes[]'), [[CIRCLE_MULTISIG_PLUGIN], [CIRCLE_MULTISIG_MANIFEST_HASH], [install]])
+  const [address] = await arcClient.readContract({ address: CIRCLE_MSCA_FACTORY, abi: factoryAbi, functionName: 'getAddress', args: [sender, pad('0x', { size: 32 }), init] })
+  return address
+}
+
+const UNCONFIRMED = 'We could not confirm your account. Try again later.'
+
+// The passkey's own account. Circle's SDK takes its address from Circle's API, so it must match the one Circle's
+// factory gives on Arc; otherwise nothing opens.
+async function connectOwn(lib: Sdk, credential: Credential, key: string): Promise<Live> {
+  const [own, derived] = await Promise.all([connect(lib, credential, key), checked(derivedAddress(credential.publicKey))])
+  if (!same(own.account.address, derived)) throw new PlainError(UNCONFIRMED)
+  return own
 }
 
 // Circle answers circle_getAddressMapping for an owner it has no record of with an error (-32602 and this text,
@@ -432,7 +461,7 @@ function rememberPasskeyUsername(address: Address, username: string) {
 // saved the passkey, loginPasskey with that passkey opens the same account.
 export async function registerPasskey(username: string): Promise<PasskeySession> {
   const { lib, credential, key } = await credentialFor('Register', { username })
-  const next = await connect(lib, credential, key)
+  const next = await connectOwn(lib, credential, key)
   // Saved before the session, so the account pill shows the name from its first render.
   rememberPasskeyUsername(next.account.address, username)
   start(next)
@@ -448,7 +477,7 @@ export type LoginResult = PasskeySession & { recoveredElsewhere?: true }
 // Logs in with a passkey already on this device. The browser lists the passkeys saved for this site.
 export async function loginPasskey(): Promise<LoginResult> {
   const { lib, credential, key } = await credentialFor('Login', {})
-  const own = await connect(lib, credential, key)
+  const own = await connectOwn(lib, credential, key)
   const recovered = await recoveredAccount(credential.id, credential.publicKey, own.account.address)
   if (recovered) {
     start(await connect(lib, credential, key, recovered))
@@ -466,12 +495,18 @@ export function logoutPasskey() {
 // The signing account for the stored session. After a reload this asks for the same passkey once. The session's
 // account is the passkey's own, or one recovered with it on this device (see recoveredAccount).
 async function ensureLive(stored: StoredPasskey): Promise<Live> {
-  if (live && live.credentialId === stored.credentialId) return live
+  // Another tab can move the session to another account of the same passkey, so the cached signer must match both.
+  if (live && live.credentialId === stored.credentialId && same(live.account.address, stored.address)) return live
   const { lib, credential, key } = await credentialFor('Login', { credentialId: stored.credentialId })
-  let next = await connect(lib, credential, key)
+  let next = await connectOwn(lib, credential, key)
   if (!same(next.account.address, stored.address)) {
+    const hadRecord = readRecovered(credential.id) !== null
     const recovered = await recoveredAccount(credential.id, credential.publicKey, next.account.address)
-    // Never sign for a wallet other than the one the page shows.
+    // Never sign for a wallet other than the one the page shows. A session with no record is most likely a recovery
+    // made before records existed: the words, entered once more here, write one.
+    if (!recovered && !hadRecord) {
+      throw new PlainError('This device needs your recovery key once more to open this account. Sign out, then choose Recover it now.')
+    }
     if (!recovered || !same(recovered, stored.address)) {
       throw new PlainError('That passkey opens a different wallet. Sign out and sign in again.')
     }
@@ -1089,6 +1124,14 @@ export async function recoverWithPhrase(p: { phrase: string; username?: string }
     // Circle can also hold a wallet made for the key itself. The account that added the key is deployed on Arc.
     const deployed = await Promise.all(wallets.map(async (w) => ((await arcClient.getCode({ address: w })) ?? '0x') !== '0x'))
     wallets = wallets.filter((_, i) => deployed[i])
+    if (wallets.length > 1) {
+      // The key's address is public on chain, so anyone can map it to their own account. Only an account that lists
+      // the key as an owner on Arc counts.
+      const owned = await Promise.all(
+        wallets.map(async (w) => !!(await readOwners(w))?.ownersData.some((o) => o.addr.toLowerCase() === recovery.address.toLowerCase())),
+      )
+      wallets = wallets.filter((_, i) => owned[i])
+    }
     if (wallets.length !== 1) throw new PlainError('This recovery key belongs to more than one account, so Fundit cannot pick one. Sign in with a passkey for the account instead.')
   }
   const account = wallets[0]!
