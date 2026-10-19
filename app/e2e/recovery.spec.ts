@@ -86,9 +86,23 @@ test.beforeAll(async ({ browser }) => {
   await newDevice(browser)
 })
 
+// Above this, a run that stopped early still has money worth sending back. Below it is the send's own reserve.
+const DUST = parseUnits('0.3', 6)
+
 test.afterAll(async () => {
+  if (account && (await usdcBalance(account)) > DUST && page && !page.isClosed()) {
+    // A failed step skips the last test, and after the passkey moves the words exist only in this run's memory.
+    try {
+      await sendOut('max')
+    } catch (err) {
+      console.log(`Could not send the rest back: ${String(err).split('\n')[0]}`)
+    }
+  }
   await context?.close()
-  if (account) console.log(`Recovery test account ${account} keeps ${formatUnits(await usdcBalance(account), 6)} USDC: ${NET.explorerUrl}/address/${account}`)
+  if (!account) return
+  const left = await usdcBalance(account)
+  const note = left > DUST ? 'STRANDED, send it back by hand' : 'dust'
+  console.log(`Recovery test account ${account} keeps ${formatUnits(left, 6)} USDC (${note}): ${NET.explorerUrl}/address/${account}`)
 })
 
 test('signs up a throwaway account with a fresh passkey and funds it', async () => {
@@ -169,7 +183,8 @@ test('after a reload, sends a tiny amount from the recovered account', async () 
   expect(await shownAddress()).toBe(account)
   const before = await usdcBalance(funder)
   await sendOut(TINY_SEND)
-  expect(await usdcBalance(funder)).toBe(before + parseUnits(TINY_SEND, 6))
+  // At least: the funder may receive something else during the run.
+  expect(await usdcBalance(funder)).toBeGreaterThanOrEqual(before + parseUnits(TINY_SEND, 6))
 })
 
 test('signs in fresh with the new passkey and opens the same account', async () => {
