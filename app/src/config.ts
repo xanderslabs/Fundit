@@ -279,11 +279,11 @@ export function networkHosts(n: NetworkConfig): string[] {
 
 export const EXTERNAL_HOSTS: readonly string[] = [ARC_RPC_URL, ...networkHosts(NETWORK)]
 
-// TODO before launch: replace placeholder social handles
+// TODO before launch: replace the placeholder Telegram, Discord and Instagram handles. X is final.
 export type SocialName = 'X' | 'Telegram' | 'Discord' | 'Instagram'
 
 export const SOCIAL_LINKS: readonly { name: SocialName; href: string }[] = [
-  { name: 'X', href: 'https://x.com/fundit' },
+  { name: 'X', href: 'https://x.com/fundithq' },
   { name: 'Telegram', href: 'https://t.me/fundit' },
   { name: 'Discord', href: 'https://discord.gg/fundit' },
   { name: 'Instagram', href: 'https://instagram.com/fundit' },

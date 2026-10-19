@@ -266,6 +266,8 @@ describe('Social links config', () => {
   it('has X, Telegram, Discord and Instagram, all on https', () => {
     expect(SOCIAL_LINKS.map((s) => s.name)).toEqual(['X', 'Telegram', 'Discord', 'Instagram'])
     for (const s of SOCIAL_LINKS) expect(s.href.startsWith('https://')).toBe(true)
+    // The project's X account.
+    expect(SOCIAL_LINKS.find((s) => s.name === 'X')?.href).toBe('https://x.com/fundithq')
   })
 })
 
