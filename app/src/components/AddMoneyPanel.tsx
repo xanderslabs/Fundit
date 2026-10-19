@@ -2,6 +2,7 @@ import { lazy, Suspense, useState } from 'react'
 import type { Address } from 'viem'
 import { CROSSCHAIN_ENABLED } from '../config'
 import { AddressQr } from './AddressTools'
+import { ErrorBoundary } from './ErrorBoundary'
 import { AddressChip, ContentTabs } from './ui'
 import './AddMoneyPanel.css'
 import './Form.css'
@@ -38,9 +39,11 @@ export function AddMoneyPanel({ account }: { account: Address }) {
       content: (
         <div className="deposit-tab">
           <p className="form-hint">Send USDC or EURC from a regular wallet on Arc.</p>
-          <Suspense fallback={LOADING}>
-            <WalletDeposit account={account} bridging={bridging} />
-          </Suspense>
+          <ErrorBoundary>
+            <Suspense fallback={LOADING}>
+              <WalletDeposit account={account} bridging={bridging} />
+            </Suspense>
+          </ErrorBoundary>
         </div>
       ),
     },
@@ -52,9 +55,11 @@ export function AddMoneyPanel({ account }: { account: Address }) {
             content: (
               <div className="deposit-tab">
                 <p className="form-hint">Move USDC from a wallet on another chain. Circle delivers it to your Fundit account on Arc.</p>
-                <Suspense fallback={LOADING}>
-                  <BridgeToAccount recipient={account} onBusyChange={setBridging} />
-                </Suspense>
+                <ErrorBoundary>
+                  <Suspense fallback={LOADING}>
+                    <BridgeToAccount recipient={account} onBusyChange={setBridging} />
+                  </Suspense>
+                </ErrorBoundary>
               </div>
             ),
           },

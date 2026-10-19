@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { Route, Routes } from 'react-router'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { Layout } from './components/Layout'
 import { CampaignPage } from './pages/CampaignPage'
 import { Create } from './pages/Create'
@@ -29,9 +30,11 @@ export function App() {
         <Route
           path="recover"
           element={
-            <Suspense fallback={<p className="main-loading">Loading...</p>}>
-              <Recover />
-            </Suspense>
+            <ErrorBoundary>
+              <Suspense fallback={<p className="main-loading">Loading...</p>}>
+                <Recover />
+              </Suspense>
+            </ErrorBoundary>
           }
         />
         <Route path="me" element={<Profile />} />
@@ -41,9 +44,11 @@ export function App() {
           <Route
             path="styleguide"
             element={
-              <Suspense fallback={<p className="main-loading">Loading...</p>}>
-                <StyleGuide />
-              </Suspense>
+              <ErrorBoundary>
+                <Suspense fallback={<p className="main-loading">Loading...</p>}>
+                  <StyleGuide />
+                </Suspense>
+              </ErrorBoundary>
             }
           />
         )}

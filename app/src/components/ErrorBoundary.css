@@ -1,0 +1,7 @@
+/* The app-level boundary stands in for a whole page, so it keeps the page's side gutter. */
+main > .error-boundary,
+#root > .error-boundary {
+  max-width: 640px;
+  margin: var(--space-6) auto;
+  padding: 0 var(--space-4);
+}
