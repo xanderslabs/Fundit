@@ -29,12 +29,6 @@ export const KNOWN_FACTORIES: Record<ArcNetwork, { address: Address; deployBlock
   testnet: { address: '0x6890D40a9A472D0d05aDb5938D85B07059ad54ab', deployBlock: 67870064n },
 }
 
-// Runtime backstop for the production build guard: true when a testnet bundle is served on fundit.fun. A
-// separate test site on a subdomain (testnet.fundit.fun, for example) is allowed.
-export function testnetRefusedOn(network: ArcNetwork, hostname: string): boolean {
-  return network === 'testnet' && (hostname === 'fundit.fun' || hostname === 'www.fundit.fun')
-}
-
 export type BuildEnv = {
   PROD: boolean
   VITE_ARC_NETWORK?: string
@@ -78,9 +72,9 @@ function hostLabels(url: string): string[] {
 // these builds fine but cannot work: a passkey sign-in with no client key, or an RPC the browser blocks.
 // The default RPCs are not set here; config.test.ts checks them against the same connect-src.
 //
-// The deploy for fundit.fun is a plain production build (npm run build), so a production build is taken to be
-// for fundit.fun. It refuses VITE_ARC_NETWORK=testnet unless VITE_ALLOW_TESTNET_BUILD=1 says the build is
-// meant for a test site. That flag must never be set where the fundit.fun build runs.
+// A production build refuses VITE_ARC_NETWORK=testnet unless VITE_ALLOW_TESTNET_BUILD=1 is also set, so a testnet
+// site is always an explicit choice. fundit.fun may run on testnet with both set; switching it to mainnet then
+// means clearing both and setting the mainnet factory, with no code change.
 export function checkBuildEnv(env: BuildEnv, headers: string): void {
   const network = parseArcNetwork(env.VITE_ARC_NETWORK)
   // A VITE_ARC_RPC_URL left over from the other network would read the wrong chain with no error.
@@ -90,7 +84,7 @@ export function checkBuildEnv(env: BuildEnv, headers: string): void {
   }
   if (!env.PROD) return
   if (network === 'testnet' && env.VITE_ALLOW_TESTNET_BUILD !== '1') {
-    throw new Error('VITE_ARC_NETWORK=testnet is refused in a production build, which is for fundit.fun. Set VITE_ALLOW_TESTNET_BUILD=1 only for a test site.')
+    throw new Error('VITE_ARC_NETWORK=testnet is refused in a production build unless VITE_ALLOW_TESTNET_BUILD=1 is also set.')
   }
   // Sign-in is passkey only, so a site with no client key would have no way in.
   if (!env.VITE_CIRCLE_CLIENT_KEY) {

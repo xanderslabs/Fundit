@@ -1,6 +1,6 @@
 import { type Address, type Chain, type Hex, parseAbi } from 'viem'
 import { arbitrum, arc, arcTestnet, avalanche, base, baseSepolia, mainnet, optimism, polygon, sepolia } from 'viem/chains'
-import { type ArcNetwork, loadConfig, parseArcNetwork, testnetRefusedOn } from './deployConfig'
+import { type ArcNetwork, loadConfig, parseArcNetwork } from './deployConfig'
 import { orList } from './lib/format'
 
 export type TokenSymbol = 'USDC' | 'EURC'
@@ -138,11 +138,6 @@ export const NETWORK: NetworkConfig = NETWORKS[parseArcNetwork(env.VITE_ARC_NETW
 // the other network never sees the first network's session, backup flags or pending transfers.
 export function storageKey(name: string, network: ArcNetwork = NETWORK.name): string {
   return network === 'mainnet' ? `fundit.${name}` : `fundit.${network}.${name}`
-}
-
-// Backstop for the build guard in deployConfig.ts: a testnet bundle never runs on fundit.fun.
-if (typeof window !== 'undefined' && testnetRefusedOn(NETWORK.name, window.location.hostname)) {
-  throw new Error('This is a test network build. It must not run on fundit.fun.')
 }
 
 // The order the source chains are named in copy.

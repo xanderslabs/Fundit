@@ -279,7 +279,7 @@ From [`app/.env.example`](app/.env.example):
 | Variable | Meaning |
 | --- | --- |
 | `VITE_ARC_NETWORK` | `mainnet` (the default when empty) or `testnet`. Every chain ID, token and contract address, RPC and Circle API URL comes from this value. |
-| `VITE_ALLOW_TESTNET_BUILD` | Set to `1` to let a production build (`npm run build`) use `testnet`. Use it for a test site only. Never set it where the `fundit.fun` build runs. |
+| `VITE_ALLOW_TESTNET_BUILD` | Set to `1` to let a production build (`npm run build`) use `testnet`. Without it, a production testnet build fails, so running a site on testnet is always an explicit choice. |
 | `VITE_REOWN_PROJECT_ID` | Reown (WalletConnect) project ID, for connecting a wallet in **Add money**. A production build fails without it. |
 | `VITE_CIRCLE_CLIENT_KEY` | Circle client key for Fundit accounts. A production build fails without it. Use the `fundit.fun` key in production and a separate `localhost` key in development. |
 | `VITE_FACTORY_ADDRESS` | `CampaignFactory` on the chosen network. Set it together with `VITE_FACTORY_DEPLOY_BLOCK`. A production build fails if either is empty. |
@@ -293,8 +293,7 @@ If you change an RPC host, add it to `connect-src` in `app/public/_headers`.
 ## Test on Arc testnet
 
 Run every end-to-end test and every test that moves money on Arc testnet, never on Arc mainnet. Testnet
-tokens have no value. The unit tests use mocks, and the contract fork suite only reads Arc mainnet state. A testnet build shows a "Test network" banner, and it refuses to run on
-`fundit.fun`.
+tokens have no value. The unit tests use mocks, and the contract fork suite only reads Arc mainnet state. A testnet build shows a "Test network" banner.
 
 1. Set the network in `app/.env.local`:
 
@@ -306,7 +305,7 @@ tokens have no value. The unit tests use mocks, and the contract fork suite only
    ```
 
    The dev server and the end-to-end suite accept `testnet` as is. Keep `VITE_ALLOW_TESTNET_BUILD` out of
-   this file. Set it only for a one-off build of a test site, never where the `fundit.fun` build runs:
+   this file. Set it only where a testnet site is built, such as `fundit.fun` while it runs on testnet:
 
    ```shell
    VITE_ALLOW_TESTNET_BUILD=1 npm run build
