@@ -139,8 +139,8 @@ export function ActivityList({ campaign, createdAtBlock, symbol }: { campaign: A
   const items = pages.flatMap((p) => p.items.map((item) => ({ item, time: p.times.get(item.blockNumber) })))
 
   return (
-    <section className="activity" aria-label="Activity">
-      <h2>Activity</h2>
+    <section className="activity" aria-label="Activity on this Fundit">
+      <h2>Activity on this Fundit</h2>
       <Unaccounted campaign={campaign} symbol={symbol} />
       {query.isPending && <p className="activity-muted">Loading activity...</p>}
       {query.isError && items.length === 0 && (

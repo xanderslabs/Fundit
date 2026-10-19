@@ -282,7 +282,7 @@ test('gives anonymously with a message, and the activity shows Anonymous', async
   const [tx] = logUserOps('Give anonymously')
   expect(shownLink).toBe(txUrl(tx!))
 
-  const activity = page.getByRole('region', { name: 'Activity' })
+  const activity = page.getByRole('region', { name: 'Activity on this Fundit' })
   await expect(activity.getByRole('listitem').first()).toContainText('Anonymous gave 0.20 USDC', { timeout: 30_000 })
   await expect(activity.getByText(MESSAGE, { exact: true })).toBeVisible()
   await expect(activity.getByText(/\[anon\]/)).toHaveCount(0)

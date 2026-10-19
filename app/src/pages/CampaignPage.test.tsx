@@ -140,7 +140,7 @@ describe('CampaignPage', () => {
       screen.getByRole('heading', { name: 'Links' }),
       screen.getByText('Organiser'),
       screen.getByRole('heading', { name: 'Share this Fundit' }),
-      screen.getByRole('heading', { name: 'Activity' }),
+      screen.getByRole('heading', { name: 'Activity on this Fundit' }),
     ]
     for (let i = 1; i < parts.length; i++) {
       expect(parts[i - 1]!.compareDocumentPosition(parts[i]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
