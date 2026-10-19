@@ -19,6 +19,14 @@
     "withdrawFeeBps": 100,
     "eurcPayoutDomains": []
   },
+  "verification": {
+    "blockscout": {
+      "CampaignFactory": "verified 2026-10-19",
+      "CampaignImplementation": "verified 2026-10-19",
+      "CampaignFactoryUrl": "https://explorer.testnet.arc.io/address/0x6890D40a9A472D0d05aDb5938D85B07059ad54ab?tab=contract",
+      "CampaignImplementationUrl": "https://explorer.testnet.arc.io/address/0xC7109CAAA5375EE740b95a3DeE52c4C92A02Ba8E?tab=contract"
+    }
+  },
   "explorer": {
     "factory": "https://explorer.testnet.arc.io/address/0x6890D40a9A472D0d05aDb5938D85B07059ad54ab",
     "deployTx": "https://explorer.testnet.arc.io/tx/0xbf0bbbbb106dbca7294a4e72a3ab1c153519b6c1269589684a45f55aaf80a728"
