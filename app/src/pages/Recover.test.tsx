@@ -139,14 +139,17 @@ describe('Recover', () => {
     expect((await screen.findByRole('alert')).textContent).toBe("Those words don't form a valid recovery key. Check the order and spelling.")
   })
 
-  // After a recovery the old key may be in someone else's hands, so the person is asked for a new one.
-  it('recovers with the words and the name, then asks for a new recovery key', async () => {
+  // The recovery key that was just used is still an owner of the account, so the success screen does not ask
+  // for another one. It points back to My page.
+  it('recovers with the words and the name, then points back to My page without asking for a recovery key', async () => {
     recoverWithPhrase.mockResolvedValue({ status: 'recovered', session: SESSION })
     const user = renderPage()
     await fill(user)
     expect(recoverWithPhrase).toHaveBeenCalledWith({ phrase: PHRASE, username: 'ana-phone' })
     expect(await screen.findByText('Your account is back.')).toBeTruthy()
-    expect(screen.getByText(`Backup prompt for ${ACCOUNT}`)).toBeTruthy()
+    expect(screen.queryByText(`Backup prompt for ${ACCOUNT}`)).toBeNull()
+    expect(screen.queryByText(/Add a new recovery key/)).toBeNull()
+    expect(screen.getByRole('link', { name: 'Go to My page' }).getAttribute('href')).toBe('/me')
     expect(screen.queryByLabelText('Word 1')).toBeNull()
   })
 

@@ -11,6 +11,11 @@
   margin-bottom: 0;
 }
 
+/* The way back to My page after a recovery. */
+.recover-done {
+  align-self: flex-start;
+}
+
 .recover-card,
 .recover-form {
   display: flex;

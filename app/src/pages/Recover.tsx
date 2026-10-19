@@ -3,9 +3,8 @@ import { useNavigate } from 'react-router'
 import type { Address } from 'viem'
 import { SignInButton } from '../components/AccountMenu'
 import { AddressQr } from '../components/AddressTools'
-import { AddBackupPasskey } from '../components/AddBackupPasskey'
 import { usernameError } from '../components/PasskeyLogin'
-import { AddressChip, Button, Card, Field, PageHeader, StatusBox } from '../components/ui'
+import { AddressChip, Button, ButtonLink, Card, Field, PageHeader, StatusBox } from '../components/ui'
 import { explainError } from '../lib/errors'
 import {
   checkPendingRecovery,
@@ -134,16 +133,11 @@ export function Recover() {
         <PageHeader
           width="narrow"
           title="Your account is back."
-          subtitle={
-            <p>
-              This device has a new passkey for your Fundit account. Add a new recovery key now. Your old one still works, so keep it safe or
-              destroy it.
-            </p>
-          }
+          subtitle={<p>This device has a new passkey for your Fundit account. Your recovery key still works, so keep it safe.</p>}
         />
-        <Card>
-          <AddBackupPasskey stored={recovered} />
-        </Card>
+        <ButtonLink to="/me" size="lg" className="recover-done">
+          Go to My page
+        </ButtonLink>
       </section>
     )
   }

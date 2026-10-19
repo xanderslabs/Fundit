@@ -717,11 +717,25 @@ describe('recoverWithPhrase', () => {
     expect(readPasskeyUsername(RECOVERED)).toBe('ana-slow')
   })
 
-  // The old recovery key should be treated as exposed, so My page asks for a new one.
-  it('asks for a new recovery key after a recovery', async () => {
+  // The recovery key that was just used is still an owner, so My page must not ask for one again. The browser's
+  // flag is dropped and the owners on Arc decide: the old passkey, the recovery key and the new passkey.
+  it('counts the recovery key after a recovery, so My page does not ask for one', async () => {
     markBackupSaved(RECOVERED)
-    await recoverWithPhrase({ phrase: PHRASE, username: 'ana' })
+    const res = await recoverWithPhrase({ phrase: PHRASE, username: 'ana' })
+    expect(res.status).toBe('recovered')
     expect(localStorage.getItem('fundit.backup.0x00000000000000000000000000000000000000ab')).toBeNull()
+    const stored = { address: RECOVERED, credentialId: NEW_CRED.id }
+    const { result } = renderHook(() => useBackupNeeded(stored))
+    expect(result.current).toBe(true)
+    owners.ids = [`0x${'95'.repeat(30)}`, `0x${'00'.repeat(10)}${'ee'.repeat(20)}`, `0x${'96'.repeat(30)}`]
+    try {
+      await act(async () => {
+        expect(await syncBackupFromChain(RECOVERED)).toBe(true)
+      })
+      expect(result.current).toBe(false)
+    } finally {
+      owners.ids = []
+    }
   })
 
   // The words control a money account. Only derived addresses and signatures may leave the browser.

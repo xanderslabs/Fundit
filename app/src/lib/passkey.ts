@@ -871,8 +871,9 @@ async function earlierRecovery(account: Address): Promise<string | null> {
   }
 }
 
-// The new passkey owns the account now. The old recovery key may be exposed, so the backup flag is cleared and
-// My page asks for a new key. The signing account loads on the next send, with the new passkey.
+// The new passkey owns the account now. The backup flag is cleared, so My page reads the owners on Arc again; the
+// recovery key that was just used is still one of them, so it counts as the backup. The signing account loads on
+// the next send, with the new passkey.
 function finishRecovery(account: Address, credentialId: string): RecoveryResult {
   clearPendingRecovery(account)
   savedThisLoad.delete(account.toLowerCase())
