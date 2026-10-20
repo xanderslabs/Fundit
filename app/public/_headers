@@ -13,11 +13,3 @@
 /embed/*
   ! Content-Security-Policy
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://rpc.mainnet.arc.io https://*.arc.io; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors *
-
-# Gate 0 test page (gate0.html, served at /gate0), temporary for the sign-in options run. Removed with the page.
-# Open connect-src and frame-src, so the email and Google flows work and G9 can list what they call. The app's own CSP
-# goes out as Report-Only, so the page logs what the app would block.
-/gate0*
-  ! Content-Security-Policy
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src https: data: blob:; font-src 'self' https:; connect-src 'self' https: wss:; frame-src https:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
-  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src https: data: blob:; font-src 'self' https://fonts.reown.com; connect-src 'self' https://rpc.mainnet.arc.io https://*.arc.io https://ethereum-rpc.publicnode.com https://api.avax.network https://mainnet.optimism.io https://arb1.arbitrum.io https://mainnet.base.org https://polygon.drpc.org https://iris-api.circle.com https://modular-sdk.circle.com https://iris-api-sandbox.circle.com https://sepolia.base.org https://11155111.rpc.thirdweb.com https://*.walletconnect.com https://*.walletconnect.org wss://*.walletconnect.com wss://*.walletconnect.org https://*.reown.com https://api.web3modal.org; frame-src https://verify.walletconnect.com https://verify.walletconnect.org https://secure.walletconnect.org; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
