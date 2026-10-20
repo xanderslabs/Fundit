@@ -9,6 +9,8 @@
 interface Env {
   ASSETS: { fetch(request: Request): Promise<Response> }
   CIRCLE_API_KEY: string
+  // Shared with the tester only. Stops anyone else from using the key (for example to send login codes to any email).
+  GATE_PASSPHRASE: string
 }
 
 const CIRCLE = 'https://api.circle.com/v1/w3s'
@@ -49,10 +51,18 @@ async function circle(env: Env, method: string, path: string, userToken: string 
   return new Response(await res.text(), { status: res.status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
 }
 
+// Constant-time compare of the SHA-256 digests, so the passphrase length and prefix do not leak through timing.
+async function same(a: string, b: string): Promise<boolean> {
+  const enc = new TextEncoder()
+  const [x, y] = await Promise.all([crypto.subtle.digest('SHA-256', enc.encode(a)), crypto.subtle.digest('SHA-256', enc.encode(b))])
+  return crypto.subtle.timingSafeEqual(x, y)
+}
+
 async function api(request: Request, env: Env, route: string): Promise<Response> {
   if (request.method !== 'POST') return json(405, { error: 'POST only' })
   // Same-origin page only. A browser always sends Origin on a cross-site POST.
   if (request.headers.get('origin') !== ORIGIN) return json(403, { error: 'Wrong origin' })
+  if (!(await same(request.headers.get('x-gate-passphrase') ?? '', env.GATE_PASSPHRASE))) return json(401, { error: 'Wrong gate passphrase' })
   let body: Body
   try {
     body = (await request.json()) as Body
@@ -122,7 +132,7 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const { pathname } = new URL(request.url)
     if (pathname.startsWith('/api/ucw/')) {
-      if (!env.CIRCLE_API_KEY) return json(503, { error: 'CIRCLE_API_KEY is not set' })
+      if (!env.CIRCLE_API_KEY || !env.GATE_PASSPHRASE) return json(503, { error: 'CIRCLE_API_KEY or GATE_PASSPHRASE is not set' })
       return api(request, env, pathname.slice('/api/ucw/'.length))
     }
     return env.ASSETS.fetch(request)

@@ -49,7 +49,7 @@ export function publicKeyXY(publicKey: Hex): { x: bigint; y: bigint } {
 }
 
 // Keys whose values never reach the page or the copied results.
-const SECRET_KEY = /token|secret|private|mnemonic|seed|phrase|password|otp|jwt|^session|sessionid|cookie|authorization/i
+const SECRET_KEY = /token|secret|private|mnemonic|seed|phrase|password|otp|jwt|^session|sessionid|cookie|authorization|encryptionkey|passphrase/i
 const JWT = /^eyJ[\w-]+\.[\w-]+\.[\w-]+$/
 const EMAIL = /([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*@([A-Za-z0-9.-]+\.[A-Za-z]{2,})/g
 

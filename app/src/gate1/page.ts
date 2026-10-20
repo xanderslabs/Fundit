@@ -111,7 +111,17 @@ function renderStatus() {
 // ---------- Worker calls ----------
 
 async function api(route: string, body: Record<string, unknown>): Promise<{ status: number; data: Record<string, unknown> }> {
-  const res = await fetch(`/api/ucw/${route}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+  let passphrase = sessionStorage.getItem(`${KEY}-passphrase`)
+  if (!passphrase) {
+    passphrase = prompt('Gate passphrase') ?? ''
+    sessionStorage.setItem(`${KEY}-passphrase`, passphrase)
+  }
+  const res = await fetch(`/api/ucw/${route}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-gate-passphrase': passphrase },
+    body: JSON.stringify(body),
+  })
+  if (res.status === 401) sessionStorage.removeItem(`${KEY}-passphrase`)
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
   log(`api ${route} -> ${res.status}`, data)
   return { status: res.status, data }
