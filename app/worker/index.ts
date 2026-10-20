@@ -132,7 +132,8 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const { pathname } = new URL(request.url)
     if (pathname.startsWith('/api/ucw/')) {
-      if (!env.CIRCLE_API_KEY || !env.GATE_PASSPHRASE) return json(503, { error: 'CIRCLE_API_KEY or GATE_PASSPHRASE is not set' })
+      const missing = (['CIRCLE_API_KEY', 'GATE_PASSPHRASE'] as const).filter((k) => !env[k])
+      if (missing.length) return json(503, { error: `Not set: ${missing.map((k) => `${k} (${env[k] === '' ? 'empty' : typeof env[k]})`).join(', ')}` })
       return api(request, env, pathname.slice('/api/ucw/'.length))
     }
     return env.ASSETS.fetch(request)
