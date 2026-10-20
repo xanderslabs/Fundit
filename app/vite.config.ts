@@ -46,6 +46,8 @@ export default defineConfig(({ command, mode }) => {
         input: {
           main: fileURLToPath(new URL('./index.html', import.meta.url)),
           embed: fileURLToPath(new URL('./embed.html', import.meta.url)),
+          // Gate 0 test page, temporary (Plan 7 Task 0). Removed with gate0.html and src/gate0/.
+          gate0: fileURLToPath(new URL('./gate0.html', import.meta.url)),
         },
         output: {
           // Keep the libraries on the first load in their own long-cached chunks, apart from app code. The
