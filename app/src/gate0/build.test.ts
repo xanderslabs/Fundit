@@ -17,9 +17,9 @@ describe('Gate 0 build switch', () => {
     expect(headers).not.toMatch(/gate0/i)
   })
 
-  it('applies the loose CSP to the two exact page paths only, with script-src self', () => {
+  it('applies the loose CSP to the exact gate page paths only, with script-src self', () => {
     const paths = gate0Headers.split('\n').filter((l) => l.startsWith('/'))
-    expect(paths).toEqual(['/gate0', '/gate0.html'])
+    expect(paths).toEqual(['/gate0', '/gate0.html', '/gate1', '/gate1.html'])
     for (const csp of gate0Headers.split('\n').filter((l) => /^\s+Content-Security-Policy:/.test(l))) {
       expect(csp).toMatch(/script-src 'self';/)
       expect(csp).not.toMatch(/unsafe-eval|script-src[^;]*(\*|https:|unsafe-inline)/)
