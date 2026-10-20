@@ -1,10 +1,14 @@
 {
-	// Static site on Cloudflare Workers. There is no Worker script: Cloudflare serves the
-	// built files in ./dist/ and applies public/_headers (copied into dist by Vite).
+	// Gate build only (branch gate1): a Worker script answers /api/ucw/* for the Gate 1 test page and hands every
+	// other request to the static files, exactly as main serves them. Redeploying main removes the script.
 	"name": "fundit",
 	"compatibility_date": "2026-10-17",
+	"main": "./worker/index.ts",
 	"assets": {
 		"directory": "./dist/",
+		"binding": "ASSETS",
+		// Only /api/* runs the Worker first. Everything else is served straight from the files.
+		"run_worker_first": ["/api/*"],
 		// Unknown paths serve /index.html with 200, so React Router handles them.
 		"not_found_handling": "single-page-application"
 	},

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { loadEnv, type Plugin } from 'vite'
 import { configDefaults, defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import { checkBuildEnv, loadConfig } from './src/deployConfig.ts'
 import { gate0Enabled, withGate0Headers } from './src/gate0/build.ts'
 
@@ -53,7 +54,8 @@ export default defineConfig(({ command, mode }) => {
   const gate0 = gate0Enabled(loadEnv(mode, '.', 'VITE_'))
 
   return {
-    plugins: [react(), embedRewrite(), ...(gate0 ? [gate0Headers()] : [])],
+    // Gate pages only: Circle's user-controlled wallets web SDK (gate1) needs Node built-ins in the browser.
+    plugins: [react(), embedRewrite(), ...(gate0 ? [gate0Headers(), nodePolyfills()] : [])],
     // Unit tests run on the defaults (mainnet), never on a developer's .env.local, which the e2e suite sets to
     // testnet.
     ...(mode === 'test' && { envDir: false as const }),
@@ -67,7 +69,10 @@ export default defineConfig(({ command, mode }) => {
           main: fileURLToPath(new URL('./index.html', import.meta.url)),
           embed: fileURLToPath(new URL('./embed.html', import.meta.url)),
           // Gate 0 test page, temporary (Plan 7 Task 0), only with VITE_GATE0=1.
-          ...(gate0 && { gate0: fileURLToPath(new URL('./gate0.html', import.meta.url)) }),
+          ...(gate0 && {
+            gate0: fileURLToPath(new URL('./gate0.html', import.meta.url)),
+            gate1: fileURLToPath(new URL('./gate1.html', import.meta.url)),
+          }),
         },
         output: {
           // Keep the libraries on the first load in their own long-cached chunks, apart from app code. The
