@@ -204,6 +204,20 @@ async function sdkComputeAddress(owner: unknown): Promise<Address> {
   return (await sdk.toCircleSmartAccount({ client: arcClient as never, owner: owner as never })).address
 }
 
+// Circle's bundler refuses a sender it has no record of (-32600 "Cannot find target wallet in the system", seen live
+// on 2026-10-20). The app gets that record the same way every time: it builds the account with
+// toCircleSmartAccount on Circle's transport, and the SDK then always calls circle_getAddress for the owner
+// (getModularWalletAddress in dist/index.mjs), even when an address is passed (connect in lib/passkey.ts). This does
+// the same call and stops the check when Circle's address is not the factory's.
+async function registerWithCircle(c: Check, owner: unknown, expected: Address) {
+  const circle = await c.step('registerWithCircle', () => circleGetAddress(owner))
+  c.set('registerWithCircle.compare', { circleGetAddress: circle, factoryAddress: expected, equal: same(circle, expected) })
+  if (!same(circle, expected)) {
+    log(`FAILED: Circle registered ${circle} for this owner, not the factory address ${expected}. Check stopped.`)
+    throw new StepFailed('registerWithCircle')
+  }
+}
+
 const factoryAbi = parseAbi(['function getAddress(bytes32 sender, bytes32 salt, bytes initializingData) view returns (address addr, bytes32 mixedSalt)'])
 async function factoryAddress(owner: FactoryOwner): Promise<Address> {
   const [address] = await arcClient.readContract({ address: CIRCLE_MSCA_FACTORY, abi: factoryAbi, functionName: 'getAddress', args: factoryArgs(owner) })
@@ -344,8 +358,7 @@ async function eoaChecks(id: string, owner: LocalAccount, send: boolean, extra: 
   const factory = await c.step('factoryGetAddress', () => factoryAddress({ kind: 'eoa', address: E }))
   const computed = await c.step('sdkComputeAddress', () => sdkComputeAddress(owner))
   c.set('factoryEqualsSdk', same(factory, computed))
-  const circle = await c.probe('circleGetAddress', () => circleGetAddress(owner))
-  if (circle) c.set('circleEqualsFactory', same(circle, factory))
+  await registerWithCircle(c, owner, factory)
   link(`${id} account`, addressUrl(factory))
   const account = await accountAt(timed(owner, c, 'standIn'), factory)
   await ensureFunds(c, factory, 1)
@@ -437,7 +450,19 @@ appKit.subscribeAccount((a) => {
   log('AppKit account', { status: a.status, address: a.address, embeddedWalletInfo: a.embeddedWalletInfo })
 }, 'eip155')
 
+// The events store notifies on every change (pending events, flushes), so the same event comes back many times. Each
+// event is logged once, and INITIALIZE only the first time.
+let lastEvent = ''
+let initializeLogged = false
 appKit.subscribeEvents((e) => {
+  const name = (e.data as { event?: string } | undefined)?.event ?? ''
+  const key = `${e.timestamp}:${name}`
+  if (key === lastEvent) return
+  lastEvent = key
+  if (name === 'INITIALIZE') {
+    if (initializeLogged) return
+    initializeLogged = true
+  }
   const data = sanitize(e.data)
   captured.push({ at: now(), source: 'appkit.event', value: data })
   log('AppKit event', data)
@@ -450,22 +475,45 @@ const openView = (view: string) => () => appKit.open({ view } as never).then(() 
 type Passkey = { credential: Awaited<ReturnType<typeof sdk.toWebAuthnCredential>>; owner: unknown; xy: { x: bigint; y: bigint }; account: Address }
 let passkey: Passkey | null = null
 
-async function newPasskey(mode: 'Register' | 'Login'): Promise<Passkey> {
+async function newPasskey(mode: 'Register' | 'Login', credentialId?: string): Promise<Passkey> {
   const credential = await sdk.toWebAuthnCredential({
     transport: sdk.toPasskeyTransport(CLIENT_URL, CIRCLE_CLIENT_KEY),
     mode: mode === 'Register' ? sdk.WebAuthnMode.Register : sdk.WebAuthnMode.Login,
     ...(mode === 'Register' && { username: `gate0-${Date.now()}` }),
+    ...(credentialId && { credentialId }),
   })
   const xy = publicKeyXY(credential.publicKey)
   const account = await factoryAddress({ kind: 'passkey', ...xy })
   return { credential, owner: toWebAuthnAccount({ credential: credential as never }), xy, account }
 }
 
+// The test passkey's credential id and account address, for this tab only, so the same account is used after a
+// reload. Both are public: no key, signature or session is stored.
+const PASSKEY_KEY = 'gate0.passkey'
+type StoredPasskey = { credentialId: string; account: Address }
+
+function readStoredPasskey(): StoredPasskey | null {
+  try {
+    const x = JSON.parse(sessionStorage.getItem(PASSKEY_KEY) ?? 'null') as Partial<StoredPasskey> | null
+    return x && typeof x.credentialId === 'string' && typeof x.account === 'string' ? { credentialId: x.credentialId, account: x.account } : null
+  } catch {
+    return null
+  }
+}
+
 async function setPasskey(mode: 'Register' | 'Login') {
   const c = check(`passkey.${mode}`)
-  passkey = await c.step('credential', () => newPasskey(mode))
+  const stored = mode === 'Login' ? readStoredPasskey() : null
+  if (stored) c.set('storedBeforeReload', stored)
+  passkey = await c.step('credential', () => newPasskey(mode, stored?.credentialId))
   c.set('account', passkey.account)
   c.set('publicKeyXY', passkey.xy)
+  if (stored) c.set('sameAccountAsStored', same(stored.account, passkey.account))
+  try {
+    sessionStorage.setItem(PASSKEY_KEY, JSON.stringify({ credentialId: passkey.credential.id, account: passkey.account }))
+  } catch {
+    log('sessionStorage unavailable: the test passkey is not kept across a reload')
+  }
   link('passkey account', addressUrl(passkey.account))
   $('status-passkey').textContent = passkey.account
   c.done()
@@ -506,6 +554,9 @@ async function scripted() {
   await c.probe('M4b.circleGetAddress.t3', () => circleGetAddress(t3))
   await c.probe('M4b.mapping.t3.afterGetAddress', () => mapping({ eoa: t3.address }))
 
+  // The passkey's own account, registered with Circle before its first user operation. Only the passkey: the throwaway
+  // EOAs are never sent through circle_getAddress, so their mapping reads stay clean.
+  await registerWithCircle(c, p.owner, A)
   await ensureFunds(c, A, 4)
   await c.probe('owners.before', () => owners(A))
 
@@ -553,6 +604,7 @@ async function g6Register() {
   c.set('account', A)
   c.set('emailEoa', email.address)
   const signer = await accountAt(p.owner, A)
+  await registerWithCircle(c, p.owner, A)
   await ensureFunds(c, A, 1)
   const gas = await c.step('estimate', () => recovery.estimateRegisterRecoveryAddressGas({ account: signer, recoveryAddress: email.address } as never))
   const hash = await c.step('send', () =>
@@ -579,6 +631,8 @@ async function g6Recover() {
   const A = p.account
   c.set('account', A)
   const signer = await accountAt(timed(email, c, 'executeRecovery'), A)
+  // The sender is the passkey's account, so it is registered through the passkey, as the app's own sign-in does.
+  await registerWithCircle(c, p.owner, A)
   await ensureFunds(c, A, 1)
   const fresh = await c.step('newPasskey', () => newPasskey('Register'))
   c.set('newPasskey', { xy: fresh.xy, ownAccount: fresh.account })
@@ -706,8 +760,10 @@ function section(title: string, text: string) {
 function build() {
   $('network').textContent = `${NETWORK.name} (chain ${ARC_CHAIN.id})`
   if (!CIRCLE_CLIENT_KEY) log('WARNING: VITE_CIRCLE_CLIENT_KEY is empty. Circle calls will fail.')
+  const stored = readStoredPasskey()
+  if (stored) $('status-passkey').textContent = `${stored.account} (saved in this tab: click Use an existing passkey)`
 
-  let row = section('Passkey', 'G5, G6 and G7 run on a test passkey account. Create one (named gate0-<time>) or use one you made earlier on this page.')
+  let row = section('Passkey', 'G5, G6 and G7 run on a test passkey account. Create one (named gate0-<time>), or use an existing one. After a reload, Use an existing passkey asks for the one this tab used.')
   button(row, 'Create a new test passkey', () => setPasskey('Register'))
   button(row, 'Use an existing passkey', () => setPasskey('Login'))
 
