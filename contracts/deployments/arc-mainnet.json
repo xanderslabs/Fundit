@@ -25,7 +25,7 @@
       "CampaignImplementation": "exact_match",
       "lookup": "https://sourcify.dev/#/lookup/0xf1b2AEF82c37fC41D254D8e06BD7780ce34617d9"
     },
-    "arcscan": "not verified: explorer.arc.io blocks automated verification behind Cloudflare (circlefin/arc-node#425)"
+    "arcscan": "exact_match for both contracts, shown on explorer.arc.io (checked 2026-10-23)"
   },
   "explorer": {
     "factory": "https://explorer.arc.io/address/0xf1b2AEF82c37fC41D254D8e06BD7780ce34617d9",
