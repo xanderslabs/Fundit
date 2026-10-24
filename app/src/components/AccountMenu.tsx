@@ -1,7 +1,7 @@
 import { type KeyboardEvent, type Ref, type RefObject, useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import type { Address } from 'viem'
-import { type AccountKind, useAccount } from '../lib/account'
+import { type AccountKind, clearEmailSession, useAccount } from '../lib/account'
 import { dismissBackupPrompt, logoutPasskey, readPasskeyUsername, type StoredPasskey, useBackupPrompt, usePasskeySession } from '../lib/passkey'
 import { ADD_MONEY_PATH } from '../lib/urls'
 import { clearWalletSession } from '../lib/walletAccount'
@@ -144,13 +144,14 @@ export function AccountControl() {
 }
 
 // Sign out for the account menu and My page. Recovery words on screen would be lost, so it asks first like any
-// other way out. It ends a passkey or wallet account, and a connected wallet goes too; with none connected that
+// other way out. It clears all three account stores, and a connected wallet goes too; with none connected that
 // does nothing. True when the person signed out.
 export function useSignOut(): () => boolean {
   return useCallback(() => {
     if (!confirmLeave()) return false
     disconnectWallet()
     clearWalletSession()
+    clearEmailSession()
     logoutPasskey()
     return true
   }, [])

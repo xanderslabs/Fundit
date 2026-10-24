@@ -182,6 +182,7 @@ describe('AccountControl signed in', () => {
   it('the pill shows the short address for a wallet account', () => {
     saveWalletSession({ address: ACCOUNT.address, connectorId: 'io.metamask' })
     render(ui())
+    expect(pill().textContent).toBe('0x1111...1111')
     expect(pill().getAttribute('aria-haspopup')).toBe('menu')
     expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull()
     localStorage.clear()
@@ -196,6 +197,19 @@ describe('AccountControl signed in', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Sign out' }))
     expect(readWalletSession()).toBeNull()
     expect(disconnect).toHaveBeenCalledTimes(1)
+    expect(await screen.findByRole('button', { name: 'Sign in' })).toBeTruthy()
+    localStorage.clear()
+  })
+
+  // Every store goes on sign out, so no account of any kind comes back for the next person on this browser.
+  it('sign out clears the email session too', async () => {
+    localStorage.setItem(storageKey('session.email'), JSON.stringify({ address: ACCOUNT.address, walletId: 'w-1', email: 'ana@example.com' }))
+    render(ui())
+    const user = userEvent.setup()
+    await user.click(pill())
+    await user.click(screen.getByRole('menuitem', { name: 'Sign out' }))
+    expect(localStorage.getItem(storageKey('session.email'))).toBeNull()
+    expect(logoutPasskey).toHaveBeenCalledTimes(1)
     expect(await screen.findByRole('button', { name: 'Sign in' })).toBeTruthy()
     localStorage.clear()
   })

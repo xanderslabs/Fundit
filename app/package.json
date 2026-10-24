@@ -27,6 +27,7 @@
     "@scure/bip39": "1.6.0",
     "@tanstack/react-query": "5.104.0",
     "@wagmi/core": "3.6.5",
+    "@walletconnect/ethereum-provider": "2.23.7",
     "qrcode-generator": "2.0.4",
     "react": "19.3.0",
     "react-dom": "19.3.0",
