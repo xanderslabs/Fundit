@@ -8,7 +8,7 @@ import {
 import { describe, expect, it, vi } from 'vitest'
 import { campaignAbi } from '../abi/campaign'
 import { factoryAbi } from '../abi/factory'
-import { CANCELLED, explainAfterApproval, explainError, FALLBACK, NeedsNetworkFee, needsAddMoney, USERNAME_RULE } from './errors'
+import { CANCELLED, explainAfterApproval, explainError, FALLBACK, NeedsNetworkFee, needsAddMoney, USERNAME_RULE, WrongWalletAccount } from './errors'
 
 const GENERIC = FALLBACK
 
@@ -268,5 +268,18 @@ describe('Circle, passkey and network errors', () => {
     explainError(new NeedsNetworkFee(1n))
     expect(log).not.toHaveBeenCalled()
     log.mockRestore()
+  })
+})
+
+describe('wallet account errors', () => {
+  it('maps insufficient funds to the add money fix', () => {
+    const e = new Error('RPC failed', { cause: new Error('insufficient funds for gas * price + value') })
+    expect(needsAddMoney(e)).toBe(true)
+  })
+
+  it('names the short address when the wallet is on another account', () => {
+    expect(explainError(new WrongWalletAccount('0x1234567890123456789012345678901234567890'))).toBe(
+      'Your wallet is on a different account. Switch back to 0x1234...7890 in your wallet, or sign in again.',
+    )
   })
 })

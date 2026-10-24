@@ -24,7 +24,7 @@ export type SendOptions = { label: string; onHash?: (hash: Hex, index: number) =
 // send() resolves to a TxResult. It throws only for a failure before anything is sent (for example a
 // gas estimate that reverts), so callers pass that to explainError (lib/errors.ts).
 export interface Sender {
-  kind: 'eoa' | 'passkey'
+  kind: 'passkey' | 'email' | 'wallet'
   address: Address
   send(calls: Call[], opts?: SendOptions): Promise<TxResult>
   // Checks a timed-out result again without sending anything or asking for a signature. Senders whose

@@ -64,7 +64,7 @@ function view(over: Partial<CampaignView['summary']> = {}): CampaignView {
 
 const success: TxResult = { status: 'success', hash: HASH, receipt: { status: 'success' } as TransactionReceipt }
 
-function fakeSender(kind: Sender['kind'] = 'eoa', address = CREATOR, ...results: TxResult[]) {
+function fakeSender(kind: Sender['kind'] = 'wallet', address = CREATOR, ...results: TxResult[]) {
   const send = vi.fn(async (_calls: Call[]) => results.shift() ?? success)
   state.sender = { kind, address, send }
   return send
@@ -132,7 +132,7 @@ describe('Manage', () => {
   // Only the organiser can sign these calls. Anyone else would only meet reverts, so they go to the public page.
   it('sends a connected non-creator to the campaign page', async () => {
     state.view = view()
-    fakeSender('eoa', STRANGER)
+    fakeSender('wallet', STRANGER)
     renderPage()
     expect(await screen.findByText('Campaign page')).toBeTruthy()
   })
@@ -236,7 +236,7 @@ describe('Manage', () => {
   it('does not warn an ordinary wallet about Base', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('[]', { status: 200 })))
     state.view = view()
-    fakeSender('eoa')
+    fakeSender('wallet')
     renderPage()
     await screen.findByRole('option', { name: 'Base' })
     await userEvent.setup().selectOptions(screen.getByLabelText('Send to'), 'Base')
@@ -337,7 +337,7 @@ describe('Manage', () => {
   // A withdrawal that timed out may still be mined. Sending again could pay out twice.
   it('blocks a second withdrawal while the first is not confirmed', async () => {
     state.view = view()
-    fakeSender('eoa', CREATOR, { status: 'timeout', hash: HASH, completed: 0 })
+    fakeSender('wallet', CREATOR, { status: 'timeout', hash: HASH, completed: 0 })
     renderPage()
     const user = userEvent.setup()
     await user.type(screen.getByLabelText('Amount'), '10')

@@ -41,7 +41,7 @@ vi.mock('../lib/deposit', async (importOriginal) => ({
   fetchAccountBalances,
 }))
 
-const core = vi.hoisted(() => ({ getChainId: vi.fn(), switchChain: vi.fn(), sendTransaction: vi.fn() }))
+const core = vi.hoisted(() => ({ getAccount: vi.fn(), getChainId: vi.fn(), switchChain: vi.fn(), sendTransaction: vi.fn() }))
 vi.mock('@wagmi/core', () => core)
 const arc = vi.hoisted(() => ({ estimateGas: vi.fn(), waitForTransactionReceipt: vi.fn(), getTransaction: vi.fn(), call: vi.fn() }))
 vi.mock('../lib/clients', () => ({ arcClient: arc }))
@@ -69,6 +69,7 @@ vi.mock('../lib/bridge', async (importOriginal) => ({
 }))
 
 beforeEach(() => {
+  core.getAccount.mockImplementation(() => ({ address: state.external }))
   core.getChainId.mockReturnValue(ARC_CHAIN_ID)
   core.sendTransaction.mockResolvedValue(HASH)
   arc.estimateGas.mockResolvedValue(50_000n)

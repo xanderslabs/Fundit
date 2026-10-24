@@ -49,7 +49,7 @@ describe('ActivityList cross-chain inflows not counted yet', () => {
   it('shows the amount and a Count it now button that sends settle() through the sender', async () => {
     state.unaccounted = 5_000000n
     const send = vi.fn(async (_calls: Call[]) => success)
-    state.sender = { kind: 'eoa', address: ME, send }
+    state.sender = { kind: 'wallet', address: ME, send }
     renderList()
     expect(await screen.findByText('5.00 USDC from other chains, not counted yet')).toBeTruthy()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Count it now' }))
@@ -62,7 +62,7 @@ describe('ActivityList cross-chain inflows not counted yet', () => {
   })
 
   it('is hidden when nothing is waiting', async () => {
-    state.sender = { kind: 'eoa', address: ME, send: vi.fn() }
+    state.sender = { kind: 'wallet', address: ME, send: vi.fn() }
     renderList()
     expect(await screen.findByText('No activity yet.')).toBeTruthy()
     // Let the unaccounted read settle before checking.

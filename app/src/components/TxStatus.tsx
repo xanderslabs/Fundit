@@ -73,8 +73,8 @@ export function useTx(onSuccess: (hash: Hex) => void) {
   }
 
   // build runs inside the guard, so a quote it fetches or a check it makes cannot overlap a second click.
-  // Several calls go to the sender in one send. A passkey sender makes them one user operation, so they
-  // succeed or fail together. A wallet sender would send them one by one, so run refuses that.
+  // Several calls go to the sender in one send. Every sender makes them one operation (a passkey user
+  // operation, or one transaction through Multicall3From), so they succeed or fail together.
   // usdcOut is the USDC the calls move out of the account; a passkey sender keeps the network fee on top.
   async function run(sender: Sender, build: () => Call | Call[] | Promise<Call | Call[]>, label: string, usdcOut?: bigint) {
     if (inFlight.current) return
@@ -83,9 +83,6 @@ export function useTx(onSuccess: (hash: Hex) => void) {
     lastSender.current = sender
     try {
       const built = await build()
-      if (Array.isArray(built) && built.length > 1 && sender.kind !== 'passkey') {
-        throw new Error('useTx: several calls need a passkey sender, which sends them as one user operation.')
-      }
       handle(await sender.send(Array.isArray(built) ? built : [built], { label, usdcOut }))
     } catch (err) {
       setPhase({ kind: 'error', message: explainError(err), addMoney: needsAddMoney(err) })

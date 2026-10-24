@@ -80,7 +80,7 @@ const submitButton = () => screen.getByRole('button', { name: 'Send' })
 describe('AccountWithdraw', () => {
   // A wallet would send approve and burn as two transactions, so a failed burn could leave an open approval.
   it('renders nothing for a regular wallet', () => {
-    renderForm('eoa')
+    renderForm('wallet')
     expect(screen.queryByRole('heading', { name: 'Send money out' })).toBeNull()
   })
 

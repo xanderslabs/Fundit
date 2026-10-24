@@ -242,6 +242,11 @@ export const CIRCLE_MSCA_FACTORY: Address = '0x0000000DF7E6c9Dc387cAFc5eCBfa6c3a
 // Arc network fees are paid in USDC from the sender's own balance. A regular wallet adding USDC to a Fundit
 // account keeps this much free. It is also the least a Fundit account ever keeps back (see passkeyReserve).
 export const PASSKEY_GAS_BUFFER = 50_000n
+// Arc's Multicall3From runs each inner call with the caller as msg.sender. Same address on mainnet and testnet.
+export const MULTICALL3_FROM: Address = '0x522fAf9A91c41c443c66765030741e4AaCe147D0'
+// What an email or wallet account keeps back for the network fee: 0.01 USDC. Its own transaction pays gas from
+// the same balance, so unlike a passkey account there is no prefund to estimate.
+export const EOA_GAS_RESERVE = 10_000n
 // A Fundit account pays for a user operation by moving its prefund (all its gas limits times the max fee) into
 // the EntryPoint before the calls run, so it keeps back more than the fee itself. passkeySender checks the
 // exact prefund before every send. When an operation cannot be estimated, these gas units stand in, times

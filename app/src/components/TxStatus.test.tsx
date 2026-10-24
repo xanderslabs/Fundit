@@ -40,7 +40,7 @@ describe('useTx with TxStatus', () => {
     expect(await screen.findByText(/^Confirm with your passkey, then wait for the network\./)).toBeTruthy()
     expect(screen.queryByText(/wallet/)).toBeNull()
     unmount()
-    render(<Harness sender={{ ...sender, kind: 'eoa' }} wallet />)
+    render(<Harness sender={{ ...sender, kind: 'wallet' }} wallet />)
     await user.click(screen.getByRole('button', { name: 'Go' }))
     expect(await screen.findByText(/^Confirm in your wallet, then wait for the network\./)).toBeTruthy()
   })
@@ -69,7 +69,7 @@ describe('useTx with TxStatus', () => {
   it('rechecks a wallet timeout with waitForResult', async () => {
     waitForResult.mockResolvedValue(success)
     const sender: Sender = {
-      kind: 'eoa',
+      kind: 'wallet',
       address: '0x00000000000000000000000000000000000000cc',
       send: async () => ({ status: 'timeout', hash: TX_HASH, completed: 0 }),
     }
@@ -82,10 +82,10 @@ describe('useTx with TxStatus', () => {
     expect(waitForResult).toHaveBeenCalledWith(expect.anything(), TX_HASH, expect.any(Number))
   })
 
-  // A wallet sends a call list one call at a time, so a failed second call could leave an open approval.
-  it('refuses several calls for a wallet sender and sends nothing', async () => {
+  // Every sender turns a call list into one send (a wallet batches through Multicall3From), so run never splits it.
+  it('passes several calls to a wallet sender in one send', async () => {
     const send = vi.fn(async () => success)
-    const sender: Sender = { kind: 'eoa', address: '0x00000000000000000000000000000000000000cc', send }
+    const sender: Sender = { kind: 'wallet', address: '0x00000000000000000000000000000000000000cc', send }
     function Many() {
       const tx = useTx(() => {})
       return (
@@ -97,13 +97,10 @@ describe('useTx with TxStatus', () => {
         </>
       )
     }
-    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
     render(<Many />)
     await userEvent.setup().click(screen.getByRole('button', { name: 'Go' }))
-    // A coding mistake, so the person sees the plain fallback and the console gets the detail.
-    expect(await screen.findByText("That didn't work. Check your connection and try again.")).toBeTruthy()
-    expect(String(log.mock.calls[0]?.[0])).toMatch(/useTx: several calls need a passkey sender/)
-    log.mockRestore()
-    expect(send).not.toHaveBeenCalled()
+    expect(await screen.findByText('Saved.')).toBeTruthy()
+    expect(send).toHaveBeenCalledTimes(1)
+    expect((send.mock.calls[0] as unknown[] | undefined)?.[0]).toEqual([CALL, CALL])
   })
 })

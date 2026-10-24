@@ -38,7 +38,7 @@ const sent = vi.hoisted(() => ({ from: [] as Address[], send: vi.fn() }))
 vi.mock('../lib/wagmiSender', () => ({
   wagmiSender: (_config: unknown, address: Address) => {
     sent.from.push(address)
-    return { kind: 'eoa', address, send: sent.send }
+    return { kind: 'wallet', address, send: sent.send }
   },
 }))
 

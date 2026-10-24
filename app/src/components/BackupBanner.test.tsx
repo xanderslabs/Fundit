@@ -21,7 +21,7 @@ const success: TxResult = { status: 'success', hash: HASH, receipt: { status: 's
 
 function fakeSender(address: Address) {
   const send = vi.fn(async (_calls: Call[]) => success)
-  state.sender = { kind: 'eoa', address, send }
+  state.sender = { kind: 'wallet', address, send }
   return send
 }
 

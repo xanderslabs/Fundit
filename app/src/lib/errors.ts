@@ -1,4 +1,4 @@
-import { decodeErrorResult, type Hex, UserRejectedRequestError } from 'viem'
+import { decodeErrorResult, type Hex, InsufficientFundsError, UserRejectedRequestError } from 'viem'
 import { campaignAbi } from '../abi/campaign'
 import { factoryAbi } from '../abi/factory'
 import { CCTP_CHAINS, CHAIN_LABELS, NETWORK } from '../config'
@@ -157,6 +157,13 @@ export class NeedsNetworkFee extends PlainError {
     super(`Your Fundit account needs at least ${formatAmount(reserve, 'USDC')} for the network fee. Add money and try again.`)
   }
 }
+export const WRONG_ACCOUNT = 'Your wallet is on a different account. Switch back to <short address> in your wallet, or sign in again.'
+// A send from a wallet that now has another account selected. Nothing was sent.
+export class WrongWalletAccount extends PlainError {
+  constructor(readonly expected: string) {
+    super(WRONG_ACCOUNT.replace('<short address>', `${expected.slice(0, 6)}...${expected.slice(-4)}`))
+  }
+}
 const NO_NETWORK_FEE = 'Your Fundit account does not have enough USDC for the network fee. Add money and try again.'
 
 // AA21 is the EntryPoint's "didn't pay prefund": the account could not cover the operation's gas.
@@ -170,9 +177,14 @@ export function isMissingParams(e: unknown): boolean {
   return texts(e).some((t) => /Missing or invalid parameters/i.test(t))
 }
 
+// An email or wallet account (a plain EOA) that cannot cover the gas, as viem or the RPC node words it.
+function isInsufficientFunds(e: unknown): boolean {
+  return chain(e).some((x) => x instanceof InsufficientFundsError) || texts(e).some((t) => /insufficient funds/i.test(t))
+}
+
 // True when the fix is to add money, so the page can link to Add money.
 export function needsAddMoney(e: unknown): boolean {
-  return chain(e).some((x) => x instanceof NeedsNetworkFee) || isPrefundError(e)
+  return chain(e).some((x) => x instanceof NeedsNetworkFee) || isPrefundError(e) || isInsufficientFunds(e)
 }
 
 function revertName(e: unknown): string | null {
@@ -247,7 +259,7 @@ export function explainError(e: unknown): string {
   if (e instanceof PlainError) return e.message
   // Every real failure is logged raw for support, whatever text the person gets. The page never shows it.
   console.error(e)
-  if (isPrefundError(e)) return NO_NETWORK_FEE
+  if (isPrefundError(e) || isInsufficientFunds(e)) return NO_NETWORK_FEE
   return kitText(e) ?? revertText(e) ?? passkeyAndNetworkText(e) ?? FALLBACK
 }
 

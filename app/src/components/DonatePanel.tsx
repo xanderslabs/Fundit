@@ -3,7 +3,7 @@ import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import type { Hex } from 'viem'
 import { EXPLORER_URL } from '../config'
-import { RESERVE_KEY, usePasskeyReserve } from '../hooks/usePasskeyReserve'
+import { RESERVE_KEY, useGasReserve } from '../hooks/useGasReserve'
 import { useSender } from '../hooks/useSender'
 import {
   clearPendingArc,
@@ -118,7 +118,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   const balance = funds.data?.balance
   // What the Fundit account keeps for the network fee (passkeyReserve). Only a USDC balance pays it.
   // Estimated as a gift of the same shape: an approve and a donate of 1 unit.
-  const reserve = usePasskeyReserve(sender, {
+  const reserve = useGasReserve(sender, {
     key: `donate-${campaign.toLowerCase()}`,
     calls: buildDonateCalls({ campaign, token, amount: 1n, tip: 0n, message: '', allowance: 0n }),
   }, amountText !== '')

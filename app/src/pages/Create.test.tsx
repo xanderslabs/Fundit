@@ -38,7 +38,7 @@ vi.mock('../hooks/useCampaigns', () => ({
 
 function fakeSender(result: TxResult) {
   const send = vi.fn(async () => result)
-  state.sender = { kind: 'eoa', address: ME, send }
+  state.sender = { kind: 'wallet', address: ME, send }
   return send
 }
 

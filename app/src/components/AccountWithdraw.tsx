@@ -3,7 +3,7 @@ import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { type Address, formatUnits, getAddress, isAddressEqual, zeroAddress } from 'viem'
 import { ARC_DOMAIN, CCTP_CHAINS, CHAIN_LABELS, TOKENS, type TokenSymbol } from '../config'
-import { RESERVE_KEY, usePasskeyReserve } from '../hooks/usePasskeyReserve'
+import { RESERVE_KEY, useGasReserve } from '../hooks/useGasReserve'
 import { buildAccountSendCalls, maxAccountSend, OWN_ADDRESS, TOO_SMALL } from '../lib/accountWithdraw'
 import { chainByKey, pendingPayoutFrom, savePendingPayout, subscribePending } from '../lib/bridge'
 import { arcClient } from '../lib/clients'
@@ -85,7 +85,7 @@ function SendOutForm({ sender }: { sender: Sender }) {
     staleTime: 15_000,
   })
   // A send to another chain is an approve and a burn, so its reserve is estimated in that shape.
-  const reserve = usePasskeyReserve(
+  const reserve = useGasReserve(
     sender,
     dest === 'Arc' ? undefined : { key: `burn-${dest}`, calls: burnShape(dest, account) },
     amountText !== '',
