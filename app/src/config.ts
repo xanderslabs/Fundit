@@ -157,6 +157,9 @@ export const NETWORKS: Record<ArcNetwork, NetworkConfig> = {
       '0xd35e225662def377baaa2c61c42749e55a8a934c',
       // The e2e wallet (app/.env.testnet.wallet), which makes a Fundit on every wallet e2e run.
       '0x2b35ea205659e5aab183af1c711564fcd86dc71f',
+      // The first two wallet e2e runs used throwaway keys, one Fundit each (e2e accounts, before the persistent wallet).
+      '0x62cc658930f0aa23c70c35b2096bcaa79c270a55',
+      '0xab007108e2b50b85632076354de1519fcc16bb9f',
     ],
   },
 }
