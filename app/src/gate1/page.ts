@@ -279,6 +279,77 @@ async function gift(id: string, mode: 'LOW' | 'MEDIUM' | 'custom') {
   record(`${id}_gift`, { mode, fee, approvalMs: approval.ms, totalMs: Math.round(performance.now() - t0), states: tx?.states, hash, chain, balanceBefore: before?.toString(), balanceAfter: after?.toString() })
 }
 
+// ---------- sign and broadcast ourselves ----------
+
+let evmWalletId: string | undefined
+
+function giftCallData(): Hex {
+  return encodeFunctionData({
+    abi: multicallAbi,
+    functionName: 'aggregate3',
+    args: [
+      [
+        { target: USDC, allowFailure: false, callData: encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [FUNDER, APPROVE_MARK] }) },
+        { target: USDC, allowFailure: false, callData: encodeFunctionData({ abi: erc20Abi, functionName: 'transfer', args: [FUNDER, GIFT] }) },
+      ],
+    ],
+  })
+}
+
+// Builds the gift as a plain EIP-1559 transaction at Arc's real fee, has Circle sign it, and sends it to Arc ourselves.
+async function signAndSend(id: string, walletId: string | undefined) {
+  if (!walletId || !session.address) throw new Error('Run U3 (and U10 for the EVM wallet) first')
+  const before = await refreshBalance()
+  const data = giftCallData()
+  const [nonce, block, gas] = await Promise.all([
+    arcClient.getTransactionCount({ address: session.address, blockTag: 'pending' }),
+    arcClient.getBlock(),
+    arcClient.estimateGas({ account: session.address, to: MULTICALL3FROM, data }),
+  ])
+  const base = block.baseFeePerGas ?? 20_000_000_000n
+  const priority = 1_000_000_000n
+  const transaction = {
+    chainId: 5042002,
+    nonce: String(nonce),
+    to: MULTICALL3FROM,
+    value: '0',
+    data,
+    gas: String((gas * 125n) / 100n),
+    maxFeePerGas: String(base * 2n + priority),
+    maxPriorityFeePerGas: String(priority),
+  }
+  const t0 = performance.now()
+  const res = await api('sign-transaction', { userToken: session.userToken, walletId, transaction: JSON.stringify(transaction) })
+  const challengeId = payload(res.data).challengeId
+  if (!challengeId) {
+    record(`${id}_signsend`, { rejected: res.data })
+    return
+  }
+  const out = await runChallenge(String(challengeId))
+  const signed = (out.result as { data?: { signedTransaction?: string } } | undefined)?.data?.signedTransaction
+  if (!signed) {
+    record(`${id}_signsend`, { approvalMs: out.ms, noSignedTransaction: out.result })
+    return
+  }
+  const raw = (signed.startsWith('0x') ? signed : `0x${signed}`) as Hex
+  const hash = await arcClient.sendRawTransaction({ serializedTransaction: raw })
+  const r = await arcClient.waitForTransactionReceipt({ hash, timeout: 60_000 })
+  const after = await refreshBalance()
+  record(`${id}_signsend`, {
+    approvalMs: out.ms,
+    totalMs: Math.round(performance.now() - t0),
+    hash,
+    status: r.status,
+    from: r.from,
+    fromIsWallet: r.from.toLowerCase() === session.address.toLowerCase(),
+    gasUsed: r.gasUsed.toString(),
+    effectiveGwei: Number(r.effectiveGasPrice) / 1e9,
+    feeUsdc: Number(r.gasUsed * r.effectiveGasPrice) / 1e18,
+    balanceBefore: before?.toString(),
+    balanceAfter: after?.toString(),
+  })
+}
+
 // ---------- checks ----------
 
 type Check = { id: string; title: string; text: string; run: () => Promise<void>; extra?: () => HTMLElement }
@@ -360,6 +431,42 @@ const checks: Check[] = [
     text: `One Circle approval. Approves the funder for 7 units and sends 0.01 USDC to the funder. ${text}`,
     run: () => gift(id, mode),
   })),
+  {
+    id: 'U9',
+    title: 'U9 Gift signed by the Arc wallet, sent by us',
+    text: 'Circle only signs; the page sends the transaction to Arc at the real fee (1 gwei tip). Circle docs suggest the Arc wallet may be refused here.',
+    run: () => signAndSend('U9', session.walletId),
+  },
+  {
+    id: 'U10',
+    title: 'U10 Create a generic EVM testnet wallet',
+    text: 'One Circle approval. Circle docs say it gets the same address as the Arc wallet.',
+    async run() {
+      let wallets = (payload((await api('wallets', { userToken: session.userToken, blockchain: 'EVM-TESTNET' })).data).wallets ?? []) as Record<string, unknown>[]
+      let created = false
+      if (wallets.length === 0) {
+        const res = await api('create-evm-wallet', { userToken: session.userToken })
+        const challengeId = payload(res.data).challengeId
+        if (!challengeId) throw new Error(`create failed: ${toJson(res.data)}`)
+        await runChallenge(String(challengeId))
+        created = true
+        for (let i = 0; i < 20 && wallets.length === 0; i++) {
+          await new Promise((r) => setTimeout(r, 1500))
+          wallets = (payload((await api('wallets', { userToken: session.userToken, blockchain: 'EVM-TESTNET' })).data).wallets ?? []) as Record<string, unknown>[]
+        }
+      }
+      const w = wallets[0]
+      if (!w) throw new Error('No EVM wallet found')
+      evmWalletId = String(w.id)
+      record('U10_evm_wallet', { created, address: w.address, sameAsArc: String(w.address).toLowerCase() === session.address?.toLowerCase(), blockchain: w.blockchain })
+    },
+  },
+  {
+    id: 'U11',
+    title: 'U11 Gift signed by the EVM wallet, sent by us',
+    text: 'Same as U9, signed by the U10 wallet with Arc testnet chain id 5042002.',
+    run: () => signAndSend('U11', evmWalletId),
+  },
   {
     id: 'U5',
     title: 'U5 Sign a message',

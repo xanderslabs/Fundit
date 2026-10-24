@@ -93,7 +93,29 @@ async function api(request: Request, env: Env, route: string): Promise<Response>
     }
     case 'wallets': {
       if (!userToken) return json(400, { error: 'userToken' })
-      return circle(env, 'GET', `/wallets?blockchain=${BLOCKCHAIN}`, userToken)
+      const chain = body.blockchain === 'EVM-TESTNET' ? 'EVM-TESTNET' : BLOCKCHAIN
+      return circle(env, 'GET', `/wallets?blockchain=${chain}`, userToken)
+    }
+    case 'create-evm-wallet': {
+      // A generic EVM testnet wallet, which Circle's signing API accepts. Same address as the Arc wallet per Circle docs.
+      if (!userToken) return json(400, { error: 'userToken' })
+      return circle(env, 'POST', '/user/wallets', userToken, { idempotencyKey, accountType: 'EOA', blockchains: ['EVM-TESTNET'] })
+    }
+    case 'sign-transaction': {
+      // The user signs a transaction the page built; the page broadcasts it to Arc itself at the real network fee.
+      const walletId = str(body, 'walletId', UUID)
+      const transaction = typeof body.transaction === 'string' && body.transaction.length <= 20_000 ? body.transaction : null
+      if (!userToken || !walletId || !transaction) return json(400, { error: 'userToken, walletId or transaction' })
+      let tx: Record<string, unknown>
+      try {
+        tx = JSON.parse(transaction) as Record<string, unknown>
+      } catch {
+        return json(400, { error: 'transaction is not JSON' })
+      }
+      if (String(tx.chainId) !== '5042002') return json(403, { error: 'Arc testnet only' })
+      if (typeof tx.to !== 'string' || !ALLOWED_CONTRACTS.has(tx.to.toLowerCase())) return json(403, { error: 'Contract not allowed' })
+      if (tx.value !== undefined && String(tx.value) !== '0') return json(403, { error: 'No native value' })
+      return circle(env, 'POST', '/user/sign/transaction', userToken, { walletId, transaction })
     }
     case 'execute': {
       const walletId = str(body, 'walletId', UUID)
