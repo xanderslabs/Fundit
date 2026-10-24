@@ -1,7 +1,8 @@
 import { expect, type Page, test } from '@playwright/test'
 import { type Address, erc20Abi, formatUnits, getAddress, type Hex, pad, parseEventLogs, parseUnits } from 'viem'
 import { campaignAbi } from '../src/abi/campaign'
-import { MULTICALL3_FROM } from '../src/config'
+import { factoryAbi } from '../src/abi/factory'
+import { EOA_GAS_RESERVE, MULTICALL3_FROM } from '../src/config'
 import { formatAmount } from '../src/lib/format'
 import { arc, checkChain, checkEnv, fundFromFunder, funderAddress, logTx, NET, txUrl, usdcBalance } from './arc'
 import { installTestWallet, loadWalletKey, type TestWallet, WALLET_NAME } from './wallet'
@@ -136,6 +137,15 @@ test('starts a Fundit from the wallet', async () => {
   console.log(`Fundit ${campaign}: ${NET.explorerUrl}/address/${campaign}`)
   const created = wallet.sent.at(-1)!
   logTx('Create a Fundit', created.hash)
+  // The factory recorded the wallet as creator, in USDC, with the goal entered.
+  const createdReceipt = await arc.getTransactionReceipt({ hash: created.hash })
+  const made = parseEventLogs({ abi: factoryAbi, eventName: 'CampaignCreated', logs: createdReceipt.logs })
+  expect(made).toHaveLength(1)
+  expect(getAddress(made[0]!.args.campaign)).toBe(campaign)
+  expect(getAddress(made[0]!.args.creator)).toBe(wallet.address)
+  const info = await arc.readContract({ address: campaign, abi: campaignAbi, functionName: 'summary' })
+  expect(getAddress(info.token)).toBe(NET.usdc)
+  expect(info.goal).toBe(parseUnits('10', 6))
 })
 
 test('gives to it: one transaction to Multicall3From', async () => {
@@ -177,6 +187,14 @@ test('gives to it: one transaction to Multicall3From', async () => {
   expect(events).toHaveLength(1)
   expect(getAddress(events[0]!.args.donor)).toBe(wallet.address)
   expect(events[0]!.args.message).toBe(`[anon]${MESSAGE}`)
+  // Amount, no tip, and the fee at the rate the Fundit itself reports (read from the contract, not assumed).
+  const gift = events[0]!.args
+  const donationBps = await arc.readContract({ address: campaign, abi: campaignAbi, functionName: 'donationFeeBps' })
+  expect(gift.amount).toBe(parseUnits(GIFT, 6))
+  expect(gift.tip).toBe(0n)
+  expect(gift.fee).toBe((gift.amount * BigInt(donationBps)) / 10_000n)
+  const after = await arc.readContract({ address: campaign, abi: campaignAbi, functionName: 'summary' })
+  expect(after.available).toBe(gift.amount - gift.fee)
 })
 
 test('withdraws on Arc from Manage', async () => {
@@ -205,6 +223,10 @@ test('withdraws on Arc from Manage', async () => {
   // Arc payouts name the recipient as a left-padded bytes32.
   expect(out[0]!.args.recipient).toBe(pad(wallet.address.toLowerCase() as Hex))
   expect(out[0]!.args.amount).toBe(available)
+  const withdrawBps = await arc.readContract({ address: campaign, abi: campaignAbi, functionName: 'withdrawFeeBps' })
+  expect(out[0]!.args.fee).toBe((available * BigInt(withdrawBps)) / 10_000n)
+  expect(out[0]!.args.net).toBe(available - out[0]!.args.fee)
+  expect(out[0]!.args.destDomain).toBe(NET.domain)
   expect((await arc.readContract({ address: campaign, abi: campaignAbi, functionName: 'summary' })).available).toBe(0n)
 })
 
@@ -236,7 +258,13 @@ test('sends money out and signs out', async () => {
   await page.getByRole('region', { name: 'Your Fundit account' }).getByRole('button', { name: 'Send' }).click()
   const send = page.getByRole('region', { name: 'Send money out' })
   await expect(send.getByText(/^You have \d/)).toBeVisible({ timeout: 30_000 })
-  await send.getByRole('textbox', { name: 'Amount' }).fill(SEND_OUT)
+  // Max keeps back exactly the account's gas reserve.
+  const held = await usdcBalance(wallet.address)
+  const field = send.getByRole('textbox', { name: 'Amount' })
+  await send.getByRole('button', { name: 'Max' }).click()
+  await expect(field).not.toHaveValue('')
+  expect(held - parseUnits(await field.inputValue(), 6)).toBe(EOA_GAS_RESERVE)
+  await field.fill(SEND_OUT)
   await send.getByLabel('Recipient').fill(funder)
   const sentBefore = wallet.sent.length
   await send.getByRole('button', { name: 'Send', exact: true }).click()
