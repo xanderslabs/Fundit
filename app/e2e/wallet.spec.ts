@@ -1,12 +1,13 @@
 import { expect, type Page, test } from '@playwright/test'
-import { type Address, erc20Abi, formatUnits, getAddress, parseEventLogs, parseUnits } from 'viem'
+import { type Address, erc20Abi, formatUnits, getAddress, type Hex, pad, parseEventLogs, parseUnits } from 'viem'
 import { campaignAbi } from '../src/abi/campaign'
 import { MULTICALL3_FROM } from '../src/config'
+import { formatAmount } from '../src/lib/format'
 import { arc, checkChain, checkEnv, fundFromFunder, funderAddress, logTx, NET, txUrl, usdcBalance } from './arc'
 import { installTestWallet, loadWalletKey, type TestWallet, WALLET_NAME } from './wallet'
 
-// Wallet sign-in end to end, with no passkey: a test wallet (the persistent e2e key in this Node process, announced to
-// the page through EIP-6963) signs in, starts a Fundit, gives to it and sends money out. It runs on localhost
+// Wallet sign-in end to end: a test wallet (the persistent e2e key in this Node process, announced to
+// the page through EIP-6963) signs in, starts a Fundit, gives to it anonymously with a message, withdraws, checks My page and sends money out. It runs on localhost
 // before a deploy as well as on fundit.fun. The wallet (app/.env.testnet.wallet, hidden in testCreators) is topped up to 0.1 USDC and
 // what is left goes back to the funder in afterAll, even when a step fails.
 test.describe.configure({ mode: 'serial' })
@@ -14,6 +15,7 @@ test.describe.configure({ mode: 'serial' })
 const FUNDING = parseUnits('0.1', 6)
 const GIFT = '0.01'
 const SEND_OUT = '0.01'
+const MESSAGE = 'Good luck from the e2e run'
 const TITLE = `E2E wallet fund ${new Date().toISOString().slice(0, 19)}`
 
 let page: Page
@@ -143,6 +145,8 @@ test('gives to it: one transaction to Multicall3From', async () => {
   const give = page.getByRole('region', { name: 'Give' })
   await give.getByRole('textbox', { name: 'Amount' }).fill(GIFT)
   await expect(give.getByRole('group', { name: 'Tip Fundit (optional)' }).getByRole('radio', { name: '0%', exact: true })).toBeChecked()
+  await give.getByLabel('Message (optional)').fill(MESSAGE)
+  await give.getByRole('switch', { name: 'Hide my name' }).check()
   const sentBefore = wallet.sent.length
   await give.getByRole('button', { name: 'Give', exact: true }).click()
   const done = give.getByText('Thank you. Your donation went through.')
@@ -163,12 +167,72 @@ test('gives to it: one transaction to Multicall3From', async () => {
   expect(receipt.status).toBe('success')
   const summary = await arc.readContract({ address: campaign, abi: campaignAbi, functionName: 'summary' })
   expect(summary.raised).toBe(parseUnits(GIFT, 6))
+
+  // The activity hides the name and the marker. On chain the gift is public: the event names the wallet and the message carries the marker.
+  const activity = page.getByRole('region', { name: 'Activity on this Fundit' })
+  await expect(activity.getByRole('listitem').first()).toContainText('Anonymous gave 0.01 USDC', { timeout: 30_000 })
+  await expect(activity.getByText(MESSAGE, { exact: true })).toBeVisible()
+  await expect(activity.getByText(/\[anon\]/)).toHaveCount(0)
+  const events = parseEventLogs({ abi: campaignAbi, eventName: 'Donated', logs: receipt.logs })
+  expect(events).toHaveLength(1)
+  expect(getAddress(events[0]!.args.donor)).toBe(wallet.address)
+  expect(events[0]!.args.message).toBe(`[anon]${MESSAGE}`)
+})
+
+test('withdraws on Arc from Manage', async () => {
+  step = 'withdraw'
+  await page.getByRole('link', { name: 'Manage this Fundit' }).click()
+  await expect(page).toHaveURL(new RegExp(`/manage/${campaign}$`))
+  const available = (await arc.readContract({ address: campaign, abi: campaignAbi, functionName: 'summary' })).available
+  const withdraw = page.getByRole('region', { name: 'Withdraw' })
+  await expect(withdraw.getByText(`Available: ${formatAmount(available, 'USDC')}`)).toBeVisible()
+  await withdraw.getByRole('button', { name: 'Max' }).click()
+  // The recipient defaults to the signed-in wallet, on Arc.
+  await expect(withdraw.getByLabel('Recipient')).toHaveValue(new RegExp(wallet.address, 'i'))
+  const sentBefore = wallet.sent.length
+  await withdraw.getByRole('button', { name: 'Withdraw', exact: true }).click()
+  const done = withdraw.getByText('Your withdrawal went through.')
+  const failed = withdraw.locator('.status-error')
+  await expect(done.or(failed).first()).toBeVisible({ timeout: 90_000 })
+  if (await failed.count()) throw new Error(`The page shows an error: ${await failed.first().innerText()}`)
+  expect(wallet.sent.length - sentBefore).toBe(1)
+  const { hash } = wallet.sent.at(-1)!
+  logTx('Withdraw on Arc', hash)
+  const receipt = await arc.getTransactionReceipt({ hash })
+  expect(receipt.status).toBe('success')
+  const out = parseEventLogs({ abi: campaignAbi, eventName: 'Withdrawn', logs: receipt.logs })
+  expect(out).toHaveLength(1)
+  // Arc payouts name the recipient as a left-padded bytes32.
+  expect(out[0]!.args.recipient).toBe(pad(wallet.address.toLowerCase() as Hex))
+  expect(out[0]!.args.amount).toBe(available)
+  expect((await arc.readContract({ address: campaign, abi: campaignAbi, functionName: 'summary' })).available).toBe(0n)
+})
+
+test('My page lists the Fundit and the gift, and Add money shows only the address', async () => {
+  step = 'my page'
+  await page.getByRole('banner').getByRole('button', { name: new RegExp(wallet.address.slice(0, 6)) }).click()
+  await page.getByRole('menuitem', { name: 'My page' }).click()
+  await expect(page).toHaveURL(/\/me$/)
+  const fundits = page.getByRole('tabpanel', { name: 'Your Fundits' })
+  await expect(fundits.getByRole('link', { name: `Manage ${TITLE}` })).toHaveAttribute('href', `/manage/${campaign}`)
+  await page.getByRole('tab', { name: 'Your gifts' }).click()
+  const gifts = page.getByRole('tabpanel', { name: 'Your gifts' })
+  const row = gifts.getByRole('listitem').filter({ hasText: TITLE })
+  await expect(row).toContainText(`You gave ${formatAmount(parseUnits(GIFT, 6), 'USDC')} to ${TITLE}`, { timeout: 30_000 })
+  await expect(row.getByText('Given with name hidden', { exact: true })).toBeVisible()
+  await expect(row.getByText(MESSAGE, { exact: true })).toBeVisible()
+
+  await page.getByRole('region', { name: 'Your Fundit account' }).getByRole('button', { name: 'Add money' }).click()
+  const panel = page.getByRole('region', { name: 'Add money' })
+  await expect(panel.getByText('Card and bank coming soon.')).toBeVisible()
+  await expect(panel.getByRole('tab')).toHaveCount(0)
+  const shown = /0x[0-9a-fA-F]{40}/.exec(await panel.innerText())?.[0]
+  expect(shown && getAddress(shown)).toBe(wallet.address)
 })
 
 test('sends money out and signs out', async () => {
   step = 'send'
-  await page.getByRole('banner').getByRole('button', { name: new RegExp(wallet.address.slice(0, 6)) }).click()
-  await page.getByRole('menuitem', { name: 'My page' }).click()
+  await expect(page).toHaveURL(/\/me/)
   await page.getByRole('region', { name: 'Your Fundit account' }).getByRole('button', { name: 'Send' }).click()
   const send = page.getByRole('region', { name: 'Send money out' })
   await expect(send.getByText(/^You have \d/)).toBeVisible({ timeout: 30_000 })
