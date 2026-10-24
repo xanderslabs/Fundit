@@ -114,12 +114,6 @@
   outline-offset: 2px;
 }
 
-.dash-recovery:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-  border-radius: var(--radius-lg);
-}
-
 /* Tab contents */
 .dash-tab {
   display: flex;
@@ -195,13 +189,6 @@
 
 .dash-account-row .bridge-tracker {
   width: 100%;
-}
-
-.dash-inline {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3);
 }
 
 .dash-signout {

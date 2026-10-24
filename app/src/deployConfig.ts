@@ -33,7 +33,6 @@ export type BuildEnv = {
   PROD: boolean
   VITE_ARC_NETWORK?: string
   VITE_ALLOW_TESTNET_BUILD?: string
-  VITE_CIRCLE_CLIENT_KEY?: string
   VITE_ARC_RPC_URL?: string
   VITE_MAINNET_RPC_URL?: string
   VITE_EMAIL_SIGNIN?: string
@@ -72,7 +71,7 @@ function hostLabels(url: string): string[] {
 }
 
 // Production build checks, run by vite.config.ts with the text of public/_headers. A site that fails one of
-// these builds fine but cannot work: a passkey sign-in with no client key, or an RPC the browser blocks.
+// these builds fine but cannot work: email sign-in with no App ID, or an RPC the browser blocks.
 // The default RPCs are not set here; config.test.ts checks them against the same connect-src.
 //
 // A production build refuses VITE_ARC_NETWORK=testnet unless VITE_ALLOW_TESTNET_BUILD=1 is also set, so a testnet
@@ -88,10 +87,6 @@ export function checkBuildEnv(env: BuildEnv, headers: string): void {
   if (!env.PROD) return
   if (network === 'testnet' && env.VITE_ALLOW_TESTNET_BUILD !== '1') {
     throw new Error('VITE_ARC_NETWORK=testnet is refused in a production build unless VITE_ALLOW_TESTNET_BUILD=1 is also set.')
-  }
-  // Passkey sign-in and every passkey account need the client key.
-  if (!env.VITE_CIRCLE_CLIENT_KEY) {
-    throw new Error('VITE_CIRCLE_CLIENT_KEY is required in a production build: passkey sign-in needs it')
   }
   // Continue with email shows only with VITE_EMAIL_SIGNIN=1, and then needs Circle's App ID and a Turnstile key.
   if (env.VITE_EMAIL_SIGNIN === '1') {

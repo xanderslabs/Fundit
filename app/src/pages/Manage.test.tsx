@@ -7,7 +7,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { campaignAbi } from '../abi/campaign'
 import { TOKENS } from '../config'
 import type { CampaignView } from '../lib/campaigns'
-import { NeedsNetworkFee } from '../lib/errors'
 import type { Call, Sender, TxResult } from '../lib/sender'
 import { Manage } from './Manage'
 
@@ -139,7 +138,7 @@ describe('Manage', () => {
   // A wallet connected for Add money is never a way to manage. Only the organiser's Fundit account is.
   it('sends a Fundit account that is not the organiser to the campaign page', async () => {
     state.view = view()
-    fakeSender('passkey', STRANGER)
+    fakeSender('email', STRANGER)
     renderPage()
     expect(await screen.findByText('Campaign page')).toBeTruthy()
   })
@@ -173,16 +172,16 @@ describe('Manage', () => {
     expect(decode(calls[0]!.data).args).toEqual([50_000000n, 26, pad(CREATOR, { size: 32 }), 0n, 0, '0x'])
   })
 
-  // A withdrawal moves no USDC out of the account but pays the prefund. The sender's refusal shows plainly.
+  // A withdrawal moves no USDC out of the account but pays the network fee. The sender's refusal shows plainly.
   it("shows the sender's network fee refusal on a withdrawal, with an Add money link", async () => {
     state.view = view()
-    const send = fakeSender('passkey')
-    send.mockRejectedValueOnce(new NeedsNetworkFee(250_000n))
+    const send = fakeSender('email')
+    send.mockRejectedValueOnce(new Error('insufficient funds for gas * price + value'))
     renderPage()
     const user = userEvent.setup()
     await user.type(screen.getByLabelText('Amount'), '50')
     await user.click(button('Withdraw'))
-    expect(await screen.findByText(/Your Fundit account needs at least 0.25 USDC for the network fee\. Add money and try again\./)).toBeTruthy()
+    expect(await screen.findByText(/Your Fundit account does not have enough USDC for the network fee\. Add money and try again\./)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/me?add=1')
     expect((send.mock.calls[0] as unknown[])[1]).toMatchObject({ label: 'Withdraw' })
   })
@@ -218,21 +217,8 @@ describe('Manage', () => {
     expect(button('Withdraw').disabled).toBe(true)
   })
 
-  // A passkey account is a contract at an address on Arc. Nothing promises the same address exists on Base.
-  it('warns a passkey sender who pays out to another chain', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('[]', { status: 200 })))
-    state.view = view()
-    fakeSender('passkey')
-    renderPage()
-    const warning = 'Your Fundit account may not exist on that chain. Send to an address you control there.'
-    expect(screen.queryByText(warning)).toBeNull()
-    await screen.findByRole('option', { name: 'Base' })
-    await userEvent.setup().selectOptions(screen.getByLabelText('Send to'), 'Base')
-    expect(screen.getByText(warning)).toBeTruthy()
-    expect(screen.getByText('Cross-chain payouts are new. Try a small amount first.')).toBeTruthy()
-  })
-
-  it('does not warn an ordinary wallet about Base', async () => {
+  // Email and wallet accounts are plain addresses that exist on every chain, so there is no account warning.
+  it('shows only the cross-chain note when paying out to Base', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('[]', { status: 200 })))
     state.view = view()
     fakeSender('wallet')
@@ -240,6 +226,7 @@ describe('Manage', () => {
     await screen.findByRole('option', { name: 'Base' })
     await userEvent.setup().selectOptions(screen.getByLabelText('Send to'), 'Base')
     expect(screen.queryByText(/Fundit account may not exist/)).toBeNull()
+    expect(screen.getByText('Cross-chain payouts are new. Try a small amount first.')).toBeTruthy()
   })
 
   // Optimism's own name for its chain is OP Mainnet. Every chain label in the app uses it.
@@ -457,7 +444,7 @@ describe('Manage', () => {
     // Nothing to rescue means nothing to show, so organisers are not asked about a balance they do not have.
     it('is hidden when the Fundit holds none of the other token', async () => {
       state.view = view()
-      fakeSender('passkey')
+      fakeSender('email')
       renderPage()
       await waitFor(() => expect(reads.some((r) => r.functionName === 'balanceOf')).toBe(true))
       expect(rescue()).toBeNull()
@@ -467,7 +454,7 @@ describe('Manage', () => {
     it('shows EURC sent to a USDC Fundit, with the amount and symbol', async () => {
       state.view = view()
       state.stray = 100000n
-      fakeSender('passkey')
+      fakeSender('email')
       renderPage()
       expect(await screen.findByRole('heading', { name: 'Rescue tokens sent by mistake' })).toBeTruthy()
       const read = reads.find((r) => r.functionName === 'balanceOf')!
@@ -484,7 +471,7 @@ describe('Manage', () => {
     it('shows USDC sent to a EURC Fundit, with the amount and symbol', async () => {
       state.view = { ...view({ token: TOKENS.EURC.address }), symbol: 'EURC' }
       state.stray = 2_500000n
-      fakeSender('passkey')
+      fakeSender('email')
       renderPage()
       expect(await screen.findByText(/^Someone sent 2.50 USDC to this Fundit\. It only accepts EURC,/)).toBeTruthy()
       expect(reads.find((r) => r.functionName === 'balanceOf')!.address).toBe(TOKENS.USDC.address)
@@ -495,7 +482,7 @@ describe('Manage', () => {
     it('sends sweep(other token, recipient), to the organiser by default', async () => {
       state.view = view()
       state.stray = 100000n
-      const send = fakeSender('passkey')
+      const send = fakeSender('email')
       renderPage()
       const user = userEvent.setup()
       await screen.findByRole('heading', { name: 'Rescue tokens sent by mistake' })
@@ -509,7 +496,7 @@ describe('Manage', () => {
 
       // Another recipient is sent as typed.
       cleanup()
-      const send2 = fakeSender('passkey')
+      const send2 = fakeSender('email')
       renderPage()
       await screen.findByRole('heading', { name: 'Rescue tokens sent by mistake' })
       await user.clear(sendTo())
@@ -523,7 +510,7 @@ describe('Manage', () => {
     it('refuses a bad, mistyped or zero recipient', async () => {
       state.view = view()
       state.stray = 100000n
-      const send = fakeSender('passkey')
+      const send = fakeSender('email')
       renderPage()
       const user = userEvent.setup()
       await screen.findByRole('heading', { name: 'Rescue tokens sent by mistake' })
@@ -549,7 +536,7 @@ describe('Manage', () => {
     it('says what was sent and reads the balance again after success', async () => {
       state.view = view()
       state.stray = 100000n
-      fakeSender('passkey')
+      fakeSender('email')
       renderPage()
       const user = userEvent.setup()
       await screen.findByRole('heading', { name: 'Rescue tokens sent by mistake' })
@@ -567,12 +554,12 @@ describe('Manage', () => {
     it("shows the sender's network fee refusal on a rescue", async () => {
       state.view = view()
       state.stray = 100000n
-      const send = fakeSender('passkey')
-      send.mockRejectedValueOnce(new NeedsNetworkFee(250_000n))
+      const send = fakeSender('email')
+      send.mockRejectedValueOnce(new Error('insufficient funds for gas * price + value'))
       renderPage()
       await screen.findByRole('heading', { name: 'Rescue tokens sent by mistake' })
       await userEvent.setup().click(button('Rescue 0.10 EURC'))
-      expect(await screen.findByText(/Your Fundit account needs at least 0.25 USDC for the network fee\./)).toBeTruthy()
+      expect(await screen.findByText(/Your Fundit account does not have enough USDC for the network fee\./)).toBeTruthy()
     })
   })
 })

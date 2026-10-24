@@ -12,8 +12,6 @@ import { Privacy } from './pages/Privacy'
 import { Profile } from './pages/Profile'
 import { Terms } from './pages/Terms'
 
-// Loaded on demand: most visits never open it.
-const Recover = lazy(() => import('./pages/Recover').then((m) => ({ default: m.Recover })))
 // Development only. A production build replaces import.meta.env.DEV with false, so this import and the route are
 // dropped and the style guide is not in the bundle.
 const StyleGuide = import.meta.env.DEV ? lazy(() => import('./pages/StyleGuide').then((m) => ({ default: m.StyleGuide }))) : null
@@ -27,16 +25,6 @@ export function App() {
         <Route path="c/:address" element={<CampaignPage />} />
         <Route path="create" element={<Create />} />
         <Route path="manage/:address" element={<Manage />} />
-        <Route
-          path="recover"
-          element={
-            <ErrorBoundary>
-              <Suspense fallback={<p className="main-loading">Loading...</p>}>
-                <Recover />
-              </Suspense>
-            </ErrorBoundary>
-          }
-        />
         <Route path="me" element={<Profile />} />
         <Route path="terms" element={<Terms />} />
         <Route path="privacy" element={<Privacy />} />

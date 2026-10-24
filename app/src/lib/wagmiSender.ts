@@ -6,8 +6,8 @@ import { arcClient } from './clients'
 import { isUserRejection, WrongWalletAccount } from './errors'
 import { arcReceipts, type Sender, waitForResult, withGasMargin } from './sender'
 
-// The sender for a connected wallet. It lives apart from sender.ts so the passkey path, which imports
-// sender.ts at start, never loads wagmi. Several calls go out as one transaction through Multicall3From.
+// The sender for a connected wallet. It lives apart from sender.ts so the app start, which imports sender.ts,
+// never loads wagmi. Several calls go out as one transaction through Multicall3From.
 export function wagmiSender(config: Config, address: Address): Sender {
   return {
     kind: 'wallet',

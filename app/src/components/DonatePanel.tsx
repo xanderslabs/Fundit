@@ -2,8 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import type { Hex } from 'viem'
-import { EXPLORER_URL } from '../config'
-import { RESERVE_KEY, useGasReserve } from '../hooks/useGasReserve'
+import { EOA_GAS_RESERVE, EXPLORER_URL } from '../config'
 import { useSender } from '../hooks/useSender'
 import {
   clearPendingArc,
@@ -19,14 +18,13 @@ import { arcClient } from '../lib/clients'
 import { BALANCES_KEY, balancesKey, fetchAccountBalances } from '../lib/deposit'
 import { buildDonateCalls, donationBreakdown, fetchDonorFunds } from '../lib/donate'
 import { confirmLine } from '../lib/account'
-import { CANCELLED, CHECK_FAILED, explainError, needsAddMoney } from '../lib/errors'
+import { addAtLeast, CANCELLED, CHECK_FAILED, explainError, needsAddMoney } from '../lib/errors'
 import { bpsToPercent, formatAmount, formatExact, parseAmount } from '../lib/format'
-import { addAtLeast } from '../lib/passkey'
 import type { TxResult } from '../lib/sender'
 import { ADD_MONEY_PATH } from '../lib/urls'
 import { byteLength } from '../lib/validate'
 import { SignInButton } from './AccountMenu'
-import { AddMoneyLink, PASSKEY_LOGIN_TO_CHECK, PASSKEY_PROCESSING, recheckResult } from './TxStatus'
+import { AddMoneyLink, recheckResult } from './TxStatus'
 import { AmountInput, Button, Card, Field, StatusBox } from './ui'
 import './DonatePanel.css'
 
@@ -43,15 +41,14 @@ type Phase =
   | { kind: 'success'; hash: Hex }
   // approve is true when the transaction that timed out is the approval, not the donation.
   // note explains a re-check that failed to answer. The outcome is still unknown, so this phase still blocks.
-  // userop marks a passkey user operation hash: no explorer link, and only the passkey bundler can check it.
-  | { kind: 'timeout'; hash: Hex; approve: boolean; userop?: boolean; note?: string }
+  | { kind: 'timeout'; hash: Hex; approve: boolean; note?: string }
   // The approval is mined but the donation was not sent (cancelled or failed).
   | { kind: 'partial'; error?: string }
   | { kind: 'error'; message: string; hash?: Hex; addMoney?: boolean }
 
 function arcTimeout(saved: PendingArc): Phase {
   const note = Date.now() - saved.createdAt > DAY_MS ? 'This was more than a day ago. Check the explorer before giving again.' : undefined
-  return { kind: 'timeout', hash: saved.hash, approve: saved.approve, userop: saved.hashKind === 'userop', note }
+  return { kind: 'timeout', hash: saved.hash, approve: saved.approve, note }
 }
 
 function ExplorerLink({ hash }: { hash: Hex }) {
@@ -95,9 +92,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
 
   // Keep the unconfirmed transaction across reloads. Forget it once an outcome is known or the donor starts over.
   useEffect(() => {
-    if (phase.kind === 'timeout') {
-      savePendingArc({ campaign, hash: phase.hash, approve: phase.approve, ...(phase.userop ? { hashKind: 'userop' as const } : {}) })
-    }
+    if (phase.kind === 'timeout') savePendingArc({ campaign, hash: phase.hash, approve: phase.approve })
     else if (phase.kind !== 'sending' && phase.kind !== 'checking') clearPendingArc(campaign)
   }, [phase, campaign])
 
@@ -117,14 +112,8 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   const limit = messageLimit(anonymous)
   const messageTooLong = messageBytes > limit
   const balance = funds.data?.balance
-  // What the account keeps for the network fee: a passkeyReserve estimate for a passkey, EOA_GAS_RESERVE for an
-  // email or wallet account. Only a USDC balance pays it. Estimated as a gift of the same shape: an approve and a
-  // donate of 1 unit.
-  const reserve = useGasReserve(sender, {
-    key: `donate-${campaign.toLowerCase()}`,
-    calls: buildDonateCalls({ campaign, token, amount: 1n, tip: 0n, message: '', allowance: 0n }),
-  }, amountText !== '')
-  const gasBuffer = sender !== null && symbol === 'USDC' ? (reserve ?? 0n) : 0n
+  // What the account keeps for the network fee. Only a USDC balance pays it.
+  const gasBuffer = sender !== null && symbol === 'USDC' ? EOA_GAS_RESERVE : 0n
   // An EURC gift from any account still pays the network fee in USDC, so it needs the buffer in USDC.
   const needsGasUsdc = sender !== null && symbol !== 'USDC'
   const gasFunds = useQuery({
@@ -133,7 +122,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
     enabled: needsGasUsdc && !closed,
     staleTime: 15_000,
   })
-  const noGas = needsGasUsdc && gasFunds.data !== undefined && reserve !== undefined && gasFunds.data.usdc < reserve
+  const noGas = needsGasUsdc && gasFunds.data !== undefined && gasFunds.data.usdc < EOA_GAS_RESERVE
   const overBalance = breakdown !== null && balance !== undefined && breakdown.total + gasBuffer > balance
   const notEnough = (have: bigint, keep = gasBuffer) =>
     keep > 0n
@@ -150,7 +139,6 @@ export function DonatePanel({ view }: { view: CampaignView }) {
     amount !== null &&
     !messageTooLong &&
     balance !== undefined &&
-    (sender.kind !== 'passkey' || reserve !== undefined) &&
     !overBalance &&
     (!needsGasUsdc || (gasFunds.data !== undefined && !noGas)) &&
     !locked
@@ -160,7 +148,6 @@ export function DonatePanel({ view }: { view: CampaignView }) {
     void queryClient.invalidateQueries({ queryKey: ['activity', campaign.toLowerCase()] })
     void queryClient.invalidateQueries({ queryKey: ['donor-funds'] })
     void queryClient.invalidateQueries({ queryKey: [BALANCES_KEY] })
-    void queryClient.invalidateQueries({ queryKey: [RESERVE_KEY] })
   }
 
   function handle(res: TxResult, hadApprove: boolean) {
@@ -173,11 +160,9 @@ export function DonatePanel({ view }: { view: CampaignView }) {
       return
     }
     if (res.status === 'timeout') {
-      // A user operation (passkey) and a wallet or email batch (one Multicall3From transaction) run the approval
-      // and the donation together, so their timeout is the donation's. completed is always 0 there.
-      const userop = res.hashKind === 'userop'
-      const together = userop || sender?.kind !== 'passkey'
-      setPhase({ kind: 'timeout', hash: res.hash, approve: !together && hadApprove && res.completed === 0, userop })
+      // A wallet or email batch (one Multicall3From transaction) runs the approval and the donation together, so
+      // its timeout is the donation's.
+      setPhase({ kind: 'timeout', hash: res.hash, approve: false })
       return
     }
     if (hadApprove && res.completed >= 1) {
@@ -211,14 +196,10 @@ export function DonatePanel({ view }: { view: CampaignView }) {
       const donateIndex = calls.length - 1
       const res = await sender.send(calls, {
         label: 'Donate',
-        // A passkey sender refuses unless the account also holds the network fee for these calls on top.
-        usdcOut: symbol === 'USDC' ? amount + tip : 0n,
         // Saved as soon as the donation has a hash, so a reload before the receipt still blocks a second one.
         // The approval alone moves nothing to the campaign, so its hash is not saved.
         onHash: (hash, index) => {
-          if (index === donateIndex) {
-            savePendingArc({ campaign, hash, approve: false, ...(sender.kind === 'passkey' ? { hashKind: 'userop' as const } : {}) })
-          }
+          if (index === donateIndex) savePendingArc({ campaign, hash, approve: false })
         },
       })
       handle(res, calls.length > 1)
@@ -235,12 +216,12 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   }
 
   // Checks the same transaction again. It never sends a new one, which could donate twice.
-  async function checkAgain(hash: Hex, approve: boolean, userop: boolean) {
+  async function checkAgain(hash: Hex, approve: boolean) {
     if (inFlight.current) return
     inFlight.current = true
     setPhase({ kind: 'checking' })
     try {
-      const res = await recheckResult(sender, hash, userop)
+      const res = await recheckResult(hash)
       if (!approve) return handle(res, false)
       switch (res.status) {
         case 'success':
@@ -248,7 +229,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
           setPhase({ kind: 'partial' })
           return
         case 'timeout':
-          setPhase({ kind: 'timeout', hash, approve: true, userop })
+          setPhase({ kind: 'timeout', hash, approve: true })
           return
         case 'reverted':
           setPhase({ kind: 'error', message: res.error, hash })
@@ -260,7 +241,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
     } catch (err) {
       // The check itself failed, so the transaction is still unknown. Stay blocked rather than invite a second send.
       console.error(err)
-      setPhase({ kind: 'timeout', hash, approve, userop, note: CHECK_FAILED })
+      setPhase({ kind: 'timeout', hash, approve, note: CHECK_FAILED })
     } finally {
       inFlight.current = false
     }
@@ -318,9 +299,9 @@ export function DonatePanel({ view }: { view: CampaignView }) {
                 {notEnough(balance)} <Link to={ADD_MONEY_PATH}>Add money</Link>
               </p>
             )}
-            {noGas && reserve !== undefined && (
+            {noGas && (
               <p id="donate-gas-error" className="give-error" role="alert">
-                {addAtLeast(reserve)} <Link to={ADD_MONEY_PATH}>Add money</Link>
+                {addAtLeast(EOA_GAS_RESERVE)} <Link to={ADD_MONEY_PATH}>Add money</Link>
               </p>
             )}
             {/* An amount error already states the balance, so the plain balance line would repeat it. */}
@@ -385,19 +366,12 @@ export function DonatePanel({ view }: { view: CampaignView }) {
               <dt>Total you pay</dt>
               <dd>{formatExact(breakdown.total, symbol)}</dd>
             </div>
-            {/* Paid in USDC from the same account, on top of the total. The reserve is the most it can take. */}
-            {sender?.kind === 'passkey' && (
-              <div>
-                <dt>Network fee</dt>
-                <dd>{reserve === undefined ? 'estimating' : `up to ${formatExact(reserve, 'USDC')}`}</dd>
-              </div>
-            )}
           </dl>
         )}
 
         {/* status-error stays on the error boxes: the e2e suite finds a failed send by it. */}
         <div className="give-status" aria-live="polite">
-          {phase.kind === 'sending' && <p>{confirmLine(sender?.kind ?? 'passkey')}, then wait for the network. This can take a few seconds.</p>}
+          {phase.kind === 'sending' && sender && <p>{confirmLine(sender.kind)}, then wait for the network. This can take a few seconds.</p>}
           {phase.kind === 'checking' && <p>Checking the transaction again...</p>}
           {phase.kind === 'success' && (
             <StatusBox tone="success">
@@ -415,15 +389,14 @@ export function DonatePanel({ view }: { view: CampaignView }) {
                 <strong>Your {phase.approve ? 'approval' : 'donation'} is not confirmed yet.</strong> It may still go
                 through. Check it before you try again, so you do not give twice.
               </p>
-              <p>{phase.userop ? PASSKEY_PROCESSING : <ExplorerLink hash={phase.hash} />}</p>
+              <p>
+                <ExplorerLink hash={phase.hash} />
+              </p>
               {phase.note && <p className="give-error">{phase.note}</p>}
-              {phase.userop && !sender?.recheck && <p className="give-error">{PASSKEY_LOGIN_TO_CHECK}</p>}
               <div className="give-actions">
-                {(!phase.userop || sender?.recheck) && (
-                  <Button variant="secondary" onClick={() => checkAgain(phase.hash, phase.approve, phase.userop === true)}>
-                    Check again
-                  </Button>
-                )}
+                <Button variant="secondary" onClick={() => checkAgain(phase.hash, phase.approve)}>
+                  Check again
+                </Button>
                 <Button variant="secondary" onClick={startOver}>
                   Start over
                 </Button>

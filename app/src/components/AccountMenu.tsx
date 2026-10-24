@@ -1,14 +1,11 @@
 import { type KeyboardEvent, type Ref, type RefObject, useCallback, useEffect, useId, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link } from 'react-router'
 import type { Address } from 'viem'
 import { type AccountKind, useAccount } from '../lib/account'
 import { signOutEmail } from '../lib/circleEmail'
 import { clearEmailSession, readEmailSession } from '../lib/emailAccount'
-import { dismissBackupPrompt, logoutPasskey, readPasskeyUsername, type StoredPasskey, useBackupPrompt, usePasskeySession } from '../lib/passkey'
-import { ADD_MONEY_PATH } from '../lib/urls'
 import { clearWalletSession } from '../lib/walletAccount'
 import { disconnectWallet } from '../lib/walletSession'
-import { AddBackupPasskey, confirmLeave } from './AddBackupPasskey'
 import { Name } from './Name'
 import { SignInOptions } from './SignInOptions'
 import { Dialog } from './ui'
@@ -29,12 +26,12 @@ function useOutsideClose(open: boolean, root: RefObject<HTMLElement | null>, clo
 type SignInProps = {
   className?: string
   label?: string
-  // Runs after a sign-in with the kind of account that opened. The top bar sends a passkey user to add money.
+  // Runs after a sign-in with the kind of account that opened.
   onSignedIn?: (kind: AccountKind) => void
   buttonRef?: Ref<HTMLButtonElement>
 }
 
-// One dialog with every way to sign in: passkey first, then email (when on) and Connect a wallet.
+// One dialog with every way to sign in: email (when on) and Connect a wallet.
 export function SignInButton({ className = 'ui-btn ui-btn-primary', label = 'Sign in', onSignedIn, buttonRef }: SignInProps) {
   const [open, setOpen] = useState(false)
   const trigger = useRef<HTMLButtonElement | null>(null)
@@ -60,7 +57,6 @@ export function SignInButton({ className = 'ui-btn ui-btn-primary', label = 'Sig
     else if (buttonRef) buttonRef.current = el
   }
 
-  // Every entry point opens on the Sign in view. Create your account is one switch away inside the dialog.
   return (
     <>
       <button ref={setTrigger} type="button" className={className} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
@@ -69,7 +65,6 @@ export function SignInButton({ className = 'ui-btn ui-btn-primary', label = 'Sig
       <Dialog open={open} size="sm" labelledBy={headingId} onClose={dismiss}>
         <SignInOptions
           headingId={headingId}
-          onLeave={() => setOpen(false)}
           onSignedIn={(kind) => {
             setOpen(false)
             onSignedIn?.(kind)
@@ -77,28 +72,6 @@ export function SignInButton({ className = 'ui-btn ui-btn-primary', label = 'Sig
         />
       </Dialog>
     </>
-  )
-}
-
-// Right after sign-up: the backup prompt as a dialog over whatever page the person is on.
-// Closing while the words are on screen asks first. Leaving drops the words.
-function BackupDialog({ stored }: { stored: StoredPasskey }) {
-  const headingId = useId()
-  const guard = useRef<string | null>(null)
-  const onGuardChange = useCallback((message: string | null) => {
-    guard.current = message
-  }, [])
-  return (
-    <Dialog open size="md" labelledBy={headingId} onClose={dismissBackupPrompt} canClose={() => !guard.current || window.confirm(guard.current)}>
-      <AddBackupPasskey
-        stored={stored}
-        headingId={headingId}
-        inDialog
-        onLater={dismissBackupPrompt}
-        onDone={dismissBackupPrompt}
-        onGuardChange={onGuardChange}
-      />
-    </Dialog>
   )
 }
 
@@ -111,10 +84,6 @@ const ChevronDown = () => (
 // The top bar control: Sign in when signed out, else the account pill and its menu.
 export function AccountControl() {
   const account = useAccount()
-  const passkey = usePasskeySession()
-  const stored = account?.kind === 'passkey' ? passkey : null
-  const backupPrompt = useBackupPrompt(stored)
-  const navigate = useNavigate()
   const signIn = useRef<HTMLButtonElement>(null)
   const [focusSignIn, setFocusSignIn] = useState(false)
 
@@ -127,44 +96,27 @@ export function AccountControl() {
   }, [focusSignIn, account])
 
   if (!account) {
-    return (
-      <SignInButton
-        className="ui-btn ui-btn-primary"
-        buttonRef={signIn}
-        onSignedIn={(kind) => {
-          if (kind === 'passkey') void navigate(ADD_MONEY_PATH)
-        }}
-      />
-    )
+    return <SignInButton className="ui-btn ui-btn-primary" buttonRef={signIn} />
   }
-  return (
-    <>
-      <AccountMenu address={account.address} kind={account.kind} onSignedOut={() => setFocusSignIn(true)} />
-      {backupPrompt && stored && <BackupDialog stored={stored} />}
-    </>
-  )
+  return <AccountMenu address={account.address} kind={account.kind} onSignedOut={() => setFocusSignIn(true)} />
 }
 
-// Sign out for the account menu and My page. Recovery words on screen would be lost, so it asks first like any
-// other way out. It clears all three account stores, and a wallet sign-in's connection goes too; with none connected that
-// does nothing. An email account's Worker cookies are cleared in the background. True when the person signed out.
-export function useSignOut(): () => boolean {
+// Sign out for the account menu and My page. It clears both account stores, and a wallet sign-in's connection goes
+// too; with none connected that does nothing. An email account's Worker cookies are cleared in the background.
+export function useSignOut(): () => void {
   return useCallback(() => {
-    if (!confirmLeave()) return false
     disconnectWallet()
     clearWalletSession()
     // Reads the email store before it is cleared below, and never throws.
     void signOutEmail()
     clearEmailSession()
-    logoutPasskey()
-    return true
   }, [])
 }
 
 function AccountMenu({ address, kind, onSignedOut }: { address: Address; kind: AccountKind; onSignedOut: () => void }) {
   const signOutNow = useSignOut()
-  // The passkey's username when this browser knows it, or the email address, else the name or short address.
-  const label = kind === 'passkey' ? readPasskeyUsername(address) : kind === 'email' ? (readEmailSession()?.email ?? null) : null
+  // The email address for an email account, else the name or short address.
+  const label = kind === 'email' ? (readEmailSession()?.email ?? null) : null
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   const button = useRef<HTMLButtonElement>(null)
@@ -213,7 +165,7 @@ function AccountMenu({ address, kind, onSignedOut }: { address: Address; kind: A
   }
 
   function signOut() {
-    if (!signOutNow()) return
+    signOutNow()
     setOpen(false)
     onSignedOut()
   }

@@ -19,7 +19,7 @@ const tokenMessengerAbi = parseAbi([
   'function depositForBurnWithHook(uint256 amount, uint32 destinationDomain, bytes32 mintRecipient, address burnToken, bytes32 destinationCaller, uint256 maxFee, uint32 minFinalityThreshold, bytes hookData)',
 ])
 
-// The calls that send money out of a Fundit account. They go in one user operation, so one passkey tap.
+// The calls that send money out of a Fundit account. They go in one transaction, so one confirmation.
 // On Arc it is a plain transfer. To another chain the account burns USDC through CCTP with the forward hook,
 // and Circle's forwarder mints amount minus the fee to the recipient there.
 export function buildAccountSendCalls(p: {

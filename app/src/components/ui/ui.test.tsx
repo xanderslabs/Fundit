@@ -213,39 +213,6 @@ describe('ui components', () => {
     expect(document.activeElement).toBe(opener)
   })
 
-  // The backup dialog asks before it closes while recovery words are on screen. If any way out skipped that
-  // question, a person could lose the words with no warning.
-  it('Dialog asks canClose before every way of closing', async () => {
-    let allow = false
-    const canClose = vi.fn(() => allow)
-    function Harness() {
-      const [open, setOpen] = useState(true)
-      return (
-        <Dialog open={open} onClose={() => setOpen(false)} title="Save your recovery key" canClose={canClose}>
-          <button type="button">Copy words</button>
-        </Dialog>
-      )
-    }
-    render(<Harness />)
-    const user = userEvent.setup()
-    const dialog = screen.getByRole('dialog', { name: 'Save your recovery key' })
-
-    await user.keyboard('{Escape}')
-    expect(screen.getByRole('dialog')).toBeTruthy()
-    // A click on the backdrop lands on the dialog element itself.
-    await user.click(dialog)
-    expect(screen.getByRole('dialog')).toBeTruthy()
-    dialog.dispatchEvent(new Event('cancel', { cancelable: true }))
-    expect(screen.getByRole('dialog')).toBeTruthy()
-    await user.click(screen.getByRole('button', { name: 'Close' }))
-    expect(screen.getByRole('dialog')).toBeTruthy()
-    expect(canClose).toHaveBeenCalledTimes(4)
-
-    allow = true
-    await user.click(screen.getByRole('button', { name: 'Close' }))
-    expect(screen.queryByRole('dialog')).toBeNull()
-  })
-
   // Sign-in and the backup prompt bring their own heading. The dialog must take its name from it, with no
   // second heading of its own.
   it('Dialog takes its name from a child heading with labelledBy', () => {
@@ -291,7 +258,7 @@ describe('ui components', () => {
     const title = parse(css('Dialog.css')).rules.find((r) => r.selector === '.ui-dialog-title')?.body
     expect(title).toMatch(/font-size\s*:\s*var\(--text-lg\)/)
     expect(title).toMatch(/line-height\s*:\s*var\(--text-lg-line\)/)
-    expect(readFileSync('src/components/PasskeyLogin.css', 'utf8')).not.toMatch(/passkey-title|h2/)
+    expect(readFileSync('src/components/SignInOptions.css', 'utf8')).not.toMatch(/h2/)
   })
 
   // A form error that appears while the person types must be read out, and a quiet one must not interrupt.

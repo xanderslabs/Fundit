@@ -46,17 +46,6 @@ export const FALLBACK = "That didn't work. Check your connection and try again."
 // A Check again that failed. Never "try again": the transaction it checks may still go through.
 export const CHECK_FAILED = 'We could not check it. Check again in a minute.'
 export const CANCELLED = "You cancelled the request. Try again when you're ready."
-export const USERNAME_TAKEN = "That username is taken. Pick another one, or sign in if it's yours."
-const NO_PASSKEY = "That passkey didn't open a Fundit account. Try another passkey, or create an account."
-const PASSKEY_NOT_SAVED = "Your browser didn't save a passkey. Try again, or use another browser or device."
-const PASSKEY_FAILED = "Your passkey didn't work. Try again, or use another browser or device."
-const NO_PASSKEY_SUPPORT = "This browser can't use passkeys. Open Fundit in an up-to-date browser such as Chrome, Safari or Firefox."
-const PASSKEY_EXISTS = 'This device already has a passkey for this account. Sign in with it instead.'
-const PASSKEY_WRONG_SITE = "Passkeys can't be used on this page address. Open Fundit at its usual address and try again."
-const SETUP_FAILED = "We couldn't finish setting up your account. Try again in a moment."
-const NONCE_CLASH = 'Another transaction from your account is still going through. Wait a moment and try again.'
-const EXPIRED = 'The request expired before it went out. Nothing was sent. Try again.'
-const BAD_SIGNATURE = "Your passkey's signature was not accepted. Sign out, sign in again and try again."
 const RATE_LIMITED = 'Too many requests right now. Wait a minute and try again.'
 const TIMED_OUT = 'The network took too long to answer. Try again in a moment.'
 const NETWORK_DOWN = "Fundit couldn't reach the network. Check your connection and try again."
@@ -121,21 +110,11 @@ function kitText(e: unknown): string | null {
 // A message written for the person, shown as it is.
 export class PlainError extends Error {}
 
-// NotAllowedError is what the browser throws when someone closes the passkey prompt.
 export function isUserRejection(e: unknown): boolean {
   return chain(e).some(
-    (x) =>
-      x instanceof UserRejectedRequestError ||
-      (x as { name?: unknown }).name === 'NotAllowedError' ||
-      (!isKitRpcError(x) && (x as { code?: unknown }).code === UserRejectedRequestError.code),
+    (x) => x instanceof UserRejectedRequestError || (!isKitRpcError(x) && (x as { code?: unknown }).code === UserRejectedRequestError.code),
   )
 }
-
-// Circle's rule for a passkey username: 5 to 50 characters, only letters, digits and _ @ . : + -. Its RPC
-// refuses any other name with error -32025, "The username is invalid. It should be 5 to 50 characters and
-// contain only alphanumeric and _@.:+- characters.", which viem shows as "An unknown RPC error occurred."
-export const USERNAME_PATTERN = /^[A-Za-z0-9_@.:+-]{5,50}$/
-export const USERNAME_RULE = 'Use 5 to 50 letters, numbers or _ @ . : + - with no spaces.'
 
 // The text of every link in the chain: message, details and viem's shortMessage.
 function texts(e: unknown): string[] {
@@ -145,18 +124,6 @@ function texts(e: unknown): string[] {
   })
 }
 
-// Matched on Circle's text, not on -32025 alone: that code is not known to mean only a bad username.
-export function isInvalidUsername(e: unknown): boolean {
-  return texts(e).some((t) => /username is invalid/i.test(t))
-}
-
-// A Fundit account pays its own gas, so the EntryPoint takes the prefund from its USDC first. The person sees the
-// real number (passkeySender works it out) and a way to add money.
-export class NeedsNetworkFee extends PlainError {
-  constructor(readonly reserve: bigint) {
-    super(`Your Fundit account needs at least ${formatAmount(reserve, 'USDC')} for the network fee. Add money and try again.`)
-  }
-}
 export const WRONG_ACCOUNT = 'Your wallet is on a different account. Switch back to <short address> in your wallet, or sign in again.'
 // A send from a wallet that now has another account selected. Nothing was sent.
 export class WrongWalletAccount extends PlainError {
@@ -166,15 +133,9 @@ export class WrongWalletAccount extends PlainError {
 }
 const NO_NETWORK_FEE = 'Your Fundit account does not have enough USDC for the network fee. Add money and try again.'
 
-// AA21 is the EntryPoint's "didn't pay prefund": the account could not cover the operation's gas.
-export function isPrefundError(e: unknown): boolean {
-  return texts(e).some((t) => /\bAA21\b|didn't pay prefund/i.test(t))
-}
-
-// Circle's bundler answered "Missing or invalid parameters" when a short account tried to create a Fundit on
-// Arc testnet. The text is not specific to gas, so callers check the balance before reading it that way.
-export function isMissingParams(e: unknown): boolean {
-  return texts(e).some((t) => /Missing or invalid parameters/i.test(t))
+// The line for an account that holds less USDC than it keeps back for the network fee.
+export function addAtLeast(reserve: bigint, what = 'It pays the network fee.'): string {
+  return `Add at least ${formatAmount(reserve, 'USDC')} to your Fundit account first. ${what}`
 }
 
 // An email or wallet account (a plain EOA) that cannot cover the gas, as viem or the RPC node words it.
@@ -184,7 +145,7 @@ function isInsufficientFunds(e: unknown): boolean {
 
 // True when the fix is to add money, so the page can link to Add money.
 export function needsAddMoney(e: unknown): boolean {
-  return chain(e).some((x) => x instanceof NeedsNetworkFee) || isPrefundError(e) || isInsufficientFunds(e)
+  return isInsufficientFunds(e)
 }
 
 function revertName(e: unknown): string | null {
@@ -225,29 +186,13 @@ function codes(e: unknown): unknown[] {
   })
 }
 
-// Circle's passkey RP and bundler, the browser's WebAuthn errors and the network, matched on the names, codes
-// and texts they send. Circle's RP answers -32024 for a taken username and -32025 for an invalid one, matched on
-// their text: neither code is known to mean only that, and this also runs on sends. Bundler codes
-// (ERC-4337): -32503 an expired operation, -32504 a throttled sender, -32507 a bad signature.
-function passkeyAndNetworkText(e: unknown): string | null {
+// Network errors, matched on the names, codes and texts the RPC and the browser send.
+function networkText(e: unknown): string | null {
   const n = names(e)
   const c = codes(e)
   const t = texts(e)
   const said = (re: RegExp) => t.some((x) => re.test(x))
-  if (said(/username is duplicated/i)) return USERNAME_TAKEN
-  if (isInvalidUsername(e)) return USERNAME_RULE
-  if (n.includes('InvalidStateError')) return PASSKEY_EXISTS
-  if (n.includes('SecurityError')) return PASSKEY_WRONG_SITE
-  if (n.includes('NotSupportedError') || said(/Credential Management API not supported/i)) return NO_PASSKEY_SUPPORT
-  if (said(/No credential available|Login verification failed|credential (was )?not found/i)) return NO_PASSKEY
-  if (said(/No credential created/i)) return PASSKEY_NOT_SAVED
-  // The SDK throws this on sign-up and on sign-in (a stored key it cannot read), so the text fits both.
-  if (said(/Credential creation failed/i)) return PASSKEY_FAILED
-  if (said(/Failed to register the (new WebAuthn credential|recovery address)/i)) return SETUP_FAILED
-  if (n.includes('InvalidAccountNonceError') || said(/\bAA25\b/)) return NONCE_CLASH
-  if (n.includes('UserOperationExpiredError') || c.includes(-32503) || said(/\bAA22\b/)) return EXPIRED
-  if (n.includes('SignatureCheckFailedError') || c.includes(-32507) || said(/\bAA24\b/)) return BAD_SIGNATURE
-  if (n.includes('LimitExceededRpcError') || c.includes(-32005) || c.includes(-32504) || c.includes(429) || said(/rate limit|too many requests/i))
+  if (n.includes('LimitExceededRpcError') || c.includes(-32005) || c.includes(429) || said(/rate limit|too many requests/i))
     return RATE_LIMITED
   if (n.includes('TimeoutError') || n.includes('AbortError') || said(/timed out|took too long/i)) return TIMED_OUT
   if (n.includes('HttpRequestError') || said(/Failed to fetch|NetworkError|Load failed|fetch failed/i)) return NETWORK_DOWN
@@ -259,12 +204,12 @@ export function explainError(e: unknown): string {
   if (e instanceof PlainError) return e.message
   // Every real failure is logged raw for support, whatever text the person gets. The page never shows it.
   console.error(e)
-  if (isPrefundError(e) || isInsufficientFunds(e)) return NO_NETWORK_FEE
-  return kitText(e) ?? revertText(e) ?? passkeyAndNetworkText(e) ?? FALLBACK
+  if (isInsufficientFunds(e)) return NO_NETWORK_FEE
+  return kitText(e) ?? revertText(e) ?? networkText(e) ?? FALLBACK
 }
 
 // For adding money from another chain, which can fail after the wallet already approved something. No text it
-// can return says "Nothing was sent" unless that is known (EXPIRED).
+// can return says "Nothing was sent".
 export function explainAfterApproval(e: unknown): string {
   return explainError(e)
 }

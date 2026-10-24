@@ -7,11 +7,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { campaignAbi } from '../abi/campaign'
 import { erc20Abi } from '../abi/erc20'
 import { TOKENS, type TokenSymbol } from '../config'
-import { NeedsNetworkFee } from '../lib/errors'
 import type { CampaignView } from '../lib/campaigns'
 import type { Call, Sender, SendOptions, TxResult } from '../lib/sender'
 import { DonatePanel } from './DonatePanel'
-import { PASSKEY_PROCESSING } from './TxStatus'
 
 const ME = '0x1111111111111111111111111111111111111111' as Address
 const CAMPAIGN = getAddress('0x00000000000000000000000000000000000000a1')
@@ -37,15 +35,6 @@ vi.mock('../lib/sender', async (importOriginal) => ({
 vi.mock('../wagmi', () => {
   throw new Error('DonatePanel loaded the wallet setup')
 })
-// What the Fundit account keeps for the network fee, as the form estimates it. The sender checks again.
-const reserve = vi.hoisted(() => ({ form: 300_000n }))
-const passkeyReserve = vi.hoisted(() =>
-  vi.fn(async (_address: unknown, _calls?: unknown) => reserve.form),
-)
-vi.mock('../lib/passkey', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../lib/passkey')>()),
-  passkeyReserve,
-}))
 vi.mock('../lib/clients', () => ({
   arcClient: {
     readContract: async (p: { address: Address; functionName: string; args: readonly unknown[] }) => {
@@ -82,16 +71,10 @@ function view(symbol: TokenSymbol, closed = false): CampaignView {
 
 const success: TxResult = { status: 'success', hash: HASH, receipt: { status: 'success' } as TransactionReceipt }
 
-// A Fundit account, the only sender useSender returns. Its re-check of a user operation goes through the same
-// planned answer as a transaction re-check. Results without hashKind stand for a transaction hash: the panel is
-// typed on Sender and still handles that shape.
-function passkeyShaped(send: Sender['send']): Sender {
-  return { kind: 'passkey', address: ME, send, recheck: () => recheck.next() }
-}
-
+// An email account, which sends every call list as one transaction like a wallet account.
 function fakeSender(...results: TxResult[]) {
   const send = vi.fn(async (_calls: Call[]) => results.shift() ?? success)
-  state.sender = passkeyShaped(send)
+  state.sender = { kind: 'email', address: ME, send }
   return send
 }
 
@@ -110,8 +93,6 @@ const donateButton = () => screen.getByRole('button', { name: 'Give' }) as HTMLB
 
 afterEach(() => {
   cleanup()
-  reserve.form = 300_000n
-  passkeyReserve.mockImplementation(async () => reserve.form)
   state.sender = null
   state.balance = 0n
   state.usdc = undefined
@@ -153,7 +134,7 @@ describe('DonatePanel', () => {
     const user = userEvent.setup()
     await user.type(screen.getByLabelText('Amount'), '100')
     await user.click(screen.getByLabelText('5%'))
-    expect(await screen.findByText(/Your balance is 104.00 USDC\. Keep about 0.30 USDC more/)).toBeTruthy()
+    expect(await screen.findByText(/Your balance is 104.00 USDC\. Keep about 0.01 USDC more/)).toBeTruthy()
     expect(donateButton().disabled).toBe(true)
 
     await user.click(screen.getByLabelText('0%'))
@@ -303,40 +284,6 @@ describe('DonatePanel', () => {
     expect(screen.getByRole('group', { name: 'Tip Fundit (optional)' })).toBeTruthy()
   })
 
-  // The network fee is paid from the same Fundit account, so the donor sees it next to the rest of the money.
-  describe('Network fee line', () => {
-    it("shows the sender's reserve estimate as its own line", async () => {
-      fakeSender()
-      state.balance = 1000_000000n
-      renderPanel(view('USDC'))
-      await userEvent.setup().type(screen.getByLabelText('Amount'), '10')
-      const breakdown = within(screen.getByLabelText('Breakdown'))
-      expect(breakdown.getByText('Network fee')).toBeTruthy()
-      expect(await breakdown.findByText('up to 0.30 USDC')).toBeTruthy()
-    })
-
-    it('says estimating while the estimate loads, without blocking the form', async () => {
-      passkeyReserve.mockImplementation(() => new Promise(() => {}))
-      fakeSender()
-      state.balance = 1000_000000n
-      renderPanel(view('USDC'))
-      await userEvent.setup().type(screen.getByLabelText('Amount'), '10')
-      const breakdown = within(screen.getByLabelText('Breakdown'))
-      expect(breakdown.getByText('Network fee')).toBeTruthy()
-      expect(breakdown.getByText('estimating')).toBeTruthy()
-      expect(screen.getByLabelText('Amount').matches(':disabled')).toBe(false)
-    })
-
-    it('is paid in USDC even for an EURC gift', async () => {
-      fakeSender()
-      state.balance = 1000_000000n
-      state.usdc = 10_000000n
-      renderPanel(view('EURC'))
-      await userEvent.setup().type(screen.getByLabelText('Amount'), '10')
-      expect(await within(screen.getByLabelText('Breakdown')).findByText('up to 0.30 USDC')).toBeTruthy()
-    })
-  })
-
   describe('Hide my name', () => {
     const toggle = () => screen.getByRole('switch', { name: 'Hide my name' }) as HTMLInputElement
 
@@ -401,7 +348,7 @@ describe('DonatePanel', () => {
       opts?.onHash?.(HASH, calls.length - 1)
       return new Promise<TxResult>(() => {})
     })
-    state.sender = passkeyShaped(send)
+    state.sender = { kind: 'email', address: ME, send }
     state.balance = 1000_000000n
     renderPanel(view('USDC'))
     await fillAndDonate()
@@ -410,8 +357,7 @@ describe('DonatePanel', () => {
     cleanup()
     renderPanel(view('USDC'))
     expect(screen.getByText(/donation is not confirmed yet/)).toBeTruthy()
-    // A user operation hash is not on the explorer. The passkey sender checks it.
-    expect(screen.getByText(PASSKEY_PROCESSING)).toBeTruthy()
+    expectExplorerLink()
     expect(screen.getByRole('button', { name: 'Check again' })).toBeTruthy()
     expectBlocked()
   })
@@ -426,7 +372,7 @@ describe('DonatePanel', () => {
       saved.push(JSON.parse(localStorage.getItem('fundit.pendingBridges') ?? '[]'))
       return success
     })
-    state.sender = passkeyShaped(send)
+    state.sender = { kind: 'email', address: ME, send }
     state.balance = 1000_000000n
     renderPanel(view('USDC'))
     await fillAndDonate()
@@ -467,12 +413,12 @@ describe('DonatePanel', () => {
     expect(reads.some((r) => r.functionName === 'allowance' && r.args[1] === CAMPAIGN)).toBe(true)
   })
 
-  // Signed out, giving starts with Fundit's sign-in dialog, passkey first. No separate wallet modal opens from here.
-  it('signed out, Sign in to give opens the sign-in dialog with the passkey button, never a separate wallet modal', async () => {
+  // Signed out, giving starts with Fundit's sign-in dialog. No separate wallet modal opens from here.
+  it('signed out, Sign in to give opens the sign-in dialog, never a separate wallet modal', async () => {
     renderPanel(view('USDC'))
     expect(screen.queryByRole('button', { name: 'Give' })).toBeNull()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in to give' }))
-    expect(within(screen.getByRole('dialog', { name: 'Sign in' })).getByRole('button', { name: 'Sign in with your passkey' })).toBeTruthy()
+    expect(within(screen.getByRole('dialog', { name: 'Sign in' })).getByRole('button', { name: 'Connect a wallet' })).toBeTruthy()
   })
 
   // After a success the campaign total and the activity list are stale, so both are reloaded.
@@ -539,11 +485,19 @@ describe('DonatePanel', () => {
     expectExplorerLink()
   })
 
-  it('blocks a new donation after the approval times out', async () => {
-    fakeSender({ status: 'timeout', hash: HASH, completed: 0 })
+  // Every sender now sends the approval and the donation as one transaction, but a saved record can still hold a
+  // lone approval that timed out.
+  const savedApproval = () =>
+    localStorage.setItem(
+      'fundit.pendingBridges',
+      JSON.stringify([{ kind: 'arc', campaign: CAMPAIGN, hash: HASH, approve: true, createdAt: Date.now() }]),
+    )
+
+  it('blocks a new donation while a saved approval is not confirmed', async () => {
+    savedApproval()
+    fakeSender()
     state.balance = 1000_000000n
     renderPanel(view('USDC'))
-    await fillAndDonate()
     expect(await screen.findByText(/approval is not confirmed yet/)).toBeTruthy()
     expectBlocked()
     expectExplorerLink()
@@ -603,11 +557,12 @@ describe('DonatePanel', () => {
     expect(screen.getByRole('button', { name: 'Give' })).toBeTruthy()
   })
 
-  it('moves to Finish donation once Check again finds the approval mined', async () => {
-    fakeSender({ status: 'timeout', hash: HASH, completed: 0 })
+  it('moves to Finish donation once Check again finds the saved approval mined', async () => {
+    savedApproval()
+    fakeSender()
     state.balance = 1000_000000n
     renderPanel(view('USDC'))
-    const user = await fillAndDonate()
+    const user = userEvent.setup()
     recheck.next = async () => success
     await user.click(await screen.findByRole('button', { name: 'Check again' }))
     expect(await screen.findByRole('button', { name: 'Finish donation' })).toBeTruthy()
@@ -809,135 +764,21 @@ describe('DonatePanel', () => {
       expect(send).not.toHaveBeenCalled()
     })
 
+    it('lets an EURC gift go when the account has USDC for the fee', async () => {
+      const send = walletSender()
+      state.balance = 100_000000n
+      state.usdc = 10_000n
+      renderPanel(view('EURC'))
+      await fillAndDonate()
+      await waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+    })
+
     it('shows no Network fee row for a wallet account', async () => {
       walletSender()
       state.balance = 100_000000n
       renderPanel(view('USDC'))
       await userEvent.setup().type(screen.getByLabelText('Amount'), '10')
       expect(within(screen.getByLabelText('Breakdown')).queryByText('Network fee')).toBeNull()
-    })
-  })
-
-  describe('passkey wallet', () => {
-    const TX = `0x${'cd'.repeat(32)}` as Hex
-    const PROCESSING = 'Your passkey transaction is still processing.'
-
-    function passkeySender(...results: TxResult[]) {
-      const send = vi.fn(async (_calls: Call[]) => results.shift() ?? success)
-      const recheckFn = vi.fn(async (_hash: Hex): Promise<TxResult> => ({
-        status: 'success',
-        hash: TX,
-        receipt: { status: 'success' } as TransactionReceipt,
-      }))
-      state.sender = { kind: 'passkey', address: ME, send, recheck: recheckFn }
-      return { send, recheck: recheckFn }
-    }
-
-    // A user operation hash is unknown to the explorer and to eth_getTransactionReceipt. Only the bundler can find it.
-    it('rechecks a timed-out user operation through the sender and then links the real transaction', async () => {
-      const { recheck: recheckFn } = passkeySender({ status: 'timeout', hash: HASH, completed: 0, hashKind: 'userop' })
-      state.balance = 1000_000000n
-      renderPanel(view('USDC'))
-      const user = await fillAndDonate()
-      // The approval and the donation are one user operation, so this is the donation, not a lone approval.
-      expect(await screen.findByText(/donation is not confirmed yet/)).toBeTruthy()
-      expect(screen.getByText(PROCESSING)).toBeTruthy()
-      expect(screen.queryByRole('link', { name: /explorer/i })).toBeNull()
-      await user.click(screen.getByRole('button', { name: 'Check again' }))
-      expect(await screen.findByText(/Thank you/)).toBeTruthy()
-      expect(recheckFn).toHaveBeenCalledWith(HASH)
-      expect(screen.getByRole('link', { name: /explorer/i }).getAttribute('href')).toBe(`https://explorer.arc.io/tx/${TX}`)
-    })
-
-    // A passkey wallet pays its gas in USDC from the same balance, and the EntryPoint takes the whole prefund
-    // before the gift runs. Leaving less than that, the gift would revert after the donor confirmed it.
-    it('keeps the estimated reserve: amount plus tip must leave the prefund', async () => {
-      passkeySender()
-      state.balance = 10_000000n
-      renderPanel(view('USDC'))
-      const user = userEvent.setup()
-      await user.type(screen.getByLabelText('Amount'), '9.8')
-      expect(await screen.findByText(/Keep about 0.30 USDC more for the network fee/)).toBeTruthy()
-      expect(donateButton().disabled).toBe(true)
-
-      await user.clear(screen.getByLabelText('Amount'))
-      await user.type(screen.getByLabelText('Amount'), '9.7')
-      await waitFor(() => expect(donateButton().disabled).toBe(false))
-    })
-
-    // The reserve drops once the account is deployed. On Arc testnet a value cached before the first operation
-    // (about 1.46 USDC) kept Give disabled on the next page.
-    it('reads the reserve again on mount instead of keeping an old one', async () => {
-      passkeySender()
-      state.balance = 10_000000n
-      const client = new QueryClient()
-      client.setQueryData(['passkey-reserve', ME.toLowerCase(), `donate-${CAMPAIGN.toLowerCase()}`], 1_460_000n)
-      renderPanel(view('USDC'), client)
-      const user = userEvent.setup()
-      await user.type(screen.getByLabelText('Amount'), '9.7')
-      await waitFor(() => expect(donateButton().disabled).toBe(false))
-    })
-
-    // The sender makes the last check with the real calls (approve and donate) and the fee it sends. The panel
-    // hands it what the gift moves out, and shows its refusal with the number and a way to add money.
-    it('hands amount plus tip to the sender and shows its network fee refusal', async () => {
-      const { send } = passkeySender()
-      send.mockRejectedValueOnce(new NeedsNetworkFee(400_000n))
-      state.balance = 10_000000n
-      renderPanel(view('USDC'))
-      await fillAndDonate('9.7')
-      expect(await screen.findByText(/Your Fundit account needs at least 0.40 USDC for the network fee\. Add money and try again\./)).toBeTruthy()
-      expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/me?add=1')
-      const [calls, opts] = send.mock.calls[0]! as unknown as [Call[], { usdcOut?: bigint }]
-      expect(calls).toHaveLength(2)
-      expect(opts.usdcOut).toBe(9_700000n)
-    })
-
-    // Arc gas is paid in USDC. A Fundit account with EURC and no USDC would fail at gas estimation after the tap.
-    it('asks for USDC gas before an EURC gift', async () => {
-      const { send } = passkeySender()
-      state.balance = 100_000000n
-      state.usdc = 10_000n
-      renderPanel(view('EURC'))
-      const user = userEvent.setup()
-      await user.type(screen.getByLabelText('Amount'), '10')
-      expect(await screen.findByText(/Add at least 0.30 USDC to your Fundit account first. It pays the network fee./)).toBeTruthy()
-      expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/me?add=1')
-      expect(donateButton().disabled).toBe(true)
-      await user.click(donateButton())
-      expect(send).not.toHaveBeenCalled()
-    })
-
-    it('lets an EURC gift go when the account has USDC for gas', async () => {
-      const { send } = passkeySender()
-      state.balance = 100_000000n
-      state.usdc = 300_000n
-      renderPanel(view('EURC'))
-      await fillAndDonate()
-      await waitFor(() => expect(send).toHaveBeenCalledTimes(1))
-    })
-
-    // After a reload the saved entry must say which kind of hash it holds, or the wrong check runs.
-    it('saves the hash kind with the pending donation', async () => {
-      passkeySender({ status: 'timeout', hash: HASH, completed: 0, hashKind: 'userop' })
-      state.balance = 1000_000000n
-      renderPanel(view('USDC'))
-      await fillAndDonate()
-      await screen.findByText(PROCESSING)
-      const saved = JSON.parse(localStorage.getItem('fundit.pendingBridges')!)
-      expect(saved[0]).toMatchObject({ kind: 'arc', hash: HASH, hashKind: 'userop' })
-    })
-
-    it('asks to log in with the passkey when a saved user operation has no passkey session', () => {
-      localStorage.setItem(
-        'fundit.pendingBridges',
-        JSON.stringify([{ kind: 'arc', campaign: CAMPAIGN, hash: HASH, approve: false, hashKind: 'userop', createdAt: Date.now() }]),
-      )
-      renderPanel(view('USDC'))
-      expect(screen.getByText('Log in with your passkey to check this transaction.')).toBeTruthy()
-      expect(screen.queryByRole('button', { name: 'Check again' })).toBeNull()
-      expect(screen.queryByRole('link', { name: /explorer/i })).toBeNull()
-      expect(screen.queryByRole('button', { name: 'Give' })).toBeNull()
     })
   })
 })

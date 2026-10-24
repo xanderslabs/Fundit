@@ -8,7 +8,7 @@ import {
 import { describe, expect, it, vi } from 'vitest'
 import { campaignAbi } from '../abi/campaign'
 import { factoryAbi } from '../abi/factory'
-import { CANCELLED, explainAfterApproval, explainError, FALLBACK, NeedsNetworkFee, needsAddMoney, USERNAME_RULE, WrongWalletAccount } from './errors'
+import { CANCELLED, explainAfterApproval, explainError, FALLBACK, needsAddMoney, PlainError, WrongWalletAccount } from './errors'
 
 const GENERIC = FALLBACK
 
@@ -133,12 +133,6 @@ describe('explainError', () => {
     const avax = Object.assign(new Error('Insufficient native token on Avalanche to cover gas fees'), { name: 'BALANCE_INSUFFICIENT_GAS' })
     expect(explainError(avax)).toBe('You do not have enough AVAX on Avalanche to pay the network fee.')
   })
-  // Closing the browser's passkey prompt throws a DOMException named NotAllowedError. It is a cancel.
-  it('reads a closed passkey prompt as a cancel', () => {
-    const cancel = Object.assign(new Error('The operation either timed out or was not allowed.'), { name: 'NotAllowedError' })
-    expect(explainError(new Error('Signing failed', { cause: cancel }))).toBe("You cancelled the request. Try again when you're ready.")
-  })
-
   // Bridge Kit names the chain Optimism. People know it as OP Mainnet, the name shown everywhere else.
   it('names Optimism as OP Mainnet in Bridge Kit messages', () => {
     const token = Object.assign(new Error('Insufficient USDC balance on Optimism'), { name: 'BALANCE_INSUFFICIENT_TOKEN' })
@@ -185,59 +179,16 @@ describe('Bridge Kit errors on testnet', () => {
   })
 })
 
-describe('network fee and username errors', () => {
-  // -32025 is not known to mean only a bad username, so only Circle's own text maps to the rule.
-  it('maps only the username text to the username rule, not any -32025', () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-    const other = Object.assign(new Error('The request is invalid.'), { code: -32025 })
-    expect(explainError(other)).not.toContain('Use 5 to 50 letters')
-    vi.mocked(console.error).mockRestore()
-    const username = Object.assign(new Error('The username is invalid. It should be 5 to 50 characters.'), { code: -32025 })
-    expect(explainError(username)).toBe('Use 5 to 50 letters, numbers or _ @ . : + - with no spaces.')
-    expect(USERNAME_RULE).not.toMatch(/[()]/)
-  })
-
-  it("says AA21 (didn't pay prefund) plainly and asks to add money", () => {
-    const err = new Error("UserOperation reverted during simulation with reason: AA21 didn't pay prefund")
-    expect(explainError(err)).toBe('Your Fundit account does not have enough USDC for the network fee. Add money and try again.')
-    expect(needsAddMoney(err)).toBe(true)
-  })
-
-  it('gives the real number when the sender knows it', () => {
-    const err = new NeedsNetworkFee(1_620_000n)
-    expect(explainError(err)).toBe('Your Fundit account needs at least 1.62 USDC for the network fee. Add money and try again.')
-    expect(needsAddMoney(err)).toBe(true)
-    expect(needsAddMoney(new Error('network down'))).toBe(false)
-  })
-})
-
-// Circle's passkey RP, its bundler and the network fail in ways people can act on. Each gets its own plain text,
-// matched on the code or text Circle and viem actually send.
-describe('Circle, passkey and network errors', () => {
-  // viem wraps Circle's JSON-RPC answer as "An unknown RPC error occurred." with the real text in details.
+// The RPC and the network fail in ways people can act on. Each gets its own plain text, matched on the code or
+// text viem and the node actually send.
+describe('network errors', () => {
+  // viem wraps a JSON-RPC answer as "An unknown RPC error occurred." with the real text in details.
   const rpc = (code: number, details: string) =>
     Object.assign(new BaseError('An unknown RPC error occurred.', { details }), { code, cause: Object.assign(new Error(details), { code }) })
   const named = (name: string, message = name) => Object.assign(new Error(message), { name })
 
   it.each([
-    ['a taken username (-32024)', rpc(-32024, 'The username is duplicated.'), "That username is taken. Pick another one, or sign in if it's yours."],
-    ['a taken username by its text alone', new Error('The username is duplicated.'), "That username is taken. Pick another one, or sign in if it's yours."],
-    ['an invalid username (-32025)', rpc(-32025, 'The username is invalid. It should be 5 to 50 characters and contain only alphanumeric and _@.:+- characters.'), USERNAME_RULE],
-    ['a closed passkey prompt', named('NotAllowedError', 'The operation either timed out or was not allowed.'), CANCELLED],
-    ['no passkey for the account', new Error('No credential available.'), "That passkey didn't open a Fundit account. Try another passkey, or create an account."],
-    ['a failed login check', new Error('Login verification failed.'), "That passkey didn't open a Fundit account. Try another passkey, or create an account."],
-    ['a passkey the browser did not save', new Error('No credential created.'), "Your browser didn't save a passkey. Try again, or use another browser or device."],
-    // The SDK throws this on sign-in too, when it cannot read the stored key, so the text fits both flows.
-    ['a passkey the SDK could not use', new Error('Credential creation failed.'), "Your passkey didn't work. Try again, or use another browser or device."],
-    ['a browser without passkeys', new Error('Credential Management API not supported.'), "This browser can't use passkeys. Open Fundit in an up-to-date browser such as Chrome, Safari or Firefox."],
-    ['a passkey already on this device', named('InvalidStateError'), 'This device already has a passkey for this account. Sign in with it instead.'],
-    ['a passkey on the wrong site address', named('SecurityError'), "Passkeys can't be used on this page address. Open Fundit at its usual address and try again."],
-    ['a failed account registration', new Error('Failed to register the new WebAuthn credential. Please try again.'), "We couldn't finish setting up your account. Try again in a moment."],
-    ['a nonce clash (AA25)', new Error('UserOperation reverted during simulation with reason: AA25 invalid account nonce'), 'Another transaction from your account is still going through. Wait a moment and try again.'],
-    ['an expired operation (AA22)', new Error('AA22 expired or not due'), 'The request expired before it went out. Nothing was sent. Try again.'],
-    ['a rejected signature (AA24)', new Error('AA24 signature error'), "Your passkey's signature was not accepted. Sign out, sign in again and try again."],
     ['a rate limit (-32005)', rpc(-32005, 'Limit exceeded'), 'Too many requests right now. Wait a minute and try again.'],
-    ['a throttled bundler (-32504)', rpc(-32504, 'throttled'), 'Too many requests right now. Wait a minute and try again.'],
     ['an HTTP 429', Object.assign(new BaseError('HTTP request failed.'), { name: 'HttpRequestError', status: 429 }), 'Too many requests right now. Wait a minute and try again.'],
     ['a timeout', named('TimeoutError', 'The request took too long to respond.'), 'The network took too long to answer. Try again in a moment.'],
     ['a timed out read', new Error('Reading the account owners timed out.'), 'The network took too long to answer. Try again in a moment.'],
@@ -249,13 +200,6 @@ describe('Circle, passkey and network errors', () => {
     vi.mocked(console.error).mockRestore()
   })
 
-  // -32024 is not known to mean only a taken username, and explainError also runs on sends. Only Circle's text counts.
-  it('does not read a bare -32024 as a taken username', () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-    expect(explainError(rpc(-32024, 'Something else entirely'))).not.toMatch(/username/)
-    vi.mocked(console.error).mockRestore()
-  })
-
   // Support needs the raw error for a mapped text too, not only for the fallback. A cancel or a PlainError is not
   // a failure, so it is not logged.
   it('logs the raw error behind every mapped text, but not a cancel or a PlainError', () => {
@@ -264,8 +208,8 @@ describe('Circle, passkey and network errors', () => {
     explainError(down)
     expect(log).toHaveBeenCalledWith(down)
     log.mockClear()
-    explainError(named('NotAllowedError'))
-    explainError(new NeedsNetworkFee(1n))
+    explainError(new UserRejectedRequestError(new Error('x')))
+    explainError(new PlainError('Plain text'))
     expect(log).not.toHaveBeenCalled()
     log.mockRestore()
   })

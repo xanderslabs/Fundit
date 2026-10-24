@@ -44,10 +44,20 @@ function renderOptions(onSignedIn = vi.fn()) {
 }
 
 describe('SignInOptions', () => {
-  it('shows passkey and Connect a wallet', () => {
+  // Email sign-in is off by default, so a wallet is the only way in until it is turned on.
+  it('with email off, only Connect a wallet shows', () => {
     renderOptions()
-    expect(screen.getByRole('button', { name: 'Sign in with your passkey' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Connect a wallet' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Sign in' })).toBeTruthy()
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Connect a wallet'])
+  })
+
+  // Passkey accounts are gone: no sign-in, sign-up or recovery option for them may come back.
+  it('no passkey option exists', () => {
+    flags.email = true
+    renderOptions()
+    expect(screen.queryByText(/passkey/i)).toBeNull()
+    expect(screen.queryByRole('link', { name: /recover/i })).toBeNull()
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Continue with email', 'Connect a wallet'])
   })
 
   // Email sign-in stays off until its own checks pass on each network.
@@ -69,15 +79,15 @@ describe('SignInOptions', () => {
     expect(connect.loads).toBe(1)
   })
 
-  // A wallet sign-in keeps only the wallet account: an older passkey session would come back after sign-out.
+  // A wallet sign-in keeps only the wallet account: an older email session would come back after sign-out.
   it('a connected wallet becomes the account and the other sessions end', async () => {
-    localStorage.setItem(storageKey('passkey'), JSON.stringify({ address: '0x2222222222222222222222222222222222222222', credentialId: 'c' }))
+    localStorage.setItem(storageKey('session.email'), JSON.stringify({ address: '0x2222222222222222222222222222222222222222', walletId: 'w-1', email: 'ana@example.com' }))
     const { user, onSignedIn } = renderOptions()
     await user.click(screen.getByRole('button', { name: 'Connect a wallet' }))
     await screen.findByText('Wallet list')
     act(() => connect.onConnected!(WALLET, 'io.metamask'))
     expect(JSON.parse(localStorage.getItem(storageKey('session.wallet'))!)).toEqual({ address: WALLET, connectorId: 'io.metamask' })
-    expect(localStorage.getItem(storageKey('passkey'))).toBeNull()
+    expect(localStorage.getItem(storageKey('session.email'))).toBeNull()
     expect(onSignedIn).toHaveBeenCalledWith('wallet')
   })
 })

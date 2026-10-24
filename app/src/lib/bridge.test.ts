@@ -142,6 +142,14 @@ describe('pending store', () => {
     expect(pendingArc(CAMPAIGN)!.createdAt).toBe(t)
   })
 
+  // Older builds saved a passkey user operation hash with hashKind 'userop'. Nothing can check that hash any
+  // more, so the record is dropped on read: it must not throw, and it must not block a new gift forever.
+  it('a saved userop pending record is ignored without throwing', () => {
+    localStorage.setItem(KEY, JSON.stringify([{ kind: 'arc', campaign: CAMPAIGN, hash: BURN, approve: true, hashKind: 'userop', createdAt: Date.now() }]))
+    expect(pendingArc(CAMPAIGN)).toBeNull()
+    expect(blockingEntry(CAMPAIGN)).toBeNull()
+  })
+
   it('keeps one unconfirmed Arc donation per campaign, apart from bridges', () => {
     savePendingArc({ campaign: CAMPAIGN, hash: BURN, approve: false })
     expect(pendingArc(CAMPAIGN)).toMatchObject({ kind: 'arc', campaign: CAMPAIGN, hash: BURN, approve: false })

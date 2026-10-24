@@ -5,7 +5,7 @@ import { factoryAbi } from '../abi/factory'
 import { SignInButton } from '../components/AccountMenu'
 import { CampaignImage } from '../components/CampaignImage'
 import { SharePanel } from '../components/SharePanel'
-import { AddMoneyLink, PASSKEY_PROCESSING, recheckResult } from '../components/TxStatus'
+import { AddMoneyLink, recheckResult } from '../components/TxStatus'
 import { AmountInput, Button, ButtonLink, Card, Field, PageHeader, StatusBox } from '../components/ui'
 import { EXPLORER_URL, FACTORY_ADDRESS, type TokenSymbol } from '../config'
 import { useFactoryFees } from '../hooks/useCampaigns'
@@ -13,7 +13,7 @@ import { useSender } from '../hooks/useSender'
 import { confirmLine } from '../lib/account'
 import { CANCELLED, CHECK_FAILED, explainError, needsAddMoney } from '../lib/errors'
 import { bpsToPercent } from '../lib/format'
-import type { Sender, TxResult } from '../lib/sender'
+import type { TxResult } from '../lib/sender'
 import { byteLength, MAX_DESCRIPTION, MAX_LINKS, MAX_TITLE, validateCampaign } from '../lib/validate'
 import '../components/Form.css'
 import './Create.css'
@@ -22,9 +22,8 @@ type Phase =
   | { kind: 'idle' }
   | { kind: 'sending' }
   | { kind: 'checking'; hash: Hex }
-  // userop marks a passkey user operation hash: no explorer link, and only the passkey bundler can check it.
   // note explains a re-check that failed to answer. The outcome is still unknown.
-  | { kind: 'timeout'; hash: Hex; userop?: boolean; note?: string }
+  | { kind: 'timeout'; hash: Hex; note?: string }
   // addMoney: the account is short of USDC for the network fee, so the box links to Add money.
   | { kind: 'error'; message: string; hash?: Hex; addMoney?: boolean }
   // The new Fundit exists. The page shows its link and share options.
@@ -85,8 +84,6 @@ export function Create() {
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' })
   // Set synchronously, so a second click before React re-renders cannot start a second send or check.
   const inFlight = useRef(false)
-  // The sender of the last send, so a re-check of its timeout goes the same way.
-  const lastSender = useRef<Sender | null>(null)
 
   const result = validateCampaign({ title, description, imageUrl, links, goal, token, backup, sender: sender?.address })
   const errors = result.ok ? {} : result.errors
@@ -118,7 +115,7 @@ export function Create() {
         setPhase({ kind: 'error', message: res.error, hash: res.hash })
         return
       case 'timeout':
-        setPhase({ kind: 'timeout', hash: res.hash, userop: res.hashKind === 'userop' })
+        setPhase({ kind: 'timeout', hash: res.hash })
         return
       case 'rejected':
         setPhase({ kind: 'error', message: CANCELLED })
@@ -130,7 +127,6 @@ export function Create() {
     if (inFlight.current || !canSubmit || !result.ok || !sender) return
     inFlight.current = true
     setPhase({ kind: 'sending' })
-    lastSender.current = sender
     try {
       const data = encodeFunctionData({
         abi: factoryAbi,
@@ -146,16 +142,16 @@ export function Create() {
   }
 
   // Checks the same transaction again. It never sends a new one, which could create the fundraiser twice.
-  async function checkAgain(hash: Hex, userop: boolean) {
+  async function checkAgain(hash: Hex) {
     if (inFlight.current) return
     inFlight.current = true
     setPhase({ kind: 'checking', hash })
     try {
-      handle(await recheckResult(lastSender.current ?? sender, hash, userop))
+      handle(await recheckResult(hash))
     } catch (err) {
       // The check itself failed, so the transaction is still unknown. Never leave the page on "Checking...".
       console.error(err)
-      setPhase({ kind: 'timeout', hash, userop, note: CHECK_FAILED })
+      setPhase({ kind: 'timeout', hash, note: CHECK_FAILED })
     } finally {
       inFlight.current = false
     }
@@ -385,7 +381,7 @@ export function Create() {
 
         {/* create-status and status-error stay: the e2e suite finds a failed create by them. */}
         <div className="create-status form-status" aria-live="polite">
-          {phase.kind === 'sending' && <p>{confirmLine(sender?.kind ?? 'passkey')}, then wait for the network. This can take a few seconds.</p>}
+          {phase.kind === 'sending' && sender && <p>{confirmLine(sender.kind)}, then wait for the network. This can take a few seconds.</p>}
           {phase.kind === 'checking' && <p>Checking the transaction again...</p>}
           {phase.kind === 'timeout' && (
             <StatusBox>
@@ -393,10 +389,12 @@ export function Create() {
                 <strong>Your transaction is not confirmed yet.</strong> It may still go through. Check it before you try
                 again, so you do not create the Fundit twice.
               </p>
-              <p>{phase.userop ? PASSKEY_PROCESSING : <ExplorerLink hash={phase.hash} />}</p>
+              <p>
+                <ExplorerLink hash={phase.hash} />
+              </p>
               {phase.note && <p className="form-error">{phase.note}</p>}
               <div className="form-actions">
-                <Button variant="secondary" onClick={() => checkAgain(phase.hash, phase.userop === true)}>
+                <Button variant="secondary" onClick={() => checkAgain(phase.hash)}>
                   Check again
                 </Button>
                 <Button variant="secondary" onClick={startOver}>

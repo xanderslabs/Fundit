@@ -2,17 +2,15 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { type Address, formatUnits, getAddress, isAddressEqual, zeroAddress } from 'viem'
-import { ARC_DOMAIN, CCTP_CHAINS, CHAIN_LABELS, TOKENS, type TokenSymbol } from '../config'
-import { RESERVE_KEY, useGasReserve } from '../hooks/useGasReserve'
+import { ARC_DOMAIN, CCTP_CHAINS, CHAIN_LABELS, EOA_GAS_RESERVE, TOKENS, type TokenSymbol } from '../config'
 import { buildAccountSendCalls, maxAccountSend, OWN_ADDRESS, TOO_SMALL } from '../lib/accountWithdraw'
 import { chainByKey, pendingPayoutFrom, savePendingPayout, subscribePending } from '../lib/bridge'
 import { arcClient } from '../lib/clients'
 import { BALANCES_KEY, balancesKey, fetchAccountBalances } from '../lib/deposit'
 import { confirmLine } from '../lib/account'
-import { PlainError } from '../lib/errors'
+import { addAtLeast, PlainError } from '../lib/errors'
 import { formatAmount, parseAmount } from '../lib/format'
 import { fetchForwardFee } from '../lib/iris'
-import { addAtLeast } from '../lib/passkey'
 import { destDomain, type PayoutDest } from '../lib/payout'
 import type { Sender } from '../lib/sender'
 import { ADD_MONEY_PATH } from '../lib/urls'
@@ -23,7 +21,7 @@ import './Form.css'
 
 const FEE_CHANGED = 'The transfer fee changed. Check the new amount and confirm again.'
 const OVER_HELD = 'That is more than your Fundit account holds.'
-// The reserve is what the account must keep for the network fee (passkeyReserve), shown as the real number.
+// The reserve is what the account must keep for the network fee (EOA_GAS_RESERVE), shown as the real number.
 const keepGas = (reserve: bigint) => `Leave at least ${formatAmount(reserve, 'USDC')} in your Fundit account for the network fee.`
 const ONE_AT_A_TIME =
   'Your last transfer to another chain is still on its way. You can send another once it arrives. Follow it, or dismiss it if it takes much longer than expected, in the Account tab.'
@@ -32,23 +30,10 @@ const QUOTE_DEBOUNCE_MS = 400
 
 // Sends USDC or EURC out of a Fundit account, on Arc or as USDC to another chain. The organiser's payout form
 // in Manage is the model: the same fee preview, a fresh quote at send time, and Fast as the default.
-// Every kind of account: approve and burn go out as one operation (a passkey user operation, or one transaction
-// through Multicall3From), so a failed burn never leaves an open approval behind.
+// Every kind of account: approve and burn go out as one transaction through Multicall3From, so a failed burn
+// never leaves an open approval behind.
 export function AccountWithdraw({ sender }: { sender: Sender }) {
   return <SendOutForm sender={sender} />
-}
-
-// An approve and a burn of 1 USDC to another chain, to estimate the reserve. Not sent.
-function burnShape(dest: PayoutDest, account: Address) {
-  return buildAccountSendCalls({
-    token: TOKENS.USDC.address,
-    amount: 1_000_000n,
-    dest,
-    recipient: '0x000000000000000000000000000000000000dEaD',
-    maxFee: 500_000n,
-    fast: false,
-    account,
-  })
 }
 
 function SendOutForm({ sender }: { sender: Sender }) {
@@ -66,7 +51,6 @@ function SendOutForm({ sender }: { sender: Sender }) {
   const tx = useTx((hash) => {
     setAmountText('')
     void queryClient.invalidateQueries({ queryKey: [BALANCES_KEY] })
-    void queryClient.invalidateQueries({ queryKey: [RESERVE_KEY] })
     const sent = sending.current
     // The burn is on Arc. Saved so My page keeps tracking the mint after a reload. Arc sends need no record.
     if (sent && sent.dest !== 'Arc' && sent.net !== undefined) {
@@ -85,17 +69,11 @@ function SendOutForm({ sender }: { sender: Sender }) {
     queryFn: () => fetchAccountBalances(arcClient, account),
     staleTime: 15_000,
   })
-  // A send to another chain is an approve and a burn, so its reserve is estimated in that shape.
-  const reserve = useGasReserve(
-    sender,
-    dest === 'Arc' ? undefined : { key: `burn-${dest}`, calls: burnShape(dest, account) },
-    amountText !== '',
-  )
   const usdc = balances.data?.usdc
   const held = balances.data ? (symbol === 'USDC' ? balances.data.usdc : balances.data.eurc) : undefined
   // Arc gas is paid in USDC, so only USDC keeps the reserve back. EURC can all go, but needs USDC for the fee.
-  const max = held === undefined || reserve === undefined ? undefined : symbol === 'USDC' ? maxAccountSend(held, reserve) : held
-  const noGas = usdc !== undefined && reserve !== undefined && usdc < reserve
+  const max = held === undefined ? undefined : symbol === 'USDC' ? maxAccountSend(held, EOA_GAS_RESERVE) : held
+  const noGas = usdc !== undefined && usdc < EOA_GAS_RESERVE
 
   // CCTP only moves USDC, so EURC stays on Arc.
   const destinations: PayoutDest[] = symbol === 'USDC' ? ['Arc', ...CCTP_CHAINS.map((c) => c.key)] : ['Arc']
@@ -163,7 +141,7 @@ function SendOutForm({ sender }: { sender: Sender }) {
     void tx.run(
       sender,
       async () => {
-        // The form's balance may be stale (another tab, a gift just sent), so check the gas reserve on a fresh one.
+        // The form's balance may be stale (another tab, a gift just sent), so check the amount on a fresh one.
         const now = await fetchAccountBalances(arcClient, account)
         queryClient.setQueryData(balancesKey(account), now)
         const nowHeld = symbol === 'USDC' ? now.usdc : now.eurc
@@ -180,8 +158,6 @@ function SendOutForm({ sender }: { sender: Sender }) {
         return buildAccountSendCalls({ token: TOKENS[symbol].address, amount, dest, recipient, maxFee: fresh?.maxFee, fast, account })
       },
       'Send money out',
-      // The sender refuses unless the account also holds the network fee for these calls on top.
-      symbol === 'USDC' ? amount : 0n,
     )
   }
 
@@ -233,14 +209,14 @@ function SendOutForm({ sender }: { sender: Sender }) {
                 {OVER_HELD}
               </p>
             )}
-            {overMax && !noGas && reserve !== undefined && (
+            {overMax && !noGas && (
               <p className="form-error" role="alert">
-                {keepGas(reserve)}
+                {keepGas(EOA_GAS_RESERVE)}
               </p>
             )}
-            {noGas && reserve !== undefined && (
+            {noGas && (
               <p className="form-error" role="alert">
-                {addAtLeast(reserve)}{' '}
+                {addAtLeast(EOA_GAS_RESERVE)}{' '}
                 <Link to={ADD_MONEY_PATH}>Add money</Link>
               </p>
             )}

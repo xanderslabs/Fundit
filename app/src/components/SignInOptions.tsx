@@ -4,7 +4,6 @@ import { type AccountKind, clearOtherSessions } from '../lib/account'
 import { saveEmailSession } from '../lib/emailAccount'
 import { saveWalletSession } from '../lib/walletAccount'
 import { EmailLogin } from './EmailLogin'
-import { PasskeyLogin } from './PasskeyLogin'
 import { Button } from './ui'
 import './SignInOptions.css'
 
@@ -13,9 +12,9 @@ const ConnectWallet = lazy(() => import('./ConnectWallet').then((m) => ({ defaul
 
 type View = 'choose' | 'email' | 'wallet'
 
-// The sign-in dialog body: passkey first (the existing PasskeyLogin views), then Continue with email (only with
-// VITE_EMAIL_SIGNIN=1) and Connect a wallet. onSignedIn gets the kind once an account is open.
-export function SignInOptions({ onSignedIn, headingId, onLeave }: { onSignedIn: (kind: AccountKind) => void; headingId?: string; onLeave?: () => void }) {
+// The sign-in dialog body: Continue with email (only with VITE_EMAIL_SIGNIN=1) and Connect a wallet. onSignedIn gets
+// the kind once an account is open.
+export function SignInOptions({ onSignedIn, headingId }: { onSignedIn: (kind: AccountKind) => void; headingId?: string }) {
   const [view, setView] = useState<View>('choose')
   const switched = useRef(false)
   const back = useRef<HTMLButtonElement>(null)
@@ -33,15 +32,9 @@ export function SignInOptions({ onSignedIn, headingId, onLeave }: { onSignedIn: 
   if (view === 'choose') {
     return (
       <div className="signin-options">
-        <PasskeyLogin
-          headingId={headingId}
-          onLeave={onLeave}
-          onDone={() => {
-            clearOtherSessions('passkey')
-            onSignedIn('passkey')
-          }}
-        />
-        <p className="signin-or">or</p>
+        <h2 id={headingId} className="ui-dialog-title">
+          Sign in
+        </h2>
         {EMAIL_SIGNIN && (
           <Button variant="secondary" size="lg" block onClick={() => switchTo('email')}>
             Continue with email

@@ -49,7 +49,7 @@
   min-width: 0;
 }
 
-/* A passkey username can be 50 characters. It is cut with an ellipsis here. My page shows it in full. */
+/* An email address can be long. It is cut with an ellipsis here. */
 .account-pill .name-text {
   max-width: 180px;
   overflow: hidden;

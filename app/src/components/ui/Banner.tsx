@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import './Banner.css'
 
-// A message across the page, with an optional action (the recovery key reminder).
+// A message across the page, with an optional action (the campaign backup banner).
 export function Banner({ tone = 'info', action, children }: { tone?: 'info' | 'attention'; action?: ReactNode; children: ReactNode }) {
   return (
     <div className={`ui-banner ui-banner-${tone}`}>

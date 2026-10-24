@@ -25,8 +25,8 @@ export type CctpChain = {
   bridgeKitChain: BridgeKitChain
 }
 
-// Everything that differs between Arc mainnet and Arc testnet. Values are checked on-chain; see
-// .superpowers/sdd/2026-10-18-fundit-plan-5-passkey-only-testnet/task-1-report.md.
+// Everything that differs between Arc mainnet and Arc testnet. Values are checked on-chain; see the task 1 report
+// of the 2026-10-18 plan 5 (testnet) in the internal planning repo.
 export type NetworkConfig = {
   name: ArcNetwork
   // viem chain, with the RPC and explorer the app uses.
@@ -41,8 +41,6 @@ export type NetworkConfig = {
   // Same address on Arc and on every CCTP source chain of the network.
   tokenMessengerV2: Address
   irisUrl: string
-  // Appended to the Modular Wallets client URL for the Arc bundler transport.
-  modularChainPath: '/arc' | '/arcTestnet'
   cctpChains: readonly CctpChain[]
   // Arc's name in Circle Bridge Kit.
   bridgeKitChain: 'Arc' | 'Arc_Testnet'
@@ -63,7 +61,6 @@ const env = {
   VITE_FACTORY_ADDRESS: import.meta.env?.VITE_FACTORY_ADDRESS,
   VITE_FACTORY_DEPLOY_BLOCK: import.meta.env?.VITE_FACTORY_DEPLOY_BLOCK,
   VITE_REOWN_PROJECT_ID: import.meta.env?.VITE_REOWN_PROJECT_ID,
-  VITE_CIRCLE_CLIENT_KEY: import.meta.env?.VITE_CIRCLE_CLIENT_KEY,
   VITE_CROSSCHAIN: import.meta.env?.VITE_CROSSCHAIN,
   VITE_BETA: import.meta.env?.VITE_BETA,
   VITE_EMAIL_SIGNIN: import.meta.env?.VITE_EMAIL_SIGNIN,
@@ -90,7 +87,6 @@ export const NETWORKS: Record<ArcNetwork, NetworkConfig> = {
     eurc: '0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1',
     tokenMessengerV2: '0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d',
     irisUrl: 'https://iris-api.circle.com',
-    modularChainPath: '/arc',
     cctpChains: [
       { key: 'Ethereum', chainId: 1, domain: 0, usdc: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', viemChain: mainnet, rpcUrl: MAINNET_RPC_URL, fast: true, bridgeKitChain: 'Ethereum' },
       { key: 'Avalanche', chainId: 43114, domain: 1, usdc: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E', viemChain: avalanche, rpcUrl: 'https://api.avax.network/ext/bc/C/rpc', fast: false, bridgeKitChain: 'Avalanche' },
@@ -119,7 +115,6 @@ export const NETWORKS: Record<ArcNetwork, NetworkConfig> = {
     eurc: '0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a',
     tokenMessengerV2: '0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA',
     irisUrl: 'https://iris-api-sandbox.circle.com',
-    modularChainPath: '/arcTestnet',
     // Only the two source chains whose USDC was checked on-chain. Public RPCs as viem lists them.
     cctpChains: [
       { key: 'Ethereum', chainId: sepolia.id, domain: 0, usdc: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', viemChain: sepolia, rpcUrl: sepolia.rpcUrls.default.http[0], fast: true, bridgeKitChain: 'Ethereum_Sepolia' },
@@ -136,7 +131,7 @@ export const NETWORKS: Record<ArcNetwork, NetworkConfig> = {
       Polygon: 'Polygon Amoy',
     },
     // The creators of the 17 testnet Fundits made up to 2026-10-19 (factory campaignAt 0 to 16, then creator()).
-    // The last one is the shared e2e account (app/.env.testnet.passkey), which makes a Fundit on every e2e run.
+    // The last one is the old shared e2e account, which made a Fundit on every e2e run.
     testCreators: [
       '0xb6ac54f822867adaaa39daa8cc97c6e0a17a2402',
       '0x2a867fff6723425c9c835bd6c8f1d3d8ac527de3',
@@ -237,38 +232,11 @@ const deploy = loadConfig(env)
 export const FACTORY_ADDRESS: Address = deploy.factoryAddress
 export const FACTORY_DEPLOY_BLOCK: bigint = deploy.factoryDeployBlock
 export const REOWN_PROJECT_ID: string = deploy.reownProjectId
-export const CIRCLE_CLIENT_KEY: string = env.VITE_CIRCLE_CLIENT_KEY ?? ''
-// Circle's weighted multisig plugin, which holds the owners of every Circle Modular Wallets account
-// (CIRCLE_WEIGHTED_WEB_AUTHN_MULTISIG_PLUGIN in @circle-fin/modular-wallets-core dist/index.js). Same address on
-// Arc mainnet and Arc testnet, checked on-chain.
-export const CIRCLE_MULTISIG_PLUGIN: Address = '0x0000000C984AFf541D6cE86Bb697e68ec57873C8'
-// The plugin's manifest hash and the factory that deploys every Circle Modular Wallets account
-// (CIRCLE_WEIGHTED_WEB_AUTHN_MULTISIG_PLUGIN.manifestHash and FACTORY in dist/index.mjs). The factory's getAddress
-// on Arc gave the shared e2e account's real address on both networks on 2026-10-19.
-export const CIRCLE_MULTISIG_MANIFEST_HASH: Hex = '0xa043327d77a74c1c55cfa799284b831fe09535a88b9f5fa4173d334e5ba0fd91'
-export const CIRCLE_MSCA_FACTORY: Address = '0x0000000DF7E6c9Dc387cAFc5eCBfa6c3a6179AdD'
-// Arc network fees are paid in USDC from the sender's own balance. A regular wallet adding USDC to a Fundit
-// account keeps this much free. It is also the least a Fundit account ever keeps back (see passkeyReserve).
-export const PASSKEY_GAS_BUFFER = 50_000n
 // Arc's Multicall3From runs each inner call with the caller as msg.sender. Same address on mainnet and testnet.
 export const MULTICALL3_FROM: Address = '0x522fAf9A91c41c443c66765030741e4AaCe147D0'
-// What an email or wallet account keeps back for the network fee: 0.01 USDC. Its own transaction pays gas from
-// the same balance, so unlike a passkey account there is no prefund to estimate.
+// What every Fundit account (email or wallet) keeps back for the network fee: 0.01 USDC. Arc network fees are
+// paid in USDC, and its own transaction pays gas from the same balance.
 export const EOA_GAS_RESERVE = 10_000n
-// A Fundit account pays for a user operation by moving its prefund (all its gas limits times the max fee) into
-// the EntryPoint before the calls run, so it keeps back more than the fee itself. passkeySender checks the
-// exact prefund before every send. When an operation cannot be estimated, these gas units stand in, times
-// Circle's fee at the time. Measured on Arc testnet on 2026-10-18 (all limits as sent): 254k to 425k for a
-// send, gift or withdrawal from a deployed account, 795k to create a Fundit, and 1.53M for the first operation,
-// which also deploys the account.
-export const FALLBACK_GAS_DEPLOYED = 450_000n
-export const FALLBACK_GAS_NEW_ACCOUNT = 1_600_000n
-// Only when Circle's fee cannot be read either: the highest max fee seen from Circle on Arc testnet (about 900
-// gwei, in native wei per gas). With FALLBACK_GAS_NEW_ACCOUNT and the margin that is 1.80 USDC.
-export const WORST_SEEN_FEE = 900_000_000_000n
-// ERC-4337 EntryPoint v0.7, used by Circle Modular Wallets. Same address on every chain. It holds each
-// account's deposit: prefund left over from earlier operations, which pays for the next one first.
-export const ENTRY_POINT: Address = '0x0000000071727De22E5E9d8BAf0edAc6f37da032'
 // Add money from another chain (bridging USDC into the Fundit account). Off by default. A transfer already saved
 // in the browser is still tracked either way.
 export const CROSSCHAIN_ENABLED: boolean = env.VITE_CROSSCHAIN === '1'
@@ -289,7 +257,6 @@ export const EMAIL_SIGNIN_SOURCES: Readonly<Record<'frame-src' | 'script-src', r
 }
 
 export const IRIS_URL: string = NETWORK.irisUrl
-export const MODULAR_WALLETS_URL = 'https://modular-sdk.circle.com'
 
 // Public RPC limits: 10,000 blocks and 2,000 logs per eth_getLogs.
 export const MAX_LOG_RANGE = 10_000n
@@ -306,7 +273,6 @@ export function networkHosts(n: NetworkConfig): string[] {
     BASE_RPC_URL,
     ...n.cctpChains.map((c) => c.rpcUrl),
     n.irisUrl,
-    MODULAR_WALLETS_URL,
   ]
 }
 

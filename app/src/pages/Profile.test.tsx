@@ -8,7 +8,6 @@ import type { Address } from 'viem'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { EXPLORER_URL, TOKENS } from '../config'
 import type { CampaignView } from '../lib/campaigns'
-import type { StoredPasskey } from '../lib/passkey'
 import type { Sender, TxResult } from '../lib/sender'
 import { Profile } from './Profile'
 
@@ -25,11 +24,10 @@ vi.mock('../config', async (importOriginal) => ({
   REOWN_PROJECT_ID: 'test-project',
 }))
 
-const state: { sender: Sender | null; mine: Promise<CampaignView[]> | null; gifts: unknown[] | null; username: string | null } = {
+const state: { sender: Sender | null; mine: Promise<CampaignView[]> | null; gifts: unknown[] | null } = {
   sender: null,
   mine: null,
   gifts: null,
-  username: null,
 }
 vi.mock('../hooks/useSender', () => ({ useSender: () => state.sender }))
 // Nothing here connects a wallet: the wallet setup loads only inside Add money, so importing it fails the test.
@@ -59,27 +57,9 @@ vi.mock('../lib/deposit', async (importOriginal) => ({
 vi.mock('../hooks/useActivity', () => ({ blockTimes: async () => new Map([[1n, 1760000000n]]) }))
 vi.mock('../hooks/useName', () => ({ useName: () => ({ data: undefined }) }))
 vi.mock('../hooks/useCampaigns', () => ({ useCampaign: () => ({ data: view() }) }))
-const backup = vi.hoisted(() => ({ needed: false, chain: (): Promise<boolean> => Promise.resolve(false) }))
-const logoutPasskey = vi.hoisted(() => vi.fn())
-vi.mock('../lib/passkey', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../lib/passkey')>()),
-  usePasskeySession: (): StoredPasskey | null => (state.sender?.kind === 'passkey' ? { address: state.sender.address, credentialId: 'c' } : null),
-  useBackupNeeded: () => backup.needed,
-  useBackupPending: () => false,
-  syncBackupFromChain: () => backup.chain(),
-  canPayBackupGas: async () => true,
-  passkeyReserve: async () => 50_000n,
-  readPasskeyUsername: () => state.username,
-  logoutPasskey: () => logoutPasskey(),
-}))
 vi.mock('../lib/account', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/account')>()),
   useAccount: () => (state.sender ? { kind: state.sender.kind, address: state.sender.address } : null),
-}))
-const confirmLeave = vi.hoisted(() => vi.fn(() => true))
-vi.mock('../components/AddBackupPasskey', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../components/AddBackupPasskey')>()),
-  confirmLeave: () => confirmLeave(),
 }))
 
 afterEach(() => {
@@ -87,12 +67,8 @@ afterEach(() => {
   state.sender = null
   state.mine = null
   state.gifts = null
-  state.username = null
-  backup.needed = false
-  backup.chain = () => Promise.resolve(false)
   flags.crosschain = false
   vi.clearAllMocks()
-  confirmLeave.mockReturnValue(true)
   localStorage.clear()
 })
 
@@ -119,7 +95,7 @@ function view(): CampaignView {
   }
 }
 
-function signIn(kind: Sender['kind'] = 'passkey') {
+function signIn(kind: Sender['kind'] = 'wallet') {
   state.sender = { kind, address: ME, send: vi.fn() }
 }
 
@@ -148,25 +124,24 @@ const sendPanel = () => screen.queryByRole('region', { name: 'Send money out' })
 const toggle = (name: 'Add money' | 'Send') => within(screen.getByRole('region', { name: 'Your Fundit account' })).getByRole('button', { name })
 
 describe('My page signed out', () => {
-  // Signed out there is no address to look up, so the page asks to sign in with a passkey instead of loading forever.
-  it('asks to sign in and opens the passkey sign-in dialog', async () => {
+  // Signed out there is no address to look up, so the page asks to sign in instead of loading forever.
+  it('asks to sign in and opens the sign-in dialog', async () => {
     const user = renderProfile()
     expect(screen.getByText('Sign in to see your Fundits and the donations you made.')).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Start a Fundit' })).toBeNull()
     await user.click(screen.getByRole('button', { name: 'Sign in' }))
-    expect(within(screen.getByRole('dialog', { name: 'Sign in' })).getByRole('button', { name: 'Sign in with your passkey' })).toBeTruthy()
+    expect(within(screen.getByRole('dialog', { name: 'Sign in' })).getByRole('button', { name: 'Connect a wallet' })).toBeTruthy()
   })
 })
 
 describe('My page balance card', () => {
-  it('shows the username, the short address with Copy, both balances and the two main buttons', async () => {
+  it('shows the card name, the short address with Copy, both balances and the two main buttons', async () => {
     signIn()
-    state.username = 'ana.phone'
     const user = renderProfile()
     const writeText = vi.fn(async () => {})
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
     const card = screen.getByRole('region', { name: 'Your Fundit account' })
-    expect(within(card).getByText('ana.phone')).toBeTruthy()
+    expect(within(card).getByText('Fundit account')).toBeTruthy()
     expect(within(card).getByText('0x0000...00cC')).toBeTruthy()
     expect(await within(card).findByText('12.50')).toBeTruthy()
     expect(within(card).getByText('3.00')).toBeTruthy()
@@ -195,12 +170,6 @@ describe('My page balance card', () => {
     for (const stat of stats) expect(stat.classList.contains('ui-stat-lg')).toBe(true)
     expect(stats.map((s) => s.querySelector('.ui-stat-value')?.textContent)).toEqual(['12.50', '3.00'])
     expect(stats.map((s) => s.querySelector('.ui-stat-label')?.textContent)).toEqual(['USDC', 'EURC'])
-  })
-
-  it('names the card Your Fundit account when the username is not known on this browser', () => {
-    signIn()
-    renderProfile()
-    expect(within(screen.getByRole('region', { name: 'Your Fundit account' })).getByText('Fundit account')).toBeTruthy()
   })
 })
 
@@ -265,7 +234,7 @@ describe('My page Add money and Send panels', () => {
   // reopening it can never start the same send again.
   it('keeps a send in flight locked after the panel is closed and opened again', async () => {
     const send = vi.fn((): Promise<TxResult> => new Promise(() => {}))
-    state.sender = { kind: 'passkey', address: ME, send }
+    state.sender = { kind: 'wallet', address: ME, send }
     const user = renderProfile()
     await user.click(toggle('Send'))
     const panel = sendPanel()!
@@ -306,62 +275,6 @@ describe('My page Add money and Send panels', () => {
     expect(addPanel()).toBeNull()
     expect(sendPanel()).toBeTruthy()
     expect(where()).toBe('/me?send=1')
-  })
-})
-
-describe('My page recovery key banner', () => {
-  const BANNER = 'Save a recovery key so you never lose this account'
-
-  it('shows the banner while no recovery key is saved, and Save now opens the recovery key flow with no Later', async () => {
-    signIn()
-    backup.needed = true
-    const user = renderProfile()
-    expect(await screen.findByText(BANNER)).toBeTruthy()
-    await user.click(screen.getByRole('button', { name: 'Save now' }))
-    expect(screen.getByRole('heading', { name: 'Add a recovery key' })).toBeTruthy()
-    expect(await screen.findByRole('button', { name: 'Show my recovery key' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Later' })).toBeNull()
-  })
-
-  // On a new browser there is no flag yet. The chain decides: a second owner on the account is the recovery key.
-  it('shows no banner when the chain shows a second owner, and none while the read runs', async () => {
-    signIn()
-    backup.needed = true
-    let answer: (v: boolean) => void = () => {}
-    backup.chain = () => new Promise((r) => (answer = r))
-    renderProfile()
-    await screen.findByText('12.50')
-    expect(screen.queryByText(BANNER)).toBeNull()
-    answer(true)
-    await screen.findByText('12.50')
-    expect(screen.queryByText(BANNER)).toBeNull()
-  })
-
-  // A failed read must never hide the prompt or block the page. The browser's flag decides then.
-  it('shows the banner when the chain read fails', async () => {
-    signIn()
-    backup.needed = true
-    backup.chain = () => Promise.reject(new Error('rpc down'))
-    renderProfile()
-    expect(await screen.findByText(BANNER)).toBeTruthy()
-  })
-
-  // A wallet account has the wallet's own backup. A recovery key belongs to passkey accounts only.
-  it('a wallet account shows no recovery key banner or row', async () => {
-    signIn('wallet')
-    backup.needed = true
-    const user = renderProfile()
-    expect(screen.queryByRole('region', { name: 'Recovery key' })).toBeNull()
-    await user.click(screen.getByRole('tab', { name: 'Account' }))
-    const panel = screen.getByRole('tabpanel', { name: 'Account' })
-    expect(within(panel).queryByRole('heading', { name: 'Recovery key' })).toBeNull()
-    expect(within(panel).queryByText('Not saved yet')).toBeNull()
-  })
-
-  it('shows no banner once a recovery key is saved', () => {
-    signIn()
-    renderProfile()
-    expect(screen.queryByText(BANNER)).toBeNull()
   })
 })
 
@@ -444,27 +357,9 @@ describe('My page Account tab', () => {
     return { user, panel: screen.getByRole('tabpanel', { name: 'Account' }) }
   }
 
-  it('says Not saved yet with Save now while no recovery key is saved', async () => {
-    signIn()
-    backup.needed = true
-    const { user, panel } = await openAccount()
-    expect(await within(panel).findByText('Not saved yet')).toBeTruthy()
-    await user.click(within(panel).getByRole('button', { name: 'Save now' }))
-    expect(screen.getByRole('heading', { name: 'Add a recovery key' })).toBeTruthy()
-  })
-
-  it('says Recovery key saved once one is saved', async () => {
+  it('shows the full account address with Copy and an explorer link', async () => {
     signIn()
     const { panel } = await openAccount()
-    expect(within(panel).getByText('Recovery key saved')).toBeTruthy()
-    expect(within(panel).queryByRole('button', { name: 'Save now' })).toBeNull()
-  })
-
-  it('shows the passkey username and the full account address with Copy and an explorer link', async () => {
-    signIn()
-    state.username = 'ana.phone'
-    const { panel } = await openAccount()
-    expect(within(panel).getByText('ana.phone')).toBeTruthy()
     expect(within(panel).getByText(ME)).toBeTruthy()
     expect(within(panel).getByRole('button', { name: 'Copy address' })).toBeTruthy()
     expect(within(panel).getByRole('link', { name: 'View on the Arc explorer' }).getAttribute('href')).toBe(`${EXPLORER_URL}/address/${ME}`)
@@ -475,7 +370,6 @@ describe('My page Account tab', () => {
     signIn('wallet')
     const { panel } = await openAccount()
     expect(within(panel).getByRole('heading', { name: 'Sign-in' })).toBeTruthy()
-    expect(within(panel).queryByRole('heading', { name: 'Passkey' })).toBeNull()
     expect(within(panel).getByText('0x0000...00cC').closest('p')?.textContent).toBe('Wallet: 0x0000...00cC')
   })
 
@@ -497,17 +391,21 @@ describe('My page Account tab', () => {
     expect(within(panel).getByText('No transfers on their way.')).toBeTruthy()
   })
 
-  // Sign out ends the session and drops a wallet connected for Add money, after the same leave question as the menu.
-  it('signs out through the leave guard', async () => {
+  // Sign out ends the session and drops a wallet connected for Add money, like the menu's Sign out.
+  it('signs out and disconnects the wallet', async () => {
     signIn()
+    localStorage.setItem('fundit.session.wallet', JSON.stringify({ address: ME, connectorId: 'io.metamask' }))
     const { user, panel } = await openAccount()
-    confirmLeave.mockReturnValueOnce(false)
     await user.click(within(panel).getByRole('button', { name: 'Sign out' }))
-    expect(confirmLeave).toHaveBeenCalledTimes(1)
-    expect(logoutPasskey).not.toHaveBeenCalled()
-    expect(disconnect).not.toHaveBeenCalled()
-    await user.click(within(panel).getByRole('button', { name: 'Sign out' }))
-    expect(logoutPasskey).toHaveBeenCalledTimes(1)
     expect(disconnect).toHaveBeenCalledTimes(1)
+    expect(localStorage.getItem('fundit.session.wallet')).toBeNull()
+  })
+
+  // Email shows the address the person signed in with.
+  it('shows the email address for an email account', async () => {
+    signIn('email')
+    localStorage.setItem('fundit.session.email', JSON.stringify({ address: ME.toLowerCase(), walletId: 'w-1', email: 'ana@example.com' }))
+    const { panel } = await openAccount()
+    expect(within(panel).getByText('ana@example.com').closest('p')?.textContent).toBe('Email: ana@example.com')
   })
 })

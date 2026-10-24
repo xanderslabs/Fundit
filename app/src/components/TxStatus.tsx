@@ -3,7 +3,7 @@ import { Link } from 'react-router'
 import type { Hex } from 'viem'
 import { EXPLORER_URL, TX_TIMEOUT_MS } from '../config'
 import { type AccountKind, confirmLine } from '../lib/account'
-import { CANCELLED, CHECK_FAILED, explainError, needsAddMoney, PlainError } from '../lib/errors'
+import { CANCELLED, CHECK_FAILED, explainError, needsAddMoney } from '../lib/errors'
 import { arcReceipts, type Call, type Sender, type TxResult, waitForResult } from '../lib/sender'
 import { ADD_MONEY_PATH } from '../lib/urls'
 import { Button, StatusBox } from './ui'
@@ -15,22 +15,13 @@ export type TxPhase =
   | { kind: 'sending'; by: AccountKind }
   | { kind: 'checking'; hash: Hex }
   | { kind: 'success'; hash: Hex }
-  // The outcome is unknown. note explains a re-check that failed to answer. userop marks a passkey user
-  // operation hash, which the explorer cannot show.
-  | { kind: 'timeout'; hash: Hex; userop?: boolean; note?: string }
+  // The outcome is unknown. note explains a re-check that failed to answer.
+  | { kind: 'timeout'; hash: Hex; note?: string }
   // addMoney: the account is short of USDC for the network fee, so the box links to Add money.
   | { kind: 'error'; message: string; hash?: Hex; addMoney?: boolean }
 
-export const PASSKEY_PROCESSING = 'Your passkey transaction is still processing.'
-export const PASSKEY_LOGIN_TO_CHECK = 'Log in with your passkey to check this transaction.'
-
-// The re-check for a timed-out result: a user operation hash goes back to the sender's bundler, a
-// transaction hash to the Arc RPC. Neither sends anything.
-export function recheckResult(sender: Sender | null, hash: Hex, userop: boolean): Promise<TxResult> {
-  if (userop) {
-    if (!sender?.recheck) return Promise.reject(new PlainError(PASSKEY_LOGIN_TO_CHECK))
-    return sender.recheck(hash)
-  }
+// The re-check for a timed-out result: the transaction hash goes to the Arc RPC. It sends nothing.
+export function recheckResult(hash: Hex): Promise<TxResult> {
   return waitForResult(arcReceipts, hash, TX_TIMEOUT_MS)
 }
 
@@ -46,7 +37,7 @@ export function ExplorerLink({ hash }: { hash: Hex }) {
   )
 }
 
-// One action on Arc (a single call, or a passkey batch sent as one user operation), with the same
+// One action on Arc (a single call, or a batch sent as one transaction), with the same
 // no-double-send rules as donating: a send or check already running blocks another, and a timed-out
 // transaction blocks a new one until a check settles it.
 // onSuccess gets the hash of the mined transaction.
@@ -54,8 +45,6 @@ export function useTx(onSuccess: (hash: Hex) => void) {
   const [phase, setPhase] = useState<TxPhase>({ kind: 'idle' })
   // Set synchronously, so a second click before React re-renders cannot start a second send or check.
   const inFlight = useRef(false)
-  // The sender of the last send, so a re-check of its timeout goes the same way.
-  const lastSender = useRef<Sender | null>(null)
 
   function handle(res: TxResult) {
     switch (res.status) {
@@ -64,7 +53,7 @@ export function useTx(onSuccess: (hash: Hex) => void) {
         setPhase({ kind: 'success', hash: res.hash })
         return
       case 'timeout':
-        setPhase({ kind: 'timeout', hash: res.hash, userop: res.hashKind === 'userop' })
+        setPhase({ kind: 'timeout', hash: res.hash })
         return
       case 'reverted':
         setPhase({ kind: 'error', message: res.error, hash: res.hash })
@@ -75,17 +64,15 @@ export function useTx(onSuccess: (hash: Hex) => void) {
   }
 
   // build runs inside the guard, so a quote it fetches or a check it makes cannot overlap a second click.
-  // Several calls go to the sender in one send. Every sender makes them one operation (a passkey user
-  // operation, or one transaction through Multicall3From), so they succeed or fail together.
-  // usdcOut is the USDC the calls move out of the account; a passkey sender keeps the network fee on top.
-  async function run(sender: Sender, build: () => Call | Call[] | Promise<Call | Call[]>, label: string, usdcOut?: bigint) {
+  // Several calls go to the sender in one send. Every sender makes them one transaction through
+  // Multicall3From, so they succeed or fail together.
+  async function run(sender: Sender, build: () => Call | Call[] | Promise<Call | Call[]>, label: string) {
     if (inFlight.current) return
     inFlight.current = true
     setPhase({ kind: 'sending', by: sender.kind })
-    lastSender.current = sender
     try {
       const built = await build()
-      handle(await sender.send(Array.isArray(built) ? built : [built], { label, usdcOut }))
+      handle(await sender.send(Array.isArray(built) ? built : [built], { label }))
     } catch (err) {
       setPhase({ kind: 'error', message: explainError(err), addMoney: needsAddMoney(err) })
     } finally {
@@ -94,15 +81,15 @@ export function useTx(onSuccess: (hash: Hex) => void) {
   }
 
   // Checks the same transaction again. It never sends a new one.
-  async function checkAgain(hash: Hex, userop = false) {
+  async function checkAgain(hash: Hex) {
     if (inFlight.current) return
     inFlight.current = true
     setPhase({ kind: 'checking', hash })
     try {
-      handle(await recheckResult(lastSender.current, hash, userop))
+      handle(await recheckResult(hash))
     } catch (err) {
       console.error(err)
-      setPhase({ kind: 'timeout', hash, userop, note: CHECK_FAILED })
+      setPhase({ kind: 'timeout', hash, note: CHECK_FAILED })
     } finally {
       inFlight.current = false
     }
@@ -151,10 +138,12 @@ export function TxStatus({
           <p>
             <strong>Your {noun} is not confirmed yet.</strong> It may still go through. Check it before you try again.
           </p>
-          <p>{phase.userop ? PASSKEY_PROCESSING : <ExplorerLink hash={phase.hash} />}</p>
+          <p>
+            <ExplorerLink hash={phase.hash} />
+          </p>
           {phase.note && <p className="form-error">{phase.note}</p>}
           <div className="form-actions">
-            <Button variant="secondary" onClick={() => tx.checkAgain(phase.hash, phase.userop)}>
+            <Button variant="secondary" onClick={() => tx.checkAgain(phase.hash)}>
               Check again
             </Button>
             <Button variant="secondary" onClick={() => tx.startOver(startOverWarning)}>

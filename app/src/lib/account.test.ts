@@ -32,6 +32,13 @@ describe('useAccount', () => {
     expect(result.current).toEqual({ kind: 'email', address: EMAIL })
   })
 
+  // A browser that signed in with a passkey before the update still holds that key. It must read as signed out.
+  it('an old passkey session key is ignored (signed out)', () => {
+    localStorage.setItem(passkeyKey, JSON.stringify({ address: PASSKEY, credentialId: 'cred-1' }))
+    const { result } = renderHook(() => useAccount())
+    expect(result.current).toBeNull()
+  })
+
   // Signing in with a wallet in one tab must move every other tab to that account, or a tab still showing the
   // old account would act for it.
   it('follows a sign-in from another tab', () => {
@@ -46,13 +53,11 @@ describe('useAccount', () => {
 })
 
 describe('clearOtherSessions', () => {
-  // One account at a time: a stale passkey or email session would come back after the wallet signs out.
-  it("clearOtherSessions('wallet') clears passkey and email stores", () => {
-    localStorage.setItem(passkeyKey, JSON.stringify({ address: PASSKEY, credentialId: 'cred-1' }))
+  // One account at a time: a stale email session would come back after the wallet signs out.
+  it("clearOtherSessions('wallet') clears the email store", () => {
     localStorage.setItem(emailKey, JSON.stringify({ address: EMAIL, walletId: 'w-1', email: 'ana@example.com' }))
     localStorage.setItem(walletKey, JSON.stringify({ address: WALLET, connectorId: 'io.metamask' }))
     clearOtherSessions('wallet')
-    expect(localStorage.getItem(passkeyKey)).toBeNull()
     expect(localStorage.getItem(emailKey)).toBeNull()
     expect(localStorage.getItem(walletKey)).not.toBeNull()
   })
@@ -60,7 +65,6 @@ describe('clearOtherSessions', () => {
 
 describe('confirmLine', () => {
   it('names the prompt each kind of account shows', () => {
-    expect(confirmLine('passkey')).toBe('Confirm with your passkey')
     expect(confirmLine('email')).toBe('Approve in the Circle window')
     expect(confirmLine('wallet')).toBe('Confirm in your wallet')
   })

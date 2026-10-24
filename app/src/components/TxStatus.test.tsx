@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Call, Sender, TxResult } from '../lib/sender'
 import { TxStatus, useTx } from './TxStatus'
 
-const OP_HASH = `0x${'1'.repeat(64)}` as Hex
 const TX_HASH = `0x${'2'.repeat(64)}` as Hex
 const CALL: Call = { to: '0x00000000000000000000000000000000000000a1', data: '0x01' }
 const success: TxResult = { status: 'success', hash: TX_HASH, receipt: { status: 'success' } as TransactionReceipt }
@@ -31,39 +30,18 @@ afterEach(() => {
 })
 
 describe('useTx with TxStatus', () => {
-  // The line names the prompt the sender shows next: the passkey, Circle's window for email, or the wallet's own.
-  it('asks for the passkey while sending, or the wallet for a wallet sender', async () => {
-    const sender: Sender = { kind: 'passkey', address: '0x00000000000000000000000000000000000000cc', send: () => new Promise(() => {}) }
+  // The line names the prompt the sender shows next: Circle's window for email, or the wallet's own.
+  it("asks for Circle's window for an email sender, or the wallet for a wallet sender", async () => {
+    const sender: Sender = { kind: 'email', address: '0x00000000000000000000000000000000000000cc', send: () => new Promise(() => {}) }
     const user = userEvent.setup()
     const { unmount } = render(<Harness sender={sender} />)
     await user.click(screen.getByRole('button', { name: 'Go' }))
-    expect(await screen.findByText(/^Confirm with your passkey, then wait for the network\./)).toBeTruthy()
+    expect(await screen.findByText(/^Approve in the Circle window, then wait for the network\./)).toBeTruthy()
     expect(screen.queryByText(/wallet/)).toBeNull()
     unmount()
     render(<Harness sender={{ ...sender, kind: 'wallet' }} />)
     await user.click(screen.getByRole('button', { name: 'Go' }))
     expect(await screen.findByText(/^Confirm in your wallet, then wait for the network\./)).toBeTruthy()
-  })
-
-  // A passkey timeout holds a user operation hash. Only the sender's bundler can find it, never the explorer.
-  it('rechecks a passkey timeout through sender.recheck and then links the real transaction', async () => {
-    const recheck = vi.fn(async () => success)
-    const sender: Sender = {
-      kind: 'passkey',
-      address: '0x00000000000000000000000000000000000000cc',
-      send: async () => ({ status: 'timeout', hash: OP_HASH, completed: 0, hashKind: 'userop' }),
-      recheck,
-    }
-    render(<Harness sender={sender} />)
-    const user = userEvent.setup()
-    await user.click(screen.getByRole('button', { name: 'Go' }))
-    expect(await screen.findByText('Your passkey transaction is still processing.')).toBeTruthy()
-    expect(screen.queryByRole('link', { name: /explorer/i })).toBeNull()
-    await user.click(screen.getByRole('button', { name: 'Check again' }))
-    expect(await screen.findByText('Saved.')).toBeTruthy()
-    expect(recheck).toHaveBeenCalledWith(OP_HASH)
-    expect(waitForResult).not.toHaveBeenCalled()
-    expect(screen.getByRole('link', { name: /explorer/i }).getAttribute('href')).toBe(`https://explorer.arc.io/tx/${TX_HASH}`)
   })
 
   it('rechecks a wallet timeout with waitForResult', async () => {

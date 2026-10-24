@@ -5,13 +5,13 @@ import { EmailError, type EmailSession } from '../lib/emailAccount'
 import { explainError } from '../lib/errors'
 import { Button, Field } from './ui'
 import './Form.css'
-import './PasskeyLogin.css'
+import './SignInOptions.css'
 
 export const WRONG_CODE = 'That code is not right. Check it and try again.'
 export const EXPIRED_CODE = 'That code has expired. Send a new one.'
 export const TOO_MANY_TRIES = 'Too many tries. Send a new code.'
 export const TURNSTILE_FAILED = 'We could not check this browser. Try again.'
-export const EMAIL_UNAVAILABLE = 'Email sign-in is not available right now. Use a passkey or a wallet.'
+export const EMAIL_UNAVAILABLE = 'Email sign-in is not available right now. Use a wallet.'
 const NEW_CODE = 'Press Send code to get a new code.'
 const CHECK_PENDING = 'Wait a moment for the browser check to finish, then try again.'
 
@@ -144,8 +144,8 @@ export function EmailLogin({ onDone }: { onDone: (session: EmailSession) => void
 
   const busy = stage !== 'idle'
   return (
-    <form className="passkey-form" onSubmit={submit} noValidate>
-      <div className="passkey-field">
+    <form className="email-form" onSubmit={submit} noValidate>
+      <div className="email-field">
         <Field id="email-address" label="Email address" error={emailError}>
           <input type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} disabled={busy} />
         </Field>
@@ -154,9 +154,9 @@ export function EmailLogin({ onDone }: { onDone: (session: EmailSession) => void
       <Button type="submit" size="lg" block disabled={busy}>
         Send code
       </Button>
-      <p className="passkey-note">We email you a code to sign in. New to Fundit? The same code creates your account.</p>
-      {stage === 'code' && <p className="passkey-hint">Enter the code from your email in the Circle window.</p>}
-      {stage === 'opening' && <p className="passkey-hint">Opening your account. A new account asks you to approve one step in the Circle window.</p>}
+      <p className="email-note">We email you a code to sign in. New to Fundit? The same code creates your account.</p>
+      {stage === 'code' && <p className="email-hint">Enter the code from your email in the Circle window.</p>}
+      {stage === 'opening' && <p className="email-hint">Opening your account. A new account asks you to approve one step in the Circle window.</p>}
       {error && (
         <p className="form-error" role="alert">
           {error}

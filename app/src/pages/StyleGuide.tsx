@@ -252,9 +252,9 @@ export function StyleGuide() {
         <Banner action={<Button variant="secondary">Learn more</Button>}>
           <p>Fundit runs on Arc. Gifts arrive in seconds.</p>
         </Banner>
-        <Banner tone="attention" action={<Button>Save now</Button>}>
+        <Banner tone="attention" action={<Button>Cancel recovery</Button>}>
           <p>
-            <strong>Save a recovery key so you never lose this account</strong>
+            <strong>Your backup started a recovery</strong>
           </p>
         </Banner>
         <StatusBox>
@@ -315,16 +315,16 @@ export function StyleGuide() {
           </Button>
         </Row>
         <Dialog open={dialogOpen === 'sm'} size="sm" onClose={() => setDialogOpen(null)} title="Sign in">
-          <Field id="sg-dialog-username" label="Username">
+          <Field id="sg-dialog-email" label="Email address">
             <input />
           </Field>
-          <Button block>Sign in with a passkey</Button>
+          <Button block>Send code</Button>
         </Dialog>
-        <Dialog open={dialogOpen === 'md'} size="md" onClose={() => setDialogOpen(null)} title="Add a recovery key">
-          <p>A recovery key is 12 words you write down and keep safe.</p>
+        <Dialog open={dialogOpen === 'md'} size="md" onClose={() => setDialogOpen(null)} title="Share this Fundit">
+          <p>Copy the link or share it with the people you know.</p>
           <Actions>
-            <Button variant="secondary">Later</Button>
-            <Button>Show my recovery key</Button>
+            <Button variant="secondary">Close</Button>
+            <Button>Copy link</Button>
           </Actions>
         </Dialog>
       </Section>

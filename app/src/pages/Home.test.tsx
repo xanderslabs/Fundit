@@ -28,13 +28,16 @@ vi.mock('../hooks/useSender', () => ({ useSender: () => state.sender }))
 vi.mock('../wagmi', () => {
   throw new Error('Home loaded the wallet setup')
 })
-const loginPasskey = vi.hoisted(() => vi.fn())
-vi.mock('../lib/passkey', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../lib/passkey')>()),
-  loginPasskey,
+// The wallet list stands in for a wallet that connects at once. ConnectWallet.test.tsx covers the real list.
+vi.mock('../components/ConnectWallet', () => ({
+  ConnectWallet: ({ onConnected }: { onConnected: (address: Address, connectorId: string) => void }) => (
+    <button type="button" onClick={() => onConnected('0x1111111111111111111111111111111111111111', 'io.metamask')}>
+      Test wallet
+    </button>
+  ),
 }))
 
-const ME: Sender = { kind: 'passkey', address: '0x1111111111111111111111111111111111111111', send: vi.fn() }
+const ME: Sender = { kind: 'wallet', address: '0x1111111111111111111111111111111111111111', send: vi.fn() }
 
 afterEach(() => {
   cleanup()
@@ -42,7 +45,7 @@ afterEach(() => {
   lists.newest = []
   flags.crosschain = false
   state.sender = null
-  loginPasskey.mockReset()
+  localStorage.clear()
 })
 
 const ui = () => (
@@ -115,13 +118,13 @@ describe('Home hero', () => {
     expect(within(hero()).getByRole('link', { name: 'Create a Fundit' }).getAttribute('href')).toBe('/create')
   })
 
-  // Only signed-in people can create. Signed out, the button opens the passkey sign-in, then carries on to /create.
-  it('signed out, Create a Fundit opens the passkey sign-in and goes to /create once signed in', async () => {
-    loginPasskey.mockResolvedValue({ address: ME.address })
+  // Only signed-in people can create. Signed out, the button opens the sign-in dialog, then carries on to /create.
+  it('signed out, Create a Fundit opens the sign-in dialog and goes to /create once signed in', async () => {
     renderHome()
     const user = userEvent.setup()
     await user.click(within(hero()).getByRole('button', { name: 'Create a Fundit' }))
-    await user.click(within(screen.getByRole('dialog', { name: 'Sign in' })).getByRole('button', { name: 'Sign in with your passkey' }))
+    await user.click(within(screen.getByRole('dialog', { name: 'Sign in' })).getByRole('button', { name: 'Connect a wallet' }))
+    await user.click(await screen.findByRole('button', { name: 'Test wallet' }))
     expect(await screen.findByText('Create page')).toBeTruthy()
   })
 

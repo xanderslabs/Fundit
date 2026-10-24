@@ -25,8 +25,8 @@ function embedRewrite(): Plugin {
 }
 
 export default defineConfig(({ command, mode }) => {
-  // Fail the production build, not the deployed page, when the factory or Reown config is missing, when
-  // the Circle client key for passkey sign-in is missing, or when an RPC host is missing from the CSP.
+  // Fail the production build, not the deployed page, when the factory or Reown config is missing, or when an
+  // RPC host is missing from the CSP.
   if (command === 'build') {
     const env = { ...loadEnv(mode, '.', 'VITE_'), PROD: mode === 'production' }
     loadConfig(env)
@@ -47,9 +47,8 @@ export default defineConfig(({ command, mode }) => {
     // testnet.
     ...(mode === 'test' && { envDir: false as const }),
     build: {
-      // wagmi loads only when a wallet tab in Add money opens, and the passkey and bridge SDKs load
-      // on demand too. Their largest chunks are about 700 kB minified, none on the first load. Raise the
-      // limit above them.
+      // wagmi loads only when a wallet tab in Add money opens, and the bridge SDK loads on demand too. Its
+      // largest chunk is about 660 kB minified, not on the first load. Raise the limit above it.
       chunkSizeWarningLimit: 1400,
       rolldownOptions: {
         input: {

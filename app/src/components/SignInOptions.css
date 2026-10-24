@@ -1,4 +1,4 @@
-/* The sign-in dialog: passkey first, then the other ways in. The wallet list (ConnectWallet) uses it too. */
+/* The sign-in dialog: email (when on) and Connect a wallet. The wallet list (ConnectWallet) uses it too. */
 .signin-options,
 .connect-wallet {
   display: flex;
@@ -6,22 +6,32 @@
   gap: var(--space-4);
 }
 
-/* Between the passkey views and the other choices. */
-.signin-or {
+/* Continue with email: the form and the lines under its button. */
+.email-form {
   display: flex;
-  align-items: center;
-  gap: var(--space-3);
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.email-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.email-hint {
   margin: 0;
   color: var(--text-muted);
   font-size: var(--text-sm);
   line-height: var(--text-sm-line);
 }
 
-.signin-or::before,
-.signin-or::after {
-  flex: 1;
-  border-top: 1px solid var(--line);
-  content: "";
+.email-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--text-xs-line);
+  text-align: center;
 }
 
 /* Turnstile's check in Continue with email, centred like the buttons around it. */
@@ -32,6 +42,29 @@
 
 .signin-back {
   align-self: center;
+}
+
+/* A button that reads as a link. */
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: var(--weight-medium);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.link-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.link-button:disabled {
+  cursor: default;
+  opacity: 0.6;
 }
 
 .connect-list {

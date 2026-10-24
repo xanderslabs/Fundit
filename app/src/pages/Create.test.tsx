@@ -13,7 +13,6 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { factoryAbi } from '../abi/factory'
 import { FACTORY_ADDRESS, TOKENS } from '../config'
-import { NeedsNetworkFee } from '../lib/errors'
 import type { Sender, TxResult } from '../lib/sender'
 import { Create } from './Create'
 
@@ -111,10 +110,10 @@ describe('Create signed out', () => {
     expect(screen.queryByRole('button', { name: 'Create a Fundit' })).toBeNull()
   })
 
-  it('Sign in opens the sign-in dialog with the passkey button, never a separate wallet modal', async () => {
+  it('Sign in opens the sign-in dialog, never a separate wallet modal', async () => {
     renderCreate()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }))
-    expect(within(screen.getByRole('dialog', { name: 'Sign in' })).getByRole('button', { name: 'Sign in with your passkey' })).toBeTruthy()
+    expect(within(screen.getByRole('dialog', { name: 'Sign in' })).getByRole('button', { name: 'Connect a wallet' })).toBeTruthy()
   })
 
   it('shows the form once signed in, without leaving /create', () => {
@@ -185,17 +184,17 @@ describe('Create', () => {
   })
 
   // A dropped or slow transaction must never look like success.
-  // Creating spends no USDC in its calls but still pays the prefund. The passkey sender refuses a short account
-  // before anything is sent (passkey.test.ts), and the page shows that with the number and a way to add money.
+  // Creating spends no USDC in its calls but still pays the network fee. A short account is refused by the wallet
+  // or the node for insufficient funds, and the page shows that with a way to add money.
   it("shows the sender's network fee refusal with an Add money link", async () => {
     const send = vi.fn(async () => {
-      throw new NeedsNetworkFee(1_620_000n)
+      throw new Error('insufficient funds for gas * price + value')
     })
-    state.sender = { kind: 'passkey', address: ME, send }
+    state.sender = { kind: 'wallet', address: ME, send }
     renderCreate()
     const user = await fillValid()
     await user.click(submitButton())
-    expect(await screen.findByText(/Your Fundit account needs at least 1.62 USDC for the network fee\. Add money and try again\./)).toBeTruthy()
+    expect(await screen.findByText(/Your Fundit account does not have enough USDC for the network fee\. Add money and try again\./)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/me?add=1')
   })
 
@@ -211,51 +210,13 @@ describe('Create', () => {
   })
 
   describe('Check again', () => {
-    const PROCESSING = 'Your passkey transaction is still processing.'
-
-    function passkeySender(first: TxResult, recheckFn: (hash: Hex) => Promise<TxResult>) {
-      const recheckSpy = vi.fn(recheckFn)
-      state.sender = { kind: 'passkey', address: ME, send: vi.fn(async () => first), recheck: recheckSpy }
-      return recheckSpy
-    }
-
-    // A user operation hash is unknown to the explorer and to the Arc RPC. Only the passkey bundler can find
-    // the transaction, and the new address is still read from that transaction's receipt log.
-    it('rechecks a passkey timeout through the bundler and opens the new campaign from the receipt', async () => {
-      const recheckSpy = passkeySender({ status: 'timeout', hash: HASH, completed: 0, hashKind: 'userop' }, async () => ({
-        status: 'success',
-        hash: HASH,
-        receipt: createdReceipt(),
-      }))
-      renderCreate()
-      const user = await fillValid()
-      await user.click(submitButton())
-      expect(await screen.findByText(/not confirmed yet/)).toBeTruthy()
-      await user.click(screen.getByRole('button', { name: 'Check again' }))
-      await expectCreated(user)
-      expect(recheckSpy).toHaveBeenCalledWith(HASH)
-    })
-
-    // The explorer would show "not found" for a user operation hash, which reads like a failure.
-    it('shows no explorer link while the hash is a user operation hash', async () => {
-      passkeySender({ status: 'timeout', hash: HASH, completed: 0, hashKind: 'userop' }, async () => {
-        throw new Error('not used')
-      })
-      renderCreate()
-      const user = await fillValid()
-      await user.click(submitButton())
-      expect(await screen.findByText(PROCESSING)).toBeTruthy()
-      expect(screen.queryByRole('link', { name: /explorer/i })).toBeNull()
-    })
-
-    it('keeps the wallet path on the Arc RPC and the explorer link', async () => {
+    it('rechecks on the Arc RPC, with the explorer link, and opens the new campaign from the receipt', async () => {
       fakeSender({ status: 'timeout', hash: HASH, completed: 0 })
       recheck.next = async () => ({ status: 'success', hash: HASH, receipt: createdReceipt() })
       renderCreate()
       const user = await fillValid()
       await user.click(submitButton())
       expect(await screen.findByText(/not confirmed yet/)).toBeTruthy()
-      expect(screen.queryByText(PROCESSING)).toBeNull()
       expect(screen.getByRole('link', { name: /explorer/i }).getAttribute('href')).toBe(`https://explorer.arc.io/tx/${HASH}`)
       await user.click(screen.getByRole('button', { name: 'Check again' }))
       await expectCreated(user)
@@ -293,34 +254,6 @@ describe('Create', () => {
       expect((submitButton() as HTMLButtonElement).disabled).toBe(false)
       expect(send).toHaveBeenCalledTimes(1)
       confirm.mockRestore()
-    })
-
-    // The passkey session can end between the send and the check. The bundler of the sender that sent still
-    // knows the user operation.
-    it('rechecks through the sender that sent, even after the current sender changes', async () => {
-      const recheckSpy = passkeySender({ status: 'timeout', hash: HASH, completed: 0, hashKind: 'userop' }, async () => ({
-        status: 'success',
-        hash: HASH,
-        receipt: createdReceipt(),
-      }))
-      const { rerender } = renderCreate()
-      const user = await fillValid()
-      await user.click(submitButton())
-      await screen.findByText(PROCESSING)
-      fakeSender({ status: 'rejected', completed: 0 })
-      rerender(
-        <QueryClientProvider client={new QueryClient()}>
-          <MemoryRouter initialEntries={['/create']}>
-            <Routes>
-              <Route path="/create" element={<Create />} />
-              <Route path="/c/:address" element={<CampaignStub />} />
-            </Routes>
-          </MemoryRouter>
-        </QueryClientProvider>,
-      )
-      await user.click(screen.getByRole('button', { name: 'Check again' }))
-      await expectCreated(user)
-      expect(recheckSpy).toHaveBeenCalledWith(HASH)
     })
   })
 })

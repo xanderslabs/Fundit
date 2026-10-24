@@ -70,7 +70,7 @@ function errorTexts(): { file: string; text: string }[] {
 describe('user-facing error messages', () => {
   it('finds the error texts to check', () => {
     const texts = errorTexts().map((t) => t.text)
-    expect(texts).toContain("That username is taken. Pick another one, or sign in if it's yours.")
+    expect(texts).toContain("Fundit couldn't reach the network. Check your connection and try again.")
     expect(texts).toContain("That didn't work. Check your connection and try again.")
     expect(texts.length).toBeGreaterThan(60)
   })

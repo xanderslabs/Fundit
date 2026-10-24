@@ -26,7 +26,6 @@ import '../components/Form.css'
 import './Manage.css'
 
 const CLOSE_TEXT = 'Closing is permanent. Funds that arrive later can still be withdrawn.'
-const PASSKEY_WARNING = 'Your Fundit account may not exist on that chain. Send to an address you control there.'
 const CROSS_CHAIN_NOTE = 'Cross-chain payouts are new. Try a small amount first.'
 const FEE_CHANGED = 'The transfer fee changed. Check the new amount and confirm again.'
 const TOO_SMALL = 'This amount is too small to cover the transfer fee. Try a larger amount.'
@@ -291,11 +290,6 @@ function WithdrawSection({ view, sender }: { view: CampaignView; sender: Sender 
             </Field>
             {symbol === 'EURC' && destinations.length === 1 && <p className="form-hint">EURC can only be paid out on Arc.</p>}
             {crossChain && <p className="form-hint">{CROSS_CHAIN_NOTE}</p>}
-            {crossChain && sender.kind === 'passkey' && (
-              <p className="form-error" role="alert">
-                {PASSKEY_WARNING}
-              </p>
-            )}
           </div>
 
           {chain && (

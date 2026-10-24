@@ -125,7 +125,7 @@ function faqs(): Faq[] {
   ]
 }
 
-// Signed in, it is a link to /create. Signed out, it opens the passkey sign-in and goes to /create once that
+// Signed in, it is a link to /create. Signed out, it opens the sign-in dialog and goes to /create once that
 // succeeds. Closing the sign-in dialog without signing in stays on Home.
 function CreateFunditButton() {
   const signedIn = useSender() !== null

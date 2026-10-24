@@ -4,12 +4,11 @@ import { Link, useSearchParams } from 'react-router'
 import type { Address } from 'viem'
 import { SignInButton, useSignOut } from '../components/AccountMenu'
 import { AccountWithdraw } from '../components/AccountWithdraw'
-import { AddBackupPasskey } from '../components/AddBackupPasskey'
 import { AddMoneyPanel } from '../components/AddMoneyPanel'
 import { CampaignGrid, LoadError } from '../components/CampaignGrid'
 import { PendingBridgeTracker } from '../components/PendingBridgeTracker'
 import { ShareDialog } from '../components/SharePanel'
-import { AddressChip, Banner, Button, ButtonLink, Card, EmptyState, PageHeader, Panel, Stat, TabPanel, Tabs } from '../components/ui'
+import { AddressChip, Button, ButtonLink, Card, EmptyState, PageHeader, Panel, Stat, TabPanel, Tabs } from '../components/ui'
 import { EXPLORER_URL } from '../config'
 import { blockTimes } from '../hooks/useActivity'
 import { useCampaign } from '../hooks/useCampaigns'
@@ -24,7 +23,6 @@ import { balancesKey, fetchAccountBalances } from '../lib/deposit'
 import { readEmailSession } from '../lib/emailAccount'
 import { formatAmount } from '../lib/format'
 import { shortAddress } from '../lib/names'
-import { readPasskeyUsername, type StoredPasskey, syncBackupFromChain, useBackupNeeded, usePasskeySession } from '../lib/passkey'
 import type { Sender } from '../lib/sender'
 import './Profile.css'
 
@@ -168,48 +166,14 @@ function useHasPending(address: Address) {
   return pending
 }
 
-function AccountTab({
-  account,
-  username,
-  backup,
-  onSaveNow,
-}: {
-  account: Account
-  username: string | null
-  backup: 'saved' | 'missing' | 'checking'
-  onSaveNow: () => void
-}) {
+function AccountTab({ account }: { account: Account }) {
   const address = account.address
   const signOut = useSignOut()
   const pending = useHasPending(address)
   return (
     <div className="dash-tab dash-account">
-      {/* A recovery key belongs to passkey accounts. A wallet has its own backup. */}
-      {account.kind === 'passkey' && (
-        <section className="dash-account-row" aria-labelledby="dash-recovery-heading">
-          <h3 id="dash-recovery-heading">Recovery key</h3>
-          {backup === 'saved' && <p>Recovery key saved</p>}
-          {backup === 'checking' && <p className="dash-muted">Checking...</p>}
-          {backup === 'missing' && (
-            <div className="dash-inline">
-              <p>Not saved yet</p>
-              <Button onClick={onSaveNow}>Save now</Button>
-            </div>
-          )}
-        </section>
-      )}
       <section className="dash-account-row" aria-labelledby="dash-signin-heading">
         <h3 id="dash-signin-heading">Sign-in</h3>
-        {account.kind === 'passkey' && (
-          <p>
-            Passkey
-            {username && (
-              <>
-                , username: <strong>{username}</strong>
-              </>
-            )}
-          </p>
-        )}
         {account.kind === 'email' && (
           <p>
             Email: <strong>{readEmailSession()?.email}</strong>
@@ -245,14 +209,12 @@ function AccountTab({
 
 function BalanceCard({
   address,
-  username,
   open,
   onToggle,
   addRef,
   sendRef,
 }: {
   address: Address
-  username: string | null
   open: Panel | null
   onToggle: (p: Panel) => void
   addRef: Ref<HTMLButtonElement>
@@ -269,7 +231,7 @@ function BalanceCard({
   return (
     <Card className="account-card" label="Your Fundit account">
       <div className="account-card-top">
-        <p className="account-card-name">{username ?? 'Fundit account'}</p>
+        <p className="account-card-name">Fundit account</p>
         <AddressChip address={address} />
       </div>
       {/* dash-balances has no styles: the e2e reads the balance through it. */}
@@ -326,9 +288,8 @@ function DashPanel({ id, label, open, onClose, children }: { id: string; label: 
   )
 }
 
-function Dashboard({ sender, account, stored }: { sender: Sender; account: Account; stored: StoredPasskey | null }) {
+function Dashboard({ sender, account }: { sender: Sender; account: Account }) {
   const address = account.address
-  const [username] = useState(() => (account.kind === 'passkey' ? readPasskeyUsername(address) : null))
   const [params, setParams] = useSearchParams()
   // The open panel lives in the address bar (?add=1 or ?send=1), so every Add money link can open it.
   const open: Panel | null = params.get('add') === '1' ? 'add' : params.get('send') === '1' ? 'send' : null
@@ -355,33 +316,13 @@ function Dashboard({ sender, account, stored }: { sender: Sender; account: Accou
     ;(which === 'add' ? addButton : sendButton).current?.focus()
   }
 
-  // A new browser has no flag yet, so the chain decides. A failed read falls back to the flag: the banner shows.
-  const backupNeeded = useBackupNeeded(stored)
-  const backupOnChain = useQuery({
-    queryKey: ['backup-on-chain', address.toLowerCase()],
-    queryFn: () => syncBackupFromChain(address),
-    enabled: backupNeeded,
-    retry: false,
-    staleTime: Infinity,
-  })
-  const showBackup = backupNeeded && (backupOnChain.isError || backupOnChain.data === false)
-  const backupState = !backupNeeded ? 'saved' : showBackup ? 'missing' : 'checking'
-  const [backupOpen, setBackupOpen] = useState(false)
   const [tab, setTab] = useState<DashTab>('dash-fundits')
-  const banner = useRef<HTMLElement>(null)
-
-  function saveNow() {
-    setBackupOpen(true)
-    banner.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
-    banner.current?.focus()
-  }
 
   return (
     <div className="dashboard">
       <h1 className="sr-only">My page</h1>
       <BalanceCard
         address={address}
-        username={username}
         open={open}
         onToggle={(p) => setOpen(open === p ? null : p)}
         addRef={addButton}
@@ -399,29 +340,13 @@ function Dashboard({ sender, account, stored }: { sender: Sender; account: Accou
         {opened.send && <AccountWithdraw sender={sender} />}
       </DashPanel>
 
-      {showBackup && stored && (
-        <section ref={banner} tabIndex={-1} className="dash-recovery" aria-label="Recovery key">
-          {backupOpen ? (
-            <Banner tone="attention">
-              <AddBackupPasskey stored={stored} />
-            </Banner>
-          ) : (
-            <Banner tone="attention" action={<Button onClick={() => setBackupOpen(true)}>Save now</Button>}>
-              <p>
-                <strong>Save a recovery key so you never lose this account</strong>
-              </p>
-            </Banner>
-          )}
-        </section>
-      )}
-
       <div>
         <Tabs label="My page" tabs={DASH_TABS} value={tab} onChange={(id) => setTab(id as DashTab)} />
         {/* Only the open tab is in the page, so a list loads when its tab is first opened. */}
         <TabPanel id={tab} active>
           {tab === 'dash-fundits' && <YourFundits address={address} />}
           {tab === 'dash-gifts' && <YourGifts address={address} />}
-          {tab === 'dash-account' && <AccountTab account={account} username={username} backup={backupState} onSaveNow={saveNow} />}
+          {tab === 'dash-account' && <AccountTab account={account} />}
         </TabPanel>
       </div>
     </div>
@@ -431,7 +356,6 @@ function Dashboard({ sender, account, stored }: { sender: Sender; account: Accou
 export function Profile() {
   const sender = useSender()
   const account = useAccount()
-  const passkey = usePasskeySession()
 
   if (!sender || !account) {
     return (
@@ -444,5 +368,5 @@ export function Profile() {
     )
   }
 
-  return <Dashboard sender={sender} account={account} stored={account.kind === 'passkey' ? passkey : null} />
+  return <Dashboard sender={sender} account={account} />
 }

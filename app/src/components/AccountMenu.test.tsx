@@ -4,16 +4,14 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import type { Address } from 'viem'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { storageKey } from '../config'
-import type { StoredPasskey } from '../lib/passkey'
 import { readWalletSession, saveWalletSession } from '../lib/walletAccount'
 import { AccountControl } from './AccountMenu'
 
-const ACCOUNT: StoredPasskey = { address: '0x1111111111111111111111111111111111111111' as Address, credentialId: 'cred-1' }
+const ACCOUNT = { address: '0x1111111111111111111111111111111111111111' as Address }
 
-const state: { session: StoredPasskey | null } = { session: null }
+// Signed in with a wallet, through the real wallet store.
+const signIn = () => saveWalletSession({ address: ACCOUNT.address, connectorId: 'io.metamask' })
 const disconnect = vi.fn()
-const logoutPasskey = vi.fn()
-const confirmLeave = vi.fn(() => true)
 const signOutEmail = vi.fn(async () => {})
 
 // Nothing here connects a wallet: the wallet setup loads only inside Add money, so importing it fails the test.
@@ -23,25 +21,12 @@ vi.mock('../wagmi', () => {
 vi.mock('../lib/walletSession', () => ({ disconnectWallet: () => disconnect() }))
 vi.mock('../lib/circleEmail', () => ({ signOutEmail: () => signOutEmail() }))
 vi.mock('../hooks/useName', () => ({ useName: () => ({ data: undefined }) }))
-vi.mock('../lib/passkey', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../lib/passkey')>()),
-  usePasskeySession: () => state.session,
-  useBackupPrompt: () => false,
-  logoutPasskey: () => logoutPasskey(),
-}))
-vi.mock('./AddBackupPasskey', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./AddBackupPasskey')>()),
-  confirmLeave: () => confirmLeave(),
-}))
 
 afterEach(() => {
   cleanup()
-  state.session = null
+  localStorage.clear()
   disconnect.mockReset()
-  logoutPasskey.mockReset()
   signOutEmail.mockClear()
-  confirmLeave.mockReset()
-  confirmLeave.mockReturnValue(true)
 })
 
 function ui() {
@@ -60,12 +45,12 @@ function ui() {
 const pill = () => screen.getByRole('button', { name: '0x1111...1111' })
 
 describe('AccountControl signed out', () => {
-  // Sign in opens Fundit's own sign-in dialog, passkey first. It never opens a separate wallet modal.
+  // Sign in opens Fundit's own sign-in dialog. It never opens a separate wallet modal.
   it('shows Sign in, which opens the sign-in dialog and never a separate wallet modal', async () => {
     render(ui())
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }))
     const dialog = screen.getByRole('dialog', { name: 'Sign in' })
-    expect(within(dialog).getByRole('button', { name: 'Sign in with your passkey' })).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Connect a wallet' })).toBeTruthy()
     expect(within(dialog).queryByText(/crypto wallet/i)).toBeNull()
     expect(screen.queryByRole('button', { name: /0x/ })).toBeNull()
   })
@@ -73,27 +58,16 @@ describe('AccountControl signed out', () => {
 
 describe('AccountControl signed in', () => {
   it('shows the short address as a menu button', () => {
-    state.session = ACCOUNT
+    signIn()
     render(ui())
     expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull()
     expect(pill().getAttribute('aria-haspopup')).toBe('menu')
     expect(pill().getAttribute('aria-expanded')).toBe('false')
   })
 
-  // People know their account by the name they gave the passkey. The address stays in the tooltip.
-  it('shows the passkey username on the pill when this browser knows it', () => {
-    state.session = ACCOUNT
-    localStorage.setItem(storageKey(`passkey.username.${ACCOUNT.address.toLowerCase()}`), 'ana.phone')
-    render(ui())
-    const named = screen.getByRole('button', { name: 'ana.phone' })
-    expect(named.getAttribute('aria-haspopup')).toBe('menu')
-    expect(named.querySelector('[title]')?.getAttribute('title')).toBe(ACCOUNT.address)
-    localStorage.clear()
-  })
-
   // Start a Fundit lives here because only signed-in people can start one. The order is the product spec.
   it('opens a menu with Start a Fundit, My page and Sign out, in that order, and focuses the first item', async () => {
-    state.session = ACCOUNT
+    signIn()
     render(ui())
     await userEvent.setup().click(pill())
     expect(pill().getAttribute('aria-expanded')).toBe('true')
@@ -104,7 +78,7 @@ describe('AccountControl signed in', () => {
   })
 
   it('moves between items with the arrow keys, wrapping at the ends', async () => {
-    state.session = ACCOUNT
+    signIn()
     render(ui())
     const user = userEvent.setup()
     await user.click(pill())
@@ -117,7 +91,7 @@ describe('AccountControl signed in', () => {
   })
 
   it('opens from the keyboard with Enter', async () => {
-    state.session = ACCOUNT
+    signIn()
     render(ui())
     const user = userEvent.setup()
     pill().focus()
@@ -127,7 +101,7 @@ describe('AccountControl signed in', () => {
 
   // Keyboard users must land back where they were, not at the top of the page.
   it('closes on Escape and returns focus to the button', async () => {
-    state.session = ACCOUNT
+    signIn()
     render(ui())
     const user = userEvent.setup()
     await user.click(pill())
@@ -138,7 +112,7 @@ describe('AccountControl signed in', () => {
   })
 
   it('closes on a click outside', async () => {
-    state.session = ACCOUNT
+    signIn()
     render(ui())
     const user = userEvent.setup()
     await user.click(pill())
@@ -147,7 +121,7 @@ describe('AccountControl signed in', () => {
   })
 
   it('My page goes to /me', async () => {
-    state.session = ACCOUNT
+    signIn()
     render(ui())
     const user = userEvent.setup()
     await user.click(pill())
@@ -157,7 +131,7 @@ describe('AccountControl signed in', () => {
   })
 
   it('Start a Fundit goes to /create', async () => {
-    state.session = ACCOUNT
+    signIn()
     render(ui())
     const user = userEvent.setup()
     await user.click(pill())
@@ -167,40 +141,25 @@ describe('AccountControl signed in', () => {
 
   // Sign out has to end the session for real, or the next person on this browser acts as this one. A wallet
   // connected to add money is disconnected too.
-  it('Sign out ends the passkey session and disconnects any wallet connected for Add money', async () => {
-    state.session = ACCOUNT
-    const { rerender } = render(ui())
-    const user = userEvent.setup()
-    await user.click(pill())
-    await user.click(screen.getByRole('menuitem', { name: 'Sign out' }))
-    expect(logoutPasskey).toHaveBeenCalledTimes(1)
-    expect(disconnect).toHaveBeenCalledTimes(1)
-    state.session = null
-    rerender(ui())
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Sign in' }))
-  })
-
-  // A wallet account has no passkey username. The pill shows its short address, like Name does elsewhere.
-  it('the pill shows the short address for a wallet account', () => {
-    saveWalletSession({ address: ACCOUNT.address, connectorId: 'io.metamask' })
-    render(ui())
-    expect(pill().textContent).toBe('0x1111...1111')
-    expect(pill().getAttribute('aria-haspopup')).toBe('menu')
-    expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull()
-    localStorage.clear()
-  })
-
-  // Sign out must end a wallet account too, or the next person on this browser would act as this one.
-  it('sign out clears the wallet session', async () => {
-    saveWalletSession({ address: ACCOUNT.address, connectorId: 'io.metamask' })
+  it('Sign out clears the wallet session, disconnects the wallet and moves focus to Sign in', async () => {
+    signIn()
     render(ui())
     const user = userEvent.setup()
     await user.click(pill())
     await user.click(screen.getByRole('menuitem', { name: 'Sign out' }))
     expect(readWalletSession()).toBeNull()
     expect(disconnect).toHaveBeenCalledTimes(1)
-    expect(await screen.findByRole('button', { name: 'Sign in' })).toBeTruthy()
-    localStorage.clear()
+    const signInButton = await screen.findByRole('button', { name: 'Sign in' })
+    expect(document.activeElement).toBe(signInButton)
+  })
+
+  // A wallet account has no name of its own. The pill shows its short address, like Name does elsewhere.
+  it('the pill shows the short address for a wallet account', () => {
+    signIn()
+    render(ui())
+    expect(pill().textContent).toBe('0x1111...1111')
+    expect(pill().getAttribute('aria-haspopup')).toBe('menu')
+    expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull()
   })
 
   // Every store goes on sign out, so no account of any kind comes back for the next person on this browser.
@@ -214,21 +173,6 @@ describe('AccountControl signed in', () => {
     expect(localStorage.getItem(storageKey('session.email'))).toBeNull()
     // The Worker drops Circle's token cookies too.
     expect(signOutEmail).toHaveBeenCalledTimes(1)
-    expect(logoutPasskey).toHaveBeenCalledTimes(1)
     expect(await screen.findByRole('button', { name: 'Sign in' })).toBeTruthy()
-    localStorage.clear()
-  })
-
-  // On My page with recovery words on screen, Sign out would drop them, so it asks first like any other exit.
-  it('Sign out asks first while recovery words are on screen, and does nothing when the person stays', async () => {
-    state.session = ACCOUNT
-    confirmLeave.mockReturnValue(false)
-    render(ui())
-    const user = userEvent.setup()
-    await user.click(pill())
-    await user.click(screen.getByRole('menuitem', { name: 'Sign out' }))
-    expect(confirmLeave).toHaveBeenCalledTimes(1)
-    expect(disconnect).not.toHaveBeenCalled()
-    expect(logoutPasskey).not.toHaveBeenCalled()
   })
 })

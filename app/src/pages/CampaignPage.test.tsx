@@ -25,7 +25,9 @@ vi.mock('../hooks/useActivity', () => ({
 vi.mock('../lib/clients', () => ({ arcClient: { readContract: async () => 0n } }))
 
 // No wallet connected: the donate panel shows its connect prompt. DonatePanel.test.tsx covers donating.
-vi.mock('../hooks/useSender', () => ({ useSender: () => null }))
+// Signed out unless a test sets a sender.
+const signedIn = vi.hoisted(() => ({ sender: null as { kind: 'email' | 'wallet'; address: string; send: () => Promise<never> } | null }))
+vi.mock('../hooks/useSender', () => ({ useSender: () => signedIn.sender }))
 vi.mock('wagmi', () => ({ useConnection: () => ({ isConnected: false }) }))
 // Names come from Ethereum mainnet; lib/names.test.ts covers the lookup.
 vi.mock('../hooks/useName', () => ({ useName: () => ({ data: undefined }) }))
@@ -68,6 +70,7 @@ function renderPage(path = `/c/${ADDRESS}`) {
 afterEach(() => {
   cleanup()
   hookState.current = { isPending: true, isError: false }
+  signedIn.sender = null
 })
 
 describe('CampaignPage', () => {
@@ -114,6 +117,18 @@ describe('CampaignPage', () => {
     // The share panel shows our own logo from /images/. No image may come from the Fundit's data.
     const imgs = Array.from(container.querySelectorAll('img')).map((i) => i.getAttribute('src'))
     expect(imgs.every((src) => src?.startsWith('/images/'))).toBe(true)
+  })
+
+  // Fundits made by the old passkey accounts stay on chain. Their creator can no longer sign in, so a signed-in
+  // person with another address must see the page as a visitor: no Manage link, and the organiser still named.
+  it('a Fundit made by an address that is not signed in shows no manage controls', () => {
+    signedIn.sender = { kind: 'wallet', address: '0x3333333333333333333333333333333333333333', send: () => new Promise(() => {}) }
+    hookState.current = { data: view({}), isPending: false, isError: false }
+    renderPage()
+    expect(screen.getByRole('heading', { level: 1, name: 'Clean water' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Manage this Fundit' })).toBeNull()
+    expect(screen.getByRole('region', { name: 'Give' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'About' })).toBeTruthy()
   })
 
   it('shows progress, raised, goal and the donate panel', () => {

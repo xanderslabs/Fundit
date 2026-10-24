@@ -83,18 +83,11 @@ describe('loadConfig factory and network', () => {
 
 // Checks only a production build runs, after loadConfig. Each catches a site that builds but cannot work.
 describe('checkBuildEnv', () => {
-  const ok = { PROD: true, VITE_CIRCLE_CLIENT_KEY: 'key' }
+  const ok = { PROD: true }
 
   it('passes the defaults and the real _headers', () => {
     expect(() => checkBuildEnv(ok, headers)).not.toThrow()
     expect(() => checkBuildEnv({ ...ok, VITE_ARC_RPC_URL: 'https://rpc.mainnet.arc.io', VITE_MAINNET_RPC_URL: 'https://ethereum-rpc.publicnode.com' }, headers)).not.toThrow()
-  })
-
-  // Passkey sign-in needs the client key. Without it no passkey account can sign in or send.
-  it('fails a production build without VITE_CIRCLE_CLIENT_KEY', () => {
-    expect(() => checkBuildEnv({ PROD: true }, headers)).toThrow(/VITE_CIRCLE_CLIENT_KEY/)
-    expect(() => checkBuildEnv({ ...ok, VITE_CIRCLE_CLIENT_KEY: '' }, headers)).toThrow(/VITE_CIRCLE_CLIENT_KEY/)
-    expect(() => checkBuildEnv({ ...ok, VITE_CIRCLE_CLIENT_KEY: 'key' }, headers)).not.toThrow()
   })
 
   // The browser blocks an RPC host missing from connect-src, so every read fails at runtime with no build error.
@@ -150,13 +143,13 @@ describe('checkBuildEnv network guard', () => {
   })
 
   it('allows a production testnet build only with VITE_ALLOW_TESTNET_BUILD=1', () => {
-    expect(() => checkBuildEnv({ PROD: true, VITE_CIRCLE_CLIENT_KEY: 'key', VITE_ARC_NETWORK: 'testnet', VITE_ALLOW_TESTNET_BUILD: '1' }, headers)).not.toThrow()
+    expect(() => checkBuildEnv({ PROD: true, VITE_ARC_NETWORK: 'testnet', VITE_ALLOW_TESTNET_BUILD: '1' }, headers)).not.toThrow()
     expect(() => checkBuildEnv({ PROD: true, VITE_ARC_NETWORK: 'testnet', VITE_ALLOW_TESTNET_BUILD: 'true' }, headers)).toThrow(/VITE_ALLOW_TESTNET_BUILD/)
   })
 
   it('allows a production mainnet build, and testnet outside production', () => {
-    expect(() => checkBuildEnv({ PROD: true, VITE_CIRCLE_CLIENT_KEY: 'key' }, headers)).not.toThrow()
-    expect(() => checkBuildEnv({ PROD: true, VITE_CIRCLE_CLIENT_KEY: 'key', VITE_ARC_NETWORK: 'mainnet' }, headers)).not.toThrow()
+    expect(() => checkBuildEnv({ PROD: true }, headers)).not.toThrow()
+    expect(() => checkBuildEnv({ PROD: true, VITE_ARC_NETWORK: 'mainnet' }, headers)).not.toThrow()
     expect(() => checkBuildEnv({ PROD: false, VITE_ARC_NETWORK: 'testnet' }, headers)).not.toThrow()
   })
 

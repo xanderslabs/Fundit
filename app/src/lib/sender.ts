@@ -9,27 +9,20 @@ export type Call = { to: Address; data: Hex }
 export type TxResult =
   | { status: 'success'; hash: Hex; receipt: TransactionReceipt }
   | { status: 'reverted'; hash: Hex; error: string; completed: number }
-  // hashKind 'userop' means hash is a passkey user operation hash, not a transaction hash: the explorer and
-  // waitForResult cannot find it, so only sender.recheck can. Absent means a transaction hash.
-  | { status: 'timeout'; hash: Hex; completed: number; hashKind?: 'tx' | 'userop' }
+  | { status: 'timeout'; hash: Hex; completed: number }
   | { status: 'rejected'; completed: number }
 
 // onHash runs as soon as a hash for calls[index] is known, before its receipt, so a caller can save it and a
-// reload during the wait still knows it went out. A passkey sender reports its one user operation hash for the
-// last call.
-// usdcOut is the USDC these calls move out of the sender. A passkey sender keeps the network fee on top of it.
-export type SendOptions = { label: string; onHash?: (hash: Hex, index: number) => void; usdcOut?: bigint }
+// reload during the wait still knows it went out.
+export type SendOptions = { label: string; onHash?: (hash: Hex, index: number) => void }
 
 // The single write path. Every action builds Calls and hands them to a Sender.
 // send() resolves to a TxResult. It throws only for a failure before anything is sent (for example a
 // gas estimate that reverts), so callers pass that to explainError (lib/errors.ts).
 export interface Sender {
-  kind: 'passkey' | 'email' | 'wallet'
+  kind: 'email' | 'wallet'
   address: Address
   send(calls: Call[], opts?: SendOptions): Promise<TxResult>
-  // Checks a timed-out result again without sending anything or asking for a signature. Senders whose
-  // timeouts carry a transaction hash leave it out, and callers use waitForResult.
-  recheck?(hash: Hex): Promise<TxResult>
 }
 
 // The viem public actions waitForResult needs. viem resolves a reverted receipt; it does not throw.
@@ -92,7 +85,7 @@ export async function waitForResult(client: ReceiptClient, hash: Hex, timeoutMs:
 // A gas estimate may run against the latest block, but the transaction lands in a later one. Campaign._activity()
 // skips two storage writes when the campaign's last activity is in the current block, so right after a
 // donation, withdrawal or settle() the estimate comes out about 3,200 gas short and the write would run out
-// of gas. 25% on top covers that gap with room to spare. Used for wallet transactions and passkey call gas.
+// of gas. 25% on top covers that gap with room to spare. Used for email and wallet transactions.
 export function withGasMargin(estimate: bigint): bigint {
   return (estimate * 125n) / 100n
 }

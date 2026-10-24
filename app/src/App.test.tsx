@@ -9,7 +9,6 @@ vi.mock('./components/Layout', async () => {
   const { Outlet } = await import('react-router')
   return { Layout: () => <Outlet /> }
 })
-vi.mock('./pages/Recover', () => ({ Recover: () => <h1>Recover your account</h1> }))
 
 afterEach(cleanup)
 
@@ -40,8 +39,9 @@ describe('App routes', () => {
     expect(screen.getByRole('link', { name: 'Go home' }).getAttribute('href')).toBe('/')
   })
 
-  it('serves /recover with no feature flag', async () => {
+  // The passkey recovery page is gone with passkey accounts. Old links get the 404, with no redirect.
+  it('/recover shows the 404 page', async () => {
     renderAt('/recover')
-    expect(await screen.findByRole('heading', { name: 'Recover your account' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { level: 1, name: "This page doesn't exist" })).toBeTruthy()
   })
 })

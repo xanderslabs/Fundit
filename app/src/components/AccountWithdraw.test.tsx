@@ -6,7 +6,6 @@ import { type Address, decodeFunctionData, getAddress, type Hex, pad, parseAbi, 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { erc20Abi } from '../abi/erc20'
 import { FORWARD_HOOK_DATA, TOKEN_MESSENGER_V2, TOKENS } from '../config'
-import { NeedsNetworkFee } from '../lib/errors'
 import type { Sender, TxResult } from '../lib/sender'
 import { AccountWithdraw } from './AccountWithdraw'
 
@@ -35,13 +34,6 @@ vi.mock('../lib/iris', async (importOriginal) => ({
   fetchTransferStatus: async () => 'pending',
 }))
 vi.mock('../lib/clients', () => ({ arcClient: {} }))
-// What the account keeps for the network fee, as the form estimates it. The sender checks again before it sends.
-const reserve = vi.hoisted(() => ({ form: 300_000n }))
-const passkeyReserve = vi.hoisted(() => vi.fn(async (_address: unknown, _calls?: unknown) => reserve.form))
-vi.mock('../lib/passkey', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../lib/passkey')>()),
-  passkeyReserve,
-}))
 
 let send: ReturnType<typeof vi.fn<(...args: Parameters<Sender['send']>) => Promise<TxResult>>>
 
@@ -55,11 +47,10 @@ afterEach(() => {
   vi.clearAllMocks()
   balances.usdc = 0n
   balances.eurc = 0n
-  reserve.form = 300_000n
   localStorage.clear()
 })
 
-function renderForm(kind: Sender['kind'] = 'passkey') {
+function renderForm(kind: Sender['kind'] = 'wallet') {
   const sender: Sender = { kind, address: ACCOUNT, send }
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
@@ -98,57 +89,44 @@ describe('AccountWithdraw', () => {
     await userEvent.clear(screen.getByLabelText('Recipient'))
     await userEvent.type(screen.getByLabelText('Recipient'), FRIEND)
     await userEvent.clear(screen.getByLabelText('Amount'))
-    // 1.00 USDC held and an estimated 0.30 kept for the prefund: 0.71 is too much.
-    await userEvent.type(screen.getByLabelText('Amount'), '0.71')
-    expect(screen.getByText('Leave at least 0.30 USDC in your Fundit account for the network fee.')).toBeTruthy()
+    // 1.00 USDC held and 0.01 kept for the network fee (EOA_GAS_RESERVE): 0.995 is too much.
+    await userEvent.type(screen.getByLabelText('Amount'), '0.995')
+    expect(screen.getByText('Leave at least 0.01 USDC in your Fundit account for the network fee.')).toBeTruthy()
     expect((submitButton() as HTMLButtonElement).disabled).toBe(true)
     await userEvent.click(submitButton())
     expect(send).not.toHaveBeenCalled()
 
-    // Max fills in exactly what can go out: the balance less the estimated reserve, not less a fixed 0.05.
+    // Max fills in exactly what can go out: the balance less the reserve.
     await userEvent.click(screen.getByRole('button', { name: 'Max' }))
-    expect((screen.getByLabelText('Amount') as HTMLInputElement).value).toBe('0.7')
+    expect((screen.getByLabelText('Amount') as HTMLInputElement).value).toBe('0.99')
     expect((submitButton() as HTMLButtonElement).disabled).toBe(false)
   })
 
-  // The last check is in the sender, which estimates the real calls once the passkey is ready. The form hands
-  // it the USDC the send moves out, and shows its refusal with the real number and a way to add money.
-  it('hands the amount to the sender and shows its network fee refusal with an Add money link', async () => {
+  // The network fee may cost more than the form expected. The wallet or the node then refuses the send for
+  // insufficient funds, and the form says so with a way to add money.
+  it('shows a network fee refusal from the sender with an Add money link', async () => {
     balances.usdc = 1_000000n
-    send.mockRejectedValueOnce(new NeedsNetworkFee(350_000n))
+    send.mockRejectedValueOnce(new Error('insufficient funds for gas * price + value'))
     renderForm()
     await screen.findByText(/You have 1.00 USDC/)
     await userEvent.click(screen.getByRole('button', { name: 'Max' }))
     await userEvent.type(screen.getByLabelText('Recipient'), FRIEND)
     await userEvent.click(submitButton())
-    expect(await screen.findByText(/Your Fundit account needs at least 0.35 USDC for the network fee\. Add money and try again\./)).toBeTruthy()
+    expect(await screen.findByText(/Your Fundit account does not have enough USDC for the network fee\. Add money and try again\./)).toBeTruthy()
     expect(screen.getAllByRole('link', { name: 'Add money' }).some((a) => a.getAttribute('href') === '/me?add=1')).toBe(true)
-    const [calls, opts] = send.mock.calls[0]!
-    expect(opts).toMatchObject({ usdcOut: 700_000n })
-    expect(decodeFunctionData({ abi: erc20Abi, data: calls[0]!.data }).args).toEqual([FRIEND, 700_000n])
-  })
-
-  it('hands no USDC amount to the sender for an EURC send, which still pays the fee in USDC', async () => {
-    balances.usdc = 1_000000n
-    balances.eurc = 5_000000n
-    renderForm()
-    await userEvent.selectOptions(screen.getByLabelText('Currency'), 'EURC')
-    await screen.findByText(/You have 5.00 EURC/)
-    await fill('5', FRIEND)
-    await userEvent.click(submitButton())
-    await screen.findByText('Your money was sent.')
-    expect(send.mock.calls[0]![1]).toMatchObject({ usdcOut: 0n })
+    const [calls] = send.mock.calls[0]!
+    expect(decodeFunctionData({ abi: erc20Abi, data: calls[0]!.data }).args).toEqual([FRIEND, 990_000n])
   })
 
   // EURC has no gas reserve of its own, but the network fee is still paid in USDC.
   it('asks for USDC gas before sending EURC', async () => {
-    balances.usdc = 10_000n
+    balances.usdc = 5_000n
     balances.eurc = 5_000000n
     renderForm()
     await userEvent.selectOptions(screen.getByLabelText('Currency'), 'EURC')
     await screen.findByText(/You have 5.00 EURC/)
     await fill('5', FRIEND)
-    expect(screen.getByText(/Add at least 0.30 USDC to your Fundit account first/)).toBeTruthy()
+    expect(screen.getByText(/Add at least 0.01 USDC to your Fundit account first/)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/me?add=1')
     expect((submitButton() as HTMLButtonElement).disabled).toBe(true)
   })
@@ -188,7 +166,7 @@ describe('AccountWithdraw', () => {
   // A timed-out send may still go through, so the form stays locked until it is checked or the person starts over.
   it('blocks a resubmit after a timeout', async () => {
     balances.usdc = 10_000000n
-    send.mockResolvedValue({ status: 'timeout', hash: HASH, completed: 0, hashKind: 'userop' })
+    send.mockResolvedValue({ status: 'timeout', hash: HASH, completed: 0 })
     renderForm()
     await screen.findByText(/You have 10.00 USDC/)
     await fill('2', FRIEND)
@@ -199,7 +177,7 @@ describe('AccountWithdraw', () => {
     expect(send).toHaveBeenCalledTimes(1)
   })
 
-  // Fast is the default, as on the organiser's payout form, and the passkey is tapped once for both calls.
+  // Fast is the default, as on the organiser's payout form, and the person confirms once for both calls.
   it('sends to Base as approve and burn in one send, with a fresh quote', async () => {
     balances.usdc = 10_000000n
     renderForm()

@@ -59,7 +59,6 @@ describe('NETWORKS', () => {
     expect(n.eurc).toBe('0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1')
     expect(n.tokenMessengerV2).toBe('0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d')
     expect(n.irisUrl).toBe('https://iris-api.circle.com')
-    expect(n.modularChainPath).toBe('/arc')
     expect(n.cctpChains.map((c) => [c.key, c.chainId, c.domain, c.usdc, c.rpcUrl])).toEqual([
       ['Ethereum', 1, 0, '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', 'https://ethereum-rpc.publicnode.com'],
       ['Avalanche', 43114, 1, '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E', 'https://api.avax.network/ext/bc/C/rpc'],
@@ -85,7 +84,6 @@ describe('NETWORKS', () => {
     expect(n.eurc).toBe('0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a')
     expect(n.tokenMessengerV2).toBe('0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA')
     expect(n.irisUrl).toBe('https://iris-api-sandbox.circle.com')
-    expect(n.modularChainPath).toBe('/arcTestnet')
     expect(n.cctpChains.map((c) => [c.key, c.chainId, c.domain, c.usdc, c.rpcUrl])).toEqual([
       ['Ethereum', 11155111, 0, '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', 'https://11155111.rpc.thirdweb.com'],
       ['Base', 84532, 6, '0x036CbD53842c5426634e7929541eC2318f3dCF7e', 'https://sepolia.base.org'],
@@ -145,15 +143,13 @@ describe('VITE_ARC_NETWORK=testnet', () => {
 // localStorage is per origin, and one dev origin can be rebuilt for either network. Mainnet keys must keep their
 // names, or live users would lose their session and pending records. Testnet keys must never equal a mainnet key.
 describe('storageKey', () => {
-  const names = ['passkey', 'backup.', 'backup.pending.', 'recovery.pending.', 'recovery.tried.', 'pendingBridges']
+  const names = ['session.email', 'session.email.tokens', 'session.wallet', 'pendingBridges']
 
   it('keeps the original mainnet key names', () => {
     expect(names.map((n) => storageKey(n, 'mainnet'))).toEqual([
-      'fundit.passkey',
-      'fundit.backup.',
-      'fundit.backup.pending.',
-      'fundit.recovery.pending.',
-      'fundit.recovery.tried.',
+      'fundit.session.email',
+      'fundit.session.email.tokens',
+      'fundit.session.wallet',
       'fundit.pendingBridges',
     ])
   })
@@ -168,7 +164,7 @@ describe('storageKey', () => {
   })
 
   it('uses the build network by default', () => {
-    expect(storageKey('passkey')).toBe(storageKey('passkey', NETWORK.name))
+    expect(storageKey('session.wallet')).toBe(storageKey('session.wallet', NETWORK.name))
   })
 })
 
@@ -215,6 +211,12 @@ describe('_headers CSP', () => {
     // The page itself calls neither host, so connect-src stays as it was.
     expect(connectSrcAllows(headers, 'https://pw-auth.circle.com')).toBe(false)
     expect(connectSrcAllows(headers, 'https://challenges.cloudflare.com')).toBe(false)
+  })
+
+  // Passkey accounts are gone, so the Circle Modular Wallets host and the WebAuthn permissions go with them.
+  it('the CSP has no modular-sdk host and no publickey-credentials permission', () => {
+    expect(headers).not.toContain('modular-sdk.circle.com')
+    expect(headers).not.toContain('publickey-credentials')
   })
 
   it('refuses a host or scheme connect-src does not list', () => {

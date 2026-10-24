@@ -92,8 +92,8 @@ describe('EmailLogin', () => {
     expect((await screen.findByRole('alert')).textContent).toBe('We could not check this browser. Try again.')
   })
 
-  it('Circle or the Worker unreachable shows "Email sign-in is not available right now. Use a passkey or a wallet."', async () => {
-    const text = 'Email sign-in is not available right now. Use a passkey or a wallet.'
+  it('Circle or the Worker unreachable shows "Email sign-in is not available right now. Use a wallet."', async () => {
+    const text = 'Email sign-in is not available right now. Use a wallet.'
     sendEmailCode.mockRejectedValue(new EmailError('Circle unreachable', 502, null))
     await submit()
     expect((await screen.findByRole('alert')).textContent).toBe(text)
