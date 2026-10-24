@@ -127,6 +127,22 @@ describe('Manage', () => {
     expect(screen.getByRole('link', { name: 'Go home' })).toBeTruthy()
   })
 
+  // Signed out, the page asks to sign in and stays on this address, so the manage page shows once signed in.
+  it('asks a signed-out visitor to sign in, then shows the manage page to the creator', () => {
+    state.view = view()
+    renderPage()
+    expect(screen.getByRole('heading', { level: 1, name: 'Sign in to continue' })).toBeTruthy()
+    expect(screen.getByText('Sign in with the Fundit account that started this Fundit to manage it.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Go home' }).getAttribute('href')).toBe('/')
+    expect(screen.queryByRole('button', { name: 'Withdraw' })).toBeNull()
+    cleanup()
+    fakeSender()
+    renderPage()
+    expect(screen.getByRole('heading', { name: 'Manage this Fundit' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Sign in to continue' })).toBeNull()
+  })
+
   // Only the organiser can sign these calls. Anyone else would only meet reverts, so they go to the public page.
   it('sends a connected non-creator to the campaign page', async () => {
     state.view = view()

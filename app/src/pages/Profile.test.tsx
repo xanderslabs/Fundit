@@ -127,7 +127,9 @@ describe('My page signed out', () => {
   // Signed out there is no address to look up, so the page asks to sign in instead of loading forever.
   it('asks to sign in and opens the sign-in dialog', async () => {
     const user = renderProfile()
-    expect(screen.getByText('Sign in to see your Fundits and the donations you made.')).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: 'Sign in to continue' })).toBeTruthy()
+    expect(screen.getByText('My page shows your Fundits and the donations you made.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Go home' }).getAttribute('href')).toBe('/')
     expect(screen.queryByRole('link', { name: 'Start a Fundit' })).toBeNull()
     await user.click(screen.getByRole('button', { name: 'Sign in' }))
     expect(within(screen.getByRole('dialog', { name: 'Sign in' })).getByRole('button', { name: 'Connect a wallet' })).toBeTruthy()

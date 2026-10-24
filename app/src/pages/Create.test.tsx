@@ -104,8 +104,10 @@ describe('Create signed out', () => {
   // Signed out, /create stays put and asks to sign in, so the form appears here once a wallet connects.
   it('shows the sign-in screen and no form', () => {
     renderCreate()
-    expect(screen.getByRole('heading', { level: 1, name: 'Sign in to start a Fundit' })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: 'Sign in to continue' })).toBeTruthy()
+    expect(screen.getByText('Start a Fundit here: tell your story and set your goal.')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Go home' }).getAttribute('href')).toBe('/')
     expect(screen.queryByLabelText('Title')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Create a Fundit' })).toBeNull()
   })

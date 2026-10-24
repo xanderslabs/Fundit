@@ -2,13 +2,13 @@ import { useQuery } from '@tanstack/react-query'
 import { type ReactNode, type Ref, useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import type { Address } from 'viem'
-import { SignInButton, useSignOut } from '../components/AccountMenu'
+import { useSignOut } from '../components/AccountMenu'
 import { AccountWithdraw } from '../components/AccountWithdraw'
 import { AddMoneyPanel } from '../components/AddMoneyPanel'
 import { CampaignGrid, LoadError } from '../components/CampaignGrid'
 import { PendingBridgeTracker } from '../components/PendingBridgeTracker'
 import { ShareDialog } from '../components/SharePanel'
-import { AddressChip, Button, ButtonLink, Card, EmptyState, PageHeader, Panel, Stat, TabPanel, Tabs } from '../components/ui'
+import { AddressChip, Button, ButtonLink, Card, EmptyState, Panel, Stat, TabPanel, Tabs } from '../components/ui'
 import { EXPLORER_URL } from '../config'
 import { blockTimes } from '../hooks/useActivity'
 import { useCampaign } from '../hooks/useCampaigns'
@@ -24,6 +24,7 @@ import { readEmailSession } from '../lib/emailAccount'
 import { formatAmount } from '../lib/format'
 import { shortAddress } from '../lib/names'
 import type { Sender } from '../lib/sender'
+import { SignInRequired } from './SignInRequired'
 import './Profile.css'
 
 // Money can arrive at the address from anywhere, so the balance is read again on a timer.
@@ -358,14 +359,7 @@ export function Profile() {
   const account = useAccount()
 
   if (!sender || !account) {
-    return (
-      <PageHeader
-        width="narrow"
-        title="My page"
-        subtitle="Sign in to see your Fundits and the donations you made."
-        actions={<SignInButton className="ui-btn ui-btn-primary ui-btn-lg" />}
-      />
-    )
+    return <SignInRequired text="My page shows your Fundits and the donations you made." />
   }
 
   return <Dashboard sender={sender} account={account} />

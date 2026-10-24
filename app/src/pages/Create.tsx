@@ -2,7 +2,6 @@ import { useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useRef, useState } from 'react'
 import { type Address, decodeEventLog, encodeFunctionData, type Hex, isAddressEqual, type TransactionReceipt } from 'viem'
 import { factoryAbi } from '../abi/factory'
-import { SignInButton } from '../components/AccountMenu'
 import { CampaignImage } from '../components/CampaignImage'
 import { SharePanel } from '../components/SharePanel'
 import { AddMoneyLink, recheckResult } from '../components/TxStatus'
@@ -15,6 +14,7 @@ import { CANCELLED, CHECK_FAILED, explainError, needsAddMoney } from '../lib/err
 import { bpsToPercent } from '../lib/format'
 import type { TxResult } from '../lib/sender'
 import { byteLength, MAX_DESCRIPTION, MAX_LINKS, MAX_TITLE, validateCampaign } from '../lib/validate'
+import { SignInRequired } from './SignInRequired'
 import '../components/Form.css'
 import './Create.css'
 
@@ -198,16 +198,7 @@ export function Create() {
   // Signed out, the page asks to sign in and stays here, so the form shows once a wallet is connected. A
   // transaction already in flight keeps the form and its status on screen even if the wallet goes away.
   if (!sender && phase.kind === 'idle') {
-    return (
-      <div className="create">
-        <PageHeader
-          width="narrow"
-          title="Sign in to start a Fundit"
-          subtitle="Sign in first. Then you can tell your story and set your goal."
-          actions={<SignInButton className="ui-btn ui-btn-primary ui-btn-lg" />}
-        />
-      </div>
-    )
+    return <SignInRequired text="Start a Fundit here: tell your story and set your goal." />
   }
 
   return (

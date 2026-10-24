@@ -1,0 +1,39 @@
+/* Sign in to continue: an account-only page, signed out. Laid out like the 404 page. */
+.signin-required {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: var(--page-narrow);
+  margin: 0 auto;
+  padding: var(--space-7) 0 var(--space-8);
+  text-align: center;
+}
+
+.signin-required h1 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.signin-required-text {
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+}
+
+.signin-required-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+@media (max-width: 480px) {
+  .signin-required-actions {
+    align-self: stretch;
+  }
+
+  .signin-required-actions > .ui-btn {
+    flex: 1 1 100%;
+  }
+}

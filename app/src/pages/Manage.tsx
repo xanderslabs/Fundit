@@ -4,7 +4,6 @@ import { Link, Navigate, useParams } from 'react-router'
 import { type Address, encodeFunctionData, formatUnits, isAddress, isAddressEqual, zeroAddress } from 'viem'
 import { campaignAbi } from '../abi/campaign'
 import { erc20Abi } from '../abi/erc20'
-import { SignInButton } from '../components/AccountMenu'
 import { PendingBridgeTracker } from '../components/PendingBridgeTracker'
 import { TxStatus, useTx } from '../components/TxStatus'
 import { Actions, AddressChip, AmountInput, Button, EmptyState, Field, PageHeader, Panel, StatusBox } from '../components/ui'
@@ -22,6 +21,7 @@ import { buildWithdrawCall, destDomain, netAfterWithdrawFee, type PayoutDest, pa
 import type { Sender } from '../lib/sender'
 import { ADDRESS_TYPO, byteLength, MAX_DESCRIPTION, MAX_LINKS, MAX_TITLE, parseTypedAddress, validateCampaign } from '../lib/validate'
 import { NotFound } from './NotFound'
+import { SignInRequired } from './SignInRequired'
 import '../components/Form.css'
 import './Manage.css'
 
@@ -569,19 +569,6 @@ function BackupSection({ view, sender }: { view: CampaignView; sender: Sender })
   )
 }
 
-function ConnectNotice() {
-  return (
-    <div className="manage">
-      <PageHeader
-        width="narrow"
-        title="Manage this Fundit"
-        subtitle="Sign in with the Fundit account that started this Fundit to manage it."
-        actions={<SignInButton className="ui-btn ui-btn-primary ui-btn-lg" />}
-      />
-    </div>
-  )
-}
-
 export function Manage() {
   const { address: param = '' } = useParams()
   const valid = isAddress(param)
@@ -614,7 +601,7 @@ export function Manage() {
     )
   }
   const view = query.data
-  if (!sender) return <ConnectNotice />
+  if (!sender) return <SignInRequired text="Sign in with the Fundit account that started this Fundit to manage it." />
   if (!isAddressEqual(sender.address, view.summary.creator)) {
     // Only the organiser can sign these calls. Anyone else sees the public page.
     return <Navigate to={`/c/${view.address}`} replace />
