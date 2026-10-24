@@ -167,3 +167,105 @@ describe('circleEmail', () => {
     expect(bodies('email-token')).toEqual([{ deviceId: 'device-id-0001', email: 'ana@example.com', turnstile: 'turnstile-token' }])
   })
 })
+
+// Circle draws its windows in the page, under a modal Fundit dialog. The flow raises circleWindow while a window is
+// up, so the dialog steps aside, and lowers it however the window ends, so the dialog always comes back.
+describe('Circle window signal', () => {
+  const login = { 'email-token': () => answer(200, LOGIN_VALUES), login: () => answer(200, { ok: true }) }
+
+  async function loadWithSignal() {
+    const mod = await load()
+    const { isCircleWindowOpen } = await import('./circleWindow')
+    return { ...mod, isCircleWindowOpen }
+  }
+
+  async function signedIn() {
+    const { saveEmailTokens } = await import('./emailAccount')
+    saveEmailTokens({ userToken: TOKENS.userToken, encryptionKey: TOKENS.encryptionKey })
+  }
+
+  afterEach(() => document.getElementById('sdkIframe')?.remove())
+
+  it('is up while the code screen is open and down after a right code', async () => {
+    worker(login)
+    const { sendEmailCode, isCircleWindowOpen } = await loadWithSignal()
+    let during = false
+    sdk.verifyOtp.mockImplementation(() => {
+      during = isCircleWindowOpen()
+      sdk.onLogin?.(undefined, { ...TOKENS })
+    })
+    await sendEmailCode('ana@example.com', 'turnstile-token')
+    expect(during).toBe(true)
+    expect(isCircleWindowOpen()).toBe(false)
+  })
+
+  it('is down after the code screen fails', async () => {
+    worker(login)
+    const { sendEmailCode, isCircleWindowOpen } = await loadWithSignal()
+    sdk.verifyOtp.mockImplementation(() => sdk.onLogin?.({ code: 155130, message: 'OTP expired' }, undefined))
+    await expect(sendEmailCode('ana@example.com', 'turnstile-token')).rejects.toMatchObject({ code: 155130 })
+    expect(isCircleWindowOpen()).toBe(false)
+  })
+
+  // Circle calls nothing when the person closes its window. Only its frame going away tells.
+  it('is down after the person closes the code screen', async () => {
+    worker(login)
+    const { sendEmailCode, isCircleWindowOpen, EmailLoginStopped } = await loadWithSignal()
+    sdk.verifyOtp.mockImplementation(() => {
+      const frame = document.createElement('iframe')
+      frame.id = 'sdkIframe'
+      document.body.append(frame)
+    })
+    const pending = sendEmailCode('ana@example.com', 'turnstile-token')
+    await vi.waitFor(() => expect(document.getElementById('sdkIframe')).not.toBeNull())
+    expect(isCircleWindowOpen()).toBe(true)
+    document.getElementById('sdkIframe')!.remove()
+    await expect(pending).rejects.toBeInstanceOf(EmailLoginStopped)
+    expect(isCircleWindowOpen()).toBe(false)
+  })
+
+  it('is up while a challenge is open and down after it is approved', async () => {
+    const { runChallenge, isCircleWindowOpen } = await loadWithSignal()
+    await signedIn()
+    let during = false
+    sdk.execute.mockImplementation((_id: string, done: ChallengeCallback) => {
+      during = isCircleWindowOpen()
+      done(undefined, { data: { signedTransaction: '0xabc' } })
+    })
+    await expect(runChallenge('create-1')).resolves.toEqual({ kind: 'done', data: { signedTransaction: '0xabc' } })
+    expect(during).toBe(true)
+    expect(isCircleWindowOpen()).toBe(false)
+  })
+
+  it('is down after a challenge fails', async () => {
+    const { runChallenge, isCircleWindowOpen } = await loadWithSignal()
+    await signedIn()
+    sdk.execute.mockImplementation((_id: string, done: ChallengeCallback) => done({ code: 155000, message: 'Failed' }, undefined))
+    await expect(runChallenge('create-1')).rejects.toMatchObject({ code: 155000 })
+    expect(isCircleWindowOpen()).toBe(false)
+  })
+
+  it('is down after the person cancels a challenge (155701)', async () => {
+    const { runChallenge, isCircleWindowOpen } = await loadWithSignal()
+    await signedIn()
+    sdk.execute.mockImplementation((_id: string, done: ChallengeCallback) => done({ code: 155701, message: 'User canceled' }, undefined))
+    await expect(runChallenge('create-1')).resolves.toEqual({ kind: 'cancelled' })
+    expect(isCircleWindowOpen()).toBe(false)
+  })
+
+  it('is down after the person closes a challenge window', async () => {
+    const { runChallenge, isCircleWindowOpen } = await loadWithSignal()
+    await signedIn()
+    sdk.execute.mockImplementation(() => {
+      const frame = document.createElement('iframe')
+      frame.id = 'sdkIframe'
+      document.body.append(frame)
+    })
+    const pending = runChallenge('create-1')
+    await vi.waitFor(() => expect(document.getElementById('sdkIframe')).not.toBeNull())
+    expect(isCircleWindowOpen()).toBe(true)
+    document.getElementById('sdkIframe')!.remove()
+    await expect(pending).resolves.toEqual({ kind: 'cancelled' })
+    expect(isCircleWindowOpen()).toBe(false)
+  })
+})

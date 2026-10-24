@@ -1,6 +1,7 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { openCircleWindow } from '../lib/circleWindow'
 import { EmailError } from '../lib/emailAccount'
 
 const { sendEmailCode, openEmailAccount, loadCircleSdk } = vi.hoisted(() => ({
@@ -11,6 +12,7 @@ const { sendEmailCode, openEmailAccount, loadCircleSdk } = vi.hoisted(() => ({
 vi.mock('../lib/circleEmail', async (orig) => ({ ...(await orig<typeof import('../lib/circleEmail')>()), sendEmailCode, openEmailAccount, loadCircleSdk }))
 
 import { EmailLogin } from './EmailLogin'
+import { Dialog } from './ui'
 
 type TurnstileOptions = { callback: (token: string) => void; 'error-callback': () => void; 'expired-callback': () => void }
 const turnstile = { options: null as TurnstileOptions | null, render: vi.fn(), reset: vi.fn(), remove: vi.fn() }
@@ -107,5 +109,40 @@ describe('EmailLogin', () => {
     sendEmailCode.mockRejectedValue(new EmailError('Network error', null, 155706))
     await submit()
     expect((await screen.findByRole('alert')).textContent).toBe(text)
+  })
+
+  // The owner could not reach Circle's code window: it sat under the sign-in dialog. The dialog steps aside while
+  // Circle's window is up, keeps the form as it was, and comes back with the outcome.
+  it('the sign-in dialog steps aside for Circle and comes back with the result', async () => {
+    let release = () => {}
+    sendEmailCode.mockImplementation(() => {
+      const closeCircle = openCircleWindow()
+      return new Promise((_resolve, reject) => {
+        release = () => {
+          closeCircle()
+          reject(new EmailError('OTP expired', null, 155130))
+        }
+      })
+    })
+    const onClose = vi.fn()
+    render(
+      <Dialog open onClose={onClose} title="Sign in">
+        <EmailLogin onDone={vi.fn()} />
+      </Dialog>,
+    )
+    const dialog = document.querySelector('dialog')!
+    const user = userEvent.setup()
+    await user.type(await screen.findByLabelText('Email address'), 'ana@example.com')
+    await waitFor(() => expect(turnstile.render).toHaveBeenCalled())
+    expect(screen.getByText(/Enter it in the Circle window that opens\./)).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Send code' }))
+    await waitFor(() => expect(dialog.open).toBe(false))
+    expect((screen.getByLabelText('Email address') as HTMLInputElement).value).toBe('ana@example.com')
+
+    act(() => release())
+    await waitFor(() => expect(dialog.open).toBe(true))
+    expect((await screen.findByRole('alert')).textContent).toBe('That code has expired. Send a new one.')
+    expect((screen.getByLabelText('Email address') as HTMLInputElement).value).toBe('ana@example.com')
+    expect(onClose).not.toHaveBeenCalled()
   })
 })

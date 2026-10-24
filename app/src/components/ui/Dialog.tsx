@@ -1,4 +1,5 @@
 import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef } from 'react'
+import { useCircleWindowOpen } from '../../lib/circleWindow'
 import { CloseIcon } from './CloseIcon'
 import './Dialog.css'
 
@@ -9,6 +10,9 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([di
 // focus goes back to the element that had it when the dialog opened.
 // Name it with title (the dialog renders an h2) or with labelledBy, the id of a heading its children render.
 // A child heading takes the ui-dialog-title class, so every dialog title looks the same.
+// While Circle's window is open the dialog steps aside: it leaves the top layer and hides, so Circle's window (drawn
+// in the page) can be reached. It stays mounted, keeps its state and does not call onClose. It comes back when
+// Circle's window closes.
 type Name = { title: string; labelledBy?: never } | { labelledBy: string; title?: never }
 // size: sm for short content (sign-in), md for longer content (sharing). Default md.
 type DialogProps = Name & { open: boolean; onClose: () => void; size?: 'sm' | 'md'; children: ReactNode }
@@ -23,19 +27,30 @@ function OpenDialog({ onClose, size = 'md', title, labelledBy, children }: Omit<
   const ownHeadingId = useId()
   const headingId = labelledBy ?? ownHeadingId
 
+  const away = useCircleWindowOpen()
+
   useEffect(() => {
     const d = dialog.current
-    if (!d) return
     const opener = document.activeElement as HTMLElement | null
-    if (typeof d.showModal === 'function' && !d.open) d.showModal()
-    else d.setAttribute('open', '')
-    d.querySelector<HTMLElement>(FOCUSABLE)?.focus()
     // The native dialog is closed first, so the page behind is no longer inert when focus goes back to it.
     return () => {
-      if (d.open && typeof d.close === 'function') d.close()
+      if (d?.open && typeof d.close === 'function') d.close()
       opener?.focus()
     }
   }, [])
+
+  useEffect(() => {
+    const d = dialog.current
+    if (!d) return
+    if (away) {
+      if (d.open && typeof d.close === 'function') d.close()
+      else d.removeAttribute('open')
+      return
+    }
+    if (typeof d.showModal === 'function' && !d.open) d.showModal()
+    else d.setAttribute('open', '')
+    d.querySelector<HTMLElement>(FOCUSABLE)?.focus()
+  }, [away])
 
   function onKeyDown(e: KeyboardEvent<HTMLDialogElement>) {
     if (e.key === 'Escape') {

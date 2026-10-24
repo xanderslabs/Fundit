@@ -154,7 +154,7 @@ export function EmailLogin({ onDone }: { onDone: (session: EmailSession) => void
       <Button type="submit" size="lg" block disabled={busy}>
         Send code
       </Button>
-      <p className="email-note">We email you a code to sign in. New to Fundit? The same code creates your account.</p>
+      <p className="email-note">We email you a code. Enter it in the Circle window that opens. New to Fundit? The same code creates your account.</p>
       {stage === 'code' && <p className="email-hint">Enter the code from your email in the Circle window.</p>}
       {stage === 'opening' && <p className="email-hint">Opening your account. A new account asks you to approve one step in the Circle window.</p>}
       {error && (

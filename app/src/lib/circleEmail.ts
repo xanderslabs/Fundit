@@ -2,6 +2,7 @@ import type { W3SSdk } from '@circle-fin/w3s-pw-web-sdk'
 import type { Error as SdkError, ThemeColor } from '@circle-fin/w3s-pw-web-sdk/dist/src/types'
 import { getAddress, isAddress } from 'viem'
 import { CIRCLE_UCW_APP_ID } from '../config'
+import { openCircleWindow } from './circleWindow'
 import {
   clearEmailTokens,
   EmailError,
@@ -144,35 +145,42 @@ export async function sendEmailCode(email: string, turnstile: string, onWrongCod
   if (typeof deviceToken !== 'string' || typeof deviceEncryptionKey !== 'string' || typeof otpToken !== 'string') {
     throw new EmailError('Circle gave no login values', 502, null)
   }
-  const tokens = await new Promise<{ userToken: string; encryptionKey: string; refreshToken: string }>((resolve, reject) => {
-    let done = false
-    const finish = (fn: () => void) => {
-      if (done) return
-      done = true
-      stopWatching()
-      fn()
-    }
-    const stopWatching = onFrameClosed(() => finish(() => reject(new EmailLoginStopped(false))))
-    sdk.updateConfigs({ appSettings: appSettings(), loginConfigs: { deviceToken, deviceEncryptionKey, otpToken } }, (error, result) => {
-      if (error || !result) {
-        const err = sdkError(error, 'Login failed')
-        if (err.code === CIRCLE_CODE.otpInvalid || err.code === CIRCLE_CODE.otpNotMatch) {
-          onWrongCode?.(err)
+  // An open Fundit dialog steps aside until the code screen closes (circleWindow).
+  const shown = openCircleWindow()
+  let tokens: { userToken: string; encryptionKey: string; refreshToken: string }
+  try {
+    tokens = await new Promise<{ userToken: string; encryptionKey: string; refreshToken: string }>((resolve, reject) => {
+      let done = false
+      const finish = (fn: () => void) => {
+        if (done) return
+        done = true
+        stopWatching()
+        fn()
+      }
+      const stopWatching = onFrameClosed(() => finish(() => reject(new EmailLoginStopped(false))))
+      sdk.updateConfigs({ appSettings: appSettings(), loginConfigs: { deviceToken, deviceEncryptionKey, otpToken } }, (error, result) => {
+        if (error || !result) {
+          const err = sdkError(error, 'Login failed')
+          if (err.code === CIRCLE_CODE.otpInvalid || err.code === CIRCLE_CODE.otpNotMatch) {
+            onWrongCode?.(err)
+            return
+          }
+          closeFrame()
+          finish(() => reject(err))
           return
         }
+        finish(() => resolve({ userToken: result.userToken, encryptionKey: result.encryptionKey, refreshToken: result.refreshToken }))
+      })
+      sdk.setOnResendOtpEmail(() => {
+        // A new code needs a new Turnstile check, which only the form can give.
         closeFrame()
-        finish(() => reject(err))
-        return
-      }
-      finish(() => resolve({ userToken: result.userToken, encryptionKey: result.encryptionKey, refreshToken: result.refreshToken }))
+        finish(() => reject(new EmailLoginStopped(true)))
+      })
+      sdk.verifyOtp()
     })
-    sdk.setOnResendOtpEmail(() => {
-      // A new code needs a new Turnstile check, which only the form can give.
-      closeFrame()
-      finish(() => reject(new EmailLoginStopped(true)))
-    })
-    sdk.verifyOtp()
-  })
+  } finally {
+    shown()
+  }
   // Once, so the Worker can keep userToken and refreshToken in HttpOnly cookies.
   await ucw('login', tokens)
   // Not tied to a wallet until openEmailAccount knows it.
@@ -241,26 +249,32 @@ export async function runChallenge(challengeId: string): Promise<ChallengeOutcom
   }
 }
 
-function executeChallenge(sdk: W3SSdk, tokens: EmailTokens, challengeId: string): Promise<ChallengeOutcome> {
+// An open Fundit dialog steps aside until Circle's window closes (circleWindow).
+async function executeChallenge(sdk: W3SSdk, tokens: EmailTokens, challengeId: string): Promise<ChallengeOutcome> {
   sdk.setAuthentication(tokens)
-  return new Promise<ChallengeOutcome>((resolve, reject) => {
-    let done = false
-    const finish = (fn: () => void) => {
-      if (done) return
-      done = true
-      stopWatching()
-      fn()
-    }
-    const stopWatching = onFrameClosed(() => finish(() => resolve({ kind: 'cancelled' })))
-    sdk.execute(challengeId, (error, result) => {
-      if (error) {
-        if (error.code === CIRCLE_CODE.userCanceled) finish(() => resolve({ kind: 'cancelled' }))
-        else finish(() => reject(sdkError(error, 'Challenge failed')))
-        return
+  const shown = openCircleWindow()
+  try {
+    return await new Promise<ChallengeOutcome>((resolve, reject) => {
+      let done = false
+      const finish = (fn: () => void) => {
+        if (done) return
+        done = true
+        stopWatching()
+        fn()
       }
-      finish(() => resolve({ kind: 'done', data: (result as { data?: unknown } | undefined)?.data }))
+      const stopWatching = onFrameClosed(() => finish(() => resolve({ kind: 'cancelled' })))
+      sdk.execute(challengeId, (error, result) => {
+        if (error) {
+          if (error.code === CIRCLE_CODE.userCanceled) finish(() => resolve({ kind: 'cancelled' }))
+          else finish(() => reject(sdkError(error, 'Challenge failed')))
+          return
+        }
+        finish(() => resolve({ kind: 'done', data: (result as { data?: unknown } | undefined)?.data }))
+      })
     })
-  })
+  } finally {
+    shown()
+  }
 }
 
 // Signs the email account out: the Worker drops its cookies and this tab forgets the tokens. Never throws, so
