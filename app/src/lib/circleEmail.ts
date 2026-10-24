@@ -1,5 +1,5 @@
 import type { W3SSdk } from '@circle-fin/w3s-pw-web-sdk'
-import type { Error as SdkError, ThemeColor } from '@circle-fin/w3s-pw-web-sdk/dist/src/types'
+import type { Resources, Error as SdkError, ThemeColor } from '@circle-fin/w3s-pw-web-sdk/dist/src/types'
 import { getAddress, isAddress } from 'viem'
 import { CIRCLE_UCW_APP_ID } from '../config'
 import { openCircleWindow } from './circleWindow'
@@ -40,31 +40,76 @@ export class EmailLoginStopped extends Error {
   }
 }
 
-// Fundit's colours (src/styles/tokens.css) on Circle's screens. Circle applies only some of them (Gate 1, U6).
+// Fundit's colours (src/styles/tokens.css) on Circle's screens. Every field is set: any left out falls back to
+// Circle's own blue, and its title and icons use a purple to blue gradient unless titleGradients is given.
+const GREEN = '#19b820'
+const GREEN_INK = '#0f7a14'
+const TEXT = '#101928'
+const MUTED = '#586283'
 const THEME: ThemeColor = {
   bg: '#ffffff',
-  backdrop: '#101928',
+  backdrop: TEXT,
   backdropOpacity: 0.4,
   divider: '#e4e8eb',
-  textMain: '#101928',
-  textMain2: '#101928',
-  textAuxiliary: '#586283',
-  textAuxiliary2: '#586283',
-  textSummary: '#101928',
-  textInteractive: '#0f7a14',
-  success: '#19b820',
+  success: GREEN_INK,
   error: '#c0150b',
+  textMain: TEXT,
+  textMain2: TEXT,
+  textAuxiliary: MUTED,
+  textAuxiliary2: MUTED,
+  textSummary: TEXT,
+  textSummaryHighlight: GREEN_INK,
+  textPlaceholder: MUTED,
+  textDetailToggle: GREEN_INK,
+  textInteractive: GREEN_INK,
+  interactiveBg: '#e8f7e9',
+  tooltipText: '#ffffff',
+  tooltipBg: TEXT,
+  pinDotBase: '#ffffff',
+  pinDotBaseBorder: '#d5dade',
+  pinDotActivated: GREEN,
+  enteredPinText: TEXT,
+  inputText: TEXT,
+  inputBorderFocused: GREEN,
+  inputBorderFocusedError: '#c0150b',
   inputBg: '#ffffff',
-  inputText: '#101928',
-  inputBorderFocused: '#586283',
-  mainBtnBg: '#19b820',
-  mainBtnBgOnHover: '#0f7a14',
+  inputBgDisabled: '#eceff1',
+  dropdownBg: '#ffffff',
+  dropdownBorderIsOpen: GREEN,
+  dropdownBorderError: '#c0150b',
   mainBtnText: '#ffffff',
+  mainBtnTextDisabled: '#ffffff',
   mainBtnTextOnHover: '#ffffff',
-  secondBtnText: '#101928',
+  mainBtnBg: GREEN,
+  mainBtnBgOnHover: GREEN_INK,
+  mainBtnBgDisabled: '#a3e0a6',
+  secondBtnText: TEXT,
+  secondBtnTextDisabled: MUTED,
+  secondBtnTextOnHover: TEXT,
   secondBtnBorder: '#d5dade',
-  secondBtnBorderOnHover: '#586283',
-  plainBtnText: '#0f7a14',
+  secondBtnBorderOnHover: MUTED,
+  secondBtnBgOnHover: '#eceff1',
+  secondBtnBorderDisabled: '#e4e8eb',
+  plainBtnText: GREEN_INK,
+  plainBtnTextDisabled: MUTED,
+  plainBtnTextOnHover: GREEN_INK,
+  plainBtnBg: '#ffffff',
+  plainBtnBgOnHover: '#e8f7e9',
+  recoverPinHintTitle: TEXT,
+  recoverPinHintTitleBg: '#e8f7e9',
+  recoverPinHint: MUTED,
+  titleGradients: [GREEN, GREEN_INK],
+}
+
+// The envelope on Circle's code screen (its own is a purple to blue gradient) and Fundit's typeface.
+const EMAIL_ICON =
+  'data:image/svg+xml,' +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="${GREEN}"/><rect x="17" y="21" width="30" height="22" rx="3" fill="none" stroke="#fff" stroke-width="3"/><path d="m18 23 14 11 14-11" fill="none" stroke="#fff" stroke-width="3" stroke-linejoin="round"/></svg>`,
+  )
+const RESOURCES: Resources = {
+  emailIcon: EMAIL_ICON,
+  fontFamily: { name: 'Outfit', url: 'https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap' },
 }
 
 const appSettings = () => ({ appId: CIRCLE_UCW_APP_ID })
@@ -102,6 +147,7 @@ function circle(): Promise<Ready> {
     const { W3SSdk } = await import('@circle-fin/w3s-pw-web-sdk')
     const sdk = new W3SSdk({ appSettings: appSettings() })
     sdk.setThemeColor(THEME)
+    sdk.setResources(RESOURCES)
     let deviceId: string
     try {
       deviceId = await sdk.getDeviceId()

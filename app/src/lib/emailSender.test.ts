@@ -25,7 +25,7 @@ const { runChallenge, getTransactionCount, estimateGas, estimateFeesPerGas, send
 vi.mock('./circleEmail', async (orig) => ({ ...(await orig<typeof import('./circleEmail')>()), runChallenge }))
 vi.mock('@circle-fin/w3s-pw-web-sdk', () => ({
   W3SSdk: function W3SSdk() {
-    return { setThemeColor: () => {}, getDeviceId: async () => 'device-id-0001' }
+    return { setThemeColor: () => {}, setResources: () => {}, getDeviceId: async () => 'device-id-0001' }
   },
 }))
 vi.mock('./clients', () => ({ arcClient: { getTransactionCount, estimateGas, estimateFeesPerGas, sendRawTransaction } }))
