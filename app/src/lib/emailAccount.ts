@@ -13,6 +13,9 @@ const TOKENS_KEY = storageKey('session.email.tokens')
 export type EmailSession = { address: Address; walletId: string; email: string }
 export type EmailTokens = { userToken: string; encryptionKey: string }
 
+// Circle's code for an expired user token (CIRCLE_CODE.userTokenExpired in circleEmail.ts, which loads the SDK).
+const CIRCLE_TOKEN_EXPIRED = 155104
+
 // When Circle's tokens for this browser can no longer be refreshed.
 export const SIGN_IN_AGAIN = 'Sign in again to continue'
 
@@ -126,6 +129,8 @@ export class EmailError extends Error {
 // here carries a token except /login's. Resolves to the JSON answer; throws EmailError for anything else.
 // A 401 means the Worker has no session for this browser (cookies expired or cleared, or a refresh refused): the
 // email account cannot be restored, so it is signed out here and the person is asked to sign in again.
+// A 401 that carries Circle's 155104 (user token expired) is not that: outside the session route the caller
+// refreshes once and tries again, so it is thrown as an EmailError and the account stays signed in.
 export async function ucw<T = Record<string, unknown>>(route: string, body: Record<string, unknown> = {}): Promise<T> {
   let res: Response
   try {
@@ -134,12 +139,12 @@ export async function ucw<T = Record<string, unknown>>(route: string, body: Reco
     throw new EmailError(err instanceof Error ? err.message : 'Worker unreachable', 0, null)
   }
   const out = (await res.json().catch(() => null)) as Record<string, unknown> | null
-  if (res.status === 401) {
+  const code = typeof out?.code === 'number' ? out.code : null
+  if (res.status === 401 && !(route !== 'session' && code === CIRCLE_TOKEN_EXPIRED)) {
     clearEmailSession()
     throw new PlainError(SIGN_IN_AGAIN)
   }
   if (!res.ok) {
-    const code = typeof out?.code === 'number' ? out.code : null
     const message = typeof out?.message === 'string' ? out.message : typeof out?.error === 'string' ? out.error : `HTTP ${res.status}`
     throw new EmailError(message, res.status, code)
   }

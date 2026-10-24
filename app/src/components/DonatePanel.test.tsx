@@ -772,6 +772,52 @@ describe('DonatePanel', () => {
     })
   })
 
+  // Email and wallet accounts pay gas in USDC from the same address. Giving the whole balance would revert after
+  // the person confirmed it, at their cost, so the form keeps EOA_GAS_RESERVE (0.01 USDC) back for them too.
+  describe('wallet account keeps the 0.01 USDC fee reserve', () => {
+    function walletSender() {
+      const send = vi.fn(async (_calls: Call[]) => success)
+      state.sender = { kind: 'wallet', address: ME, send }
+      return send
+    }
+
+    it('blocks a USDC gift that would leave less than 0.01 USDC', async () => {
+      walletSender()
+      state.balance = 10_000000n
+      renderPanel(view('USDC'))
+      const user = userEvent.setup()
+      await user.type(screen.getByLabelText('Amount'), '9.995')
+      expect(await screen.findByText(/Keep about 0.01 USDC more for the network fee/)).toBeTruthy()
+      expect(donateButton().disabled).toBe(true)
+
+      await user.clear(screen.getByLabelText('Amount'))
+      await user.type(screen.getByLabelText('Amount'), '9.99')
+      await waitFor(() => expect(donateButton().disabled).toBe(false))
+    })
+
+    it('blocks an EURC gift when the account has no USDC for the fee', async () => {
+      const send = walletSender()
+      state.balance = 100_000000n
+      state.usdc = 0n
+      renderPanel(view('EURC'))
+      const user = userEvent.setup()
+      await user.type(screen.getByLabelText('Amount'), '10')
+      expect(await screen.findByText(/Add at least 0.01 USDC to your Fundit account first. It pays the network fee./)).toBeTruthy()
+      expect(screen.getByRole('link', { name: 'Add money' }).getAttribute('href')).toBe('/me?add=1')
+      expect(donateButton().disabled).toBe(true)
+      await user.click(donateButton())
+      expect(send).not.toHaveBeenCalled()
+    })
+
+    it('shows no Network fee row for a wallet account', async () => {
+      walletSender()
+      state.balance = 100_000000n
+      renderPanel(view('USDC'))
+      await userEvent.setup().type(screen.getByLabelText('Amount'), '10')
+      expect(within(screen.getByLabelText('Breakdown')).queryByText('Network fee')).toBeNull()
+    })
+  })
+
   describe('passkey wallet', () => {
     const TX = `0x${'cd'.repeat(32)}` as Hex
     const PROCESSING = 'Your passkey transaction is still processing.'

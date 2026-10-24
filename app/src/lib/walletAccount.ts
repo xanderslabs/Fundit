@@ -1,7 +1,7 @@
 import { type Address, isAddress, isAddressEqual } from 'viem'
 import { storageKey } from '../config'
 import { ACCOUNT_EVENT } from './account'
-import { PlainError, WrongWalletAccount } from './errors'
+import { PlainError } from './errors'
 import type { Sender } from './sender'
 
 // The wallet account's store: the address and the wagmi connector it signed in with. Nothing in this file loads
@@ -11,6 +11,8 @@ export const WALLET_KEY = storageKey('session.wallet')
 export type WalletSession = { address: Address; connectorId: string }
 
 export const WALLET_LOCKED = 'Your wallet did not reconnect. Open it, unlock it if it asks, then try again.'
+// The wallet came back on another account. The session is already gone, so switching back would not help.
+export const WALLET_CHANGED = 'Your wallet changed to a different account, so you were signed out. Sign in again.'
 
 function notify() {
   if (typeof window !== 'undefined') window.dispatchEvent(new Event(ACCOUNT_EVENT))
@@ -66,7 +68,7 @@ export function walletAccountSender(s: WalletSession): Sender {
         if (now === undefined) throw new PlainError(WALLET_LOCKED)
         if (!same(now)) {
           clearWalletSession()
-          throw new WrongWalletAccount(s.address)
+          throw new PlainError(WALLET_CHANGED)
         }
       }
       return wagmiSender(wagmiConfig, s.address).send(calls, opts)

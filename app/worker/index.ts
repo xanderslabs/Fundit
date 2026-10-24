@@ -123,6 +123,13 @@ async function isCampaign(cfg: Config, address: Address): Promise<boolean> {
   return decodeFunctionResult({ abi: factoryAbi, functionName: 'isCampaign', data: out.result as `0x${string}` })
 }
 
+// The email limit's key. Privacy says the server does not keep the address, so even a rate-limit key holds only
+// a SHA-256 of it, lowercased, as hex.
+async function emailKey(email: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(email.toLowerCase()))
+  return `email:${[...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')}`
+}
+
 async function rateLimit(env: Env, keys: string[]): Promise<void> {
   if (!env.UCW_LIMIT) return
   for (const key of keys) {
@@ -164,10 +171,12 @@ async function route(name: string, request: Request, env: Env, cfg: Config): Pro
       const email = str(body, 'email', EMAIL)
       const turnstile = str(body, 'turnstile', TURNSTILE_TOKEN)
       if (!deviceId || !email || !turnstile) return json(400, { error: 'deviceId, email or turnstile' })
-      await rateLimit(env, [`ip:${ip || 'unknown'}`])
+      // Its own IP bucket: many people can share one IP behind a carrier's NAT, and sign-in must not eat the
+      // budget for signing gifts (ip:sign:), or the other way round.
+      await rateLimit(env, [`ip:code:${ip || 'unknown'}`])
       if (!(await verifyTurnstile(env, turnstile, ip))) return json(403, { error: 'Turnstile check failed' })
       // Per email only after Turnstile, so junk requests cannot use up someone else's budget.
-      await rateLimit(env, [`email:${email.toLowerCase()}`])
+      await rateLimit(env, [await emailKey(email)])
       const data = await circle(env, 'POST', '/users/email/token', null, { idempotencyKey, deviceId, email })
       const out = { deviceToken: data.deviceToken, deviceEncryptionKey: data.deviceEncryptionKey, otpToken: data.otpToken }
       if (Object.values(out).some((v) => typeof v !== 'string')) return json(502, { error: 'Circle gave no login values' })
@@ -212,7 +221,7 @@ async function route(name: string, request: Request, env: Env, cfg: Config): Pro
       const transaction = typeof body.transaction === 'string' && body.transaction.length <= 20_000 ? body.transaction : null
       const memo = body.memo === undefined ? null : str(body, 'memo', MEMO)
       if (!walletId || !transaction || (body.memo !== undefined && !memo)) return json(400, { error: 'walletId, transaction or memo' })
-      await rateLimit(env, [`ip:${ip || 'unknown'}`])
+      await rateLimit(env, [`ip:sign:${ip || 'unknown'}`])
       let tx: unknown
       try {
         tx = JSON.parse(transaction)

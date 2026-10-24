@@ -227,8 +227,21 @@ export async function ensureEmailTokens(): Promise<EmailTokens> {
 
 // Opens Circle's window for a challenge and waits for the person. Closing it, or Circle's own cancel (155701),
 // is 'cancelled'. data is the SDK result's data, such as signedTransaction for a sign request.
+// Another tab may have refreshed the session, leaving this tab an old user token that the Worker never sees (its
+// cookies are fresh). Circle's window then fails with 155104: the tokens are refreshed once and the same challenge
+// runs again. A second failure is thrown as it is.
 export async function runChallenge(challengeId: string): Promise<ChallengeOutcome> {
   const [{ sdk }, tokens] = await Promise.all([circle(), ensureEmailTokens()])
+  try {
+    return await executeChallenge(sdk, tokens, challengeId)
+  } catch (err) {
+    if (!(err instanceof EmailError && err.code === CIRCLE_CODE.userTokenExpired)) throw err
+    closeFrame()
+    return executeChallenge(sdk, await refreshEmailTokens(), challengeId)
+  }
+}
+
+function executeChallenge(sdk: W3SSdk, tokens: EmailTokens, challengeId: string): Promise<ChallengeOutcome> {
   sdk.setAuthentication(tokens)
   return new Promise<ChallengeOutcome>((resolve, reject) => {
     let done = false

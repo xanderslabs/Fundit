@@ -117,15 +117,16 @@ export function DonatePanel({ view }: { view: CampaignView }) {
   const limit = messageLimit(anonymous)
   const messageTooLong = messageBytes > limit
   const balance = funds.data?.balance
-  // What the Fundit account keeps for the network fee (passkeyReserve). Only a USDC balance pays it.
-  // Estimated as a gift of the same shape: an approve and a donate of 1 unit.
+  // What the account keeps for the network fee: a passkeyReserve estimate for a passkey, EOA_GAS_RESERVE for an
+  // email or wallet account. Only a USDC balance pays it. Estimated as a gift of the same shape: an approve and a
+  // donate of 1 unit.
   const reserve = useGasReserve(sender, {
     key: `donate-${campaign.toLowerCase()}`,
     calls: buildDonateCalls({ campaign, token, amount: 1n, tip: 0n, message: '', allowance: 0n }),
   }, amountText !== '')
-  const gasBuffer = sender?.kind === 'passkey' && symbol === 'USDC' ? (reserve ?? 0n) : 0n
-  // An EURC gift from a Fundit account still pays the network fee in USDC, so it needs the buffer in USDC.
-  const needsGasUsdc = sender?.kind === 'passkey' && symbol !== 'USDC'
+  const gasBuffer = sender !== null && symbol === 'USDC' ? (reserve ?? 0n) : 0n
+  // An EURC gift from any account still pays the network fee in USDC, so it needs the buffer in USDC.
+  const needsGasUsdc = sender !== null && symbol !== 'USDC'
   const gasFunds = useQuery({
     queryKey: balancesKey(sender?.address ?? null),
     queryFn: () => fetchAccountBalances(arcClient, sender!.address),

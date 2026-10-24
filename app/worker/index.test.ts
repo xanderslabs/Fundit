@@ -13,6 +13,9 @@ const COOKIE_RT = 'cookie-refresh-token-0123456789abcdef'
 const BODY_UT = 'body-user-token-0123456789abcdef'
 const WALLET_ID = '0a1b2c3d-1111-4222-8333-444455556666'
 const net = NETWORKS_WORKER.testnet
+// SHA-256 hex of 'a@example.com' and 'ana.doe@example.com' (shasum -a 256).
+const A_EXAMPLE_SHA256 = '08168cd80dfd534ab0f10af10f1303fe00af2d43ab5c1432360d137f8197e17a'
+const ANA_SHA256 = 'c93586a8cd1820bf03b064845d0cc056be572210a6d981e238ff7619693805f9'
 
 const assets = vi.fn(async (_req: Request) => new Response('static'))
 const limit = vi.fn(async (_o: { key: string }) => ({ success: true }))
@@ -105,7 +108,7 @@ describe('worker', () => {
     expect(circleCalls()).toEqual([])
     // A failed check uses only the caller's own IP budget, never the email address's, so junk requests cannot
     // lock someone else out of sign-in.
-    expect(limit.mock.calls.map(([o]) => o.key)).toEqual(['ip:203.0.113.7', 'ip:203.0.113.7'])
+    expect(limit.mock.calls.map(([o]) => o.key)).toEqual(['ip:code:203.0.113.7', 'ip:code:203.0.113.7'])
     // The secret and the visitor's IP went to Cloudflare's check, not anywhere else.
     const verify = calls.find((c) => c.url.includes('siteverify'))
     const form = new URLSearchParams(String(verify?.init.body))
@@ -121,8 +124,25 @@ describe('worker', () => {
     const [c] = circleCalls()
     expect(header(c!, 'authorization')).toBe('Bearer TEST_API_KEY:abc:def')
     expect(JSON.parse(String(c!.init.body))).toMatchObject({ deviceId: 'device-12345', email: 'a@example.com' })
-    // Rate limited per IP and per email address.
-    expect(limit.mock.calls.map(([o]) => o.key)).toEqual(['ip:203.0.113.7', 'email:a@example.com'])
+    // Rate limited per IP and per email address. The address is keyed by its SHA-256 (of the lowercased form).
+    expect(limit.mock.calls.map(([o]) => o.key)).toEqual(['ip:code:203.0.113.7', `email:${A_EXAMPLE_SHA256}`])
+  })
+
+  // Privacy says the server does not keep the email address. A raw address as a rate-limit key would be kept by
+  // Cloudflare's limiter. Any case of the address must land in the same bucket.
+  it('never puts the raw email in a rate-limit key, and keys it by the lowercased address', async () => {
+    const res = await worker.fetch(post('email-token', { deviceId: 'device-12345', email: 'Ana.Doe@Example.COM', turnstile: 'good' }), env())
+    expect(res.status).toBe(200)
+    const keys = limit.mock.calls.map(([o]) => o.key)
+    for (const k of keys) expect(k.toLowerCase()).not.toContain('ana.doe')
+    expect(keys[1]).toBe(`email:${ANA_SHA256}`)
+  })
+
+  // Many mobile users share one IP behind a carrier's NAT. Sign-in codes and gift signatures use separate budgets,
+  // so a rush of sign-ins cannot block gifts.
+  it('sign-transaction uses its own IP bucket, apart from email-token', async () => {
+    await worker.fetch(post('sign-transaction', { walletId: WALLET_ID, transaction: signTx(CAMPAIGN) }, cookie), env())
+    expect(limit.mock.calls.map(([o]) => o.key)).toEqual(['ip:sign:203.0.113.7'])
   })
 
   it('refuses when the rate limit is reached, before Turnstile or Circle', async () => {

@@ -61,6 +61,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.stubGlobal('fetch', fetchMock)
   sdk.verifyOtp.mockImplementation(() => sdk.onLogin?.(undefined, { ...TOKENS }))
+  // mockReset drops any once-answer a failed test left queued.
+  sdk.execute.mockReset()
   sdk.execute.mockImplementation((_id: string, done: ChallengeCallback) => done(undefined, { type: 'INITIALIZE', status: 'COMPLETE' }))
 })
 
@@ -107,6 +109,40 @@ describe('circleEmail', () => {
     expect(sdk.execute.mock.invocationCallOrder[0]!).toBeLessThan(fetchMock.mock.invocationCallOrder.at(-1)!)
     expect(bodies('wallets')).toHaveLength(2)
     expect(session.walletId).toBe(WALLET_ID)
+  })
+
+  // Another tab refreshed the session, so this tab still holds an old user token. The Worker call works on the
+  // fresh cookies, but Circle's window refuses the old token with 155104. One refresh and the same challenge again.
+  it('runChallenge refreshes once and retries the same challenge after an SDK 155104', async () => {
+    const FRESH = { userToken: 'fresh-user-'.padEnd(40, 'f'), encryptionKey: 'fresh-key-'.padEnd(40, 'g') }
+    worker({ session: () => answer(200, FRESH) })
+    const { runChallenge } = await load()
+    const { saveEmailTokens, readEmailTokens } = await import('./emailAccount')
+    saveEmailTokens({ userToken: TOKENS.userToken, encryptionKey: TOKENS.encryptionKey })
+    sdk.execute
+      .mockImplementationOnce((_id: string, done: ChallengeCallback) => done({ code: 155104, message: 'Token expired' }, undefined))
+      .mockImplementationOnce((_id: string, done: ChallengeCallback) => done(undefined, { data: { signedTransaction: '0xabc' } }))
+    const outcome = await runChallenge('sign-1')
+    expect(outcome).toEqual({ kind: 'done', data: { signedTransaction: '0xabc' } })
+    expect(sdk.execute.mock.calls.map((c) => c[0])).toEqual(['sign-1', 'sign-1'])
+    expect(bodies('session')).toHaveLength(1)
+    expect(sdk.setAuthentication.mock.calls.map((c) => c[0])).toEqual([
+      { userToken: TOKENS.userToken, encryptionKey: TOKENS.encryptionKey },
+      FRESH,
+    ])
+    expect(readEmailTokens()).toEqual(FRESH)
+  })
+
+  it('runChallenge throws a second 155104 after one refresh', async () => {
+    const FRESH = { userToken: 'fresh-user-'.padEnd(40, 'f'), encryptionKey: 'fresh-key-'.padEnd(40, 'g') }
+    worker({ session: () => answer(200, FRESH) })
+    const { runChallenge } = await load()
+    const { saveEmailTokens } = await import('./emailAccount')
+    saveEmailTokens({ userToken: TOKENS.userToken, encryptionKey: TOKENS.encryptionKey })
+    sdk.execute.mockImplementation((_id: string, done: ChallengeCallback) => done({ code: 155104, message: 'Token expired' }, undefined))
+    await expect(runChallenge('sign-1')).rejects.toMatchObject({ code: 155104 })
+    expect(sdk.execute).toHaveBeenCalledTimes(2)
+    expect(bodies('session')).toHaveLength(1)
   })
 
   // localStorage outlives the tab and any script on the origin can read it. The tokens may sit only in memory and

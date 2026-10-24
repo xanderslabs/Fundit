@@ -58,12 +58,15 @@ describe('walletAccountSender', () => {
 
   // The person picked another account inside the wallet while away. Fundit must never send from it, and the
   // session ends so they sign in again with the account they want.
-  it('a reconnect to another address signs the wallet session out and throws WrongWalletAccount', async () => {
+  // The message must not ask them to switch back: the session is already gone, so only signing in again helps.
+  it('a reconnect to another address signs the wallet session out and says to sign in again', async () => {
     saveWalletSession({ address: ME, connectorId: 'io.metamask' })
     wallet.reconnect.mockImplementation(async () => {
       wallet.account = { address: OTHER }
     })
-    await expect(walletAccountSender({ address: ME, connectorId: 'io.metamask' }).send(CALLS)).rejects.toBeInstanceOf(WrongWalletAccount)
+    const err = await walletAccountSender({ address: ME, connectorId: 'io.metamask' }).send(CALLS).catch((e: unknown) => e)
+    expect(err).not.toBeInstanceOf(WrongWalletAccount)
+    expect((err as Error).message).toBe('Your wallet changed to a different account, so you were signed out. Sign in again.')
     expect(wallet.send).not.toHaveBeenCalled()
     expect(readWalletSession()).toBeNull()
   })
