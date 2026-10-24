@@ -226,7 +226,7 @@ export function Recover() {
       </Card>
       {!session && (
         <p className="recover-back">
-          Still have your passkey? <SignInButton className="link-button" label="Back to sign in" onPasskeyDone={() => navigate('/me')} />
+          Still have your passkey? <SignInButton className="link-button" label="Back to sign in" onSignedIn={() => navigate('/me')} />
         </p>
       )}
     </section>

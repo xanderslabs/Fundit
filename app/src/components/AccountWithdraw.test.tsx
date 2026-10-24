@@ -78,10 +78,12 @@ async function fill(amount: string, recipient: string) {
 const submitButton = () => screen.getByRole('button', { name: 'Send' })
 
 describe('AccountWithdraw', () => {
-  // A wallet would send approve and burn as two transactions, so a failed burn could leave an open approval.
-  it('renders nothing for a regular wallet', () => {
+  // A wallet account sends approve and burn as one transaction through Multicall3From, so they succeed or fail
+  // together and no open approval is left behind.
+  it('a wallet account sees the Send out form', () => {
     renderForm('wallet')
-    expect(screen.queryByRole('heading', { name: 'Send money out' })).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Send money out' })).toBeTruthy()
+    expect(screen.getByText(/Confirm in your wallet once\./)).toBeTruthy()
   })
 
   // The account's own address would only burn gas, and spending the gas buffer would strand the account.

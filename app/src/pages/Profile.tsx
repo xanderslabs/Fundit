@@ -14,6 +14,7 @@ import { EXPLORER_URL } from '../config'
 import { blockTimes } from '../hooks/useActivity'
 import { useCampaign } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
+import { type Account, useAccount } from '../lib/account'
 import { type DonationItem, recentDonationsBy } from '../lib/activity'
 import { readMessage } from '../lib/anon'
 import { pendingCrossChain, pendingPayouts, subscribePending } from '../lib/bridge'
@@ -21,6 +22,7 @@ import { myCampaigns } from '../lib/campaigns'
 import { arcClient } from '../lib/clients'
 import { balancesKey, fetchAccountBalances } from '../lib/deposit'
 import { formatAmount } from '../lib/format'
+import { shortAddress } from '../lib/names'
 import { readPasskeyUsername, type StoredPasskey, syncBackupFromChain, useBackupNeeded, usePasskeySession } from '../lib/passkey'
 import type { Sender } from '../lib/sender'
 import './Profile.css'
@@ -166,36 +168,50 @@ function useHasPending(address: Address) {
 }
 
 function AccountTab({
-  address,
+  account,
   username,
   backup,
   onSaveNow,
 }: {
-  address: Address
+  account: Account
   username: string | null
   backup: 'saved' | 'missing' | 'checking'
   onSaveNow: () => void
 }) {
+  const address = account.address
   const signOut = useSignOut()
   const pending = useHasPending(address)
   return (
     <div className="dash-tab dash-account">
-      <section className="dash-account-row" aria-labelledby="dash-recovery-heading">
-        <h3 id="dash-recovery-heading">Recovery key</h3>
-        {backup === 'saved' && <p>Recovery key saved</p>}
-        {backup === 'checking' && <p className="dash-muted">Checking...</p>}
-        {backup === 'missing' && (
-          <div className="dash-inline">
-            <p>Not saved yet</p>
-            <Button onClick={onSaveNow}>Save now</Button>
-          </div>
-        )}
-      </section>
-      <section className="dash-account-row" aria-labelledby="dash-passkey-heading">
-        <h3 id="dash-passkey-heading">Passkey</h3>
-        {username && (
+      {/* A recovery key belongs to passkey accounts. A wallet has its own backup. */}
+      {account.kind === 'passkey' && (
+        <section className="dash-account-row" aria-labelledby="dash-recovery-heading">
+          <h3 id="dash-recovery-heading">Recovery key</h3>
+          {backup === 'saved' && <p>Recovery key saved</p>}
+          {backup === 'checking' && <p className="dash-muted">Checking...</p>}
+          {backup === 'missing' && (
+            <div className="dash-inline">
+              <p>Not saved yet</p>
+              <Button onClick={onSaveNow}>Save now</Button>
+            </div>
+          )}
+        </section>
+      )}
+      <section className="dash-account-row" aria-labelledby="dash-signin-heading">
+        <h3 id="dash-signin-heading">Sign-in</h3>
+        {account.kind === 'passkey' && (
           <p>
-            Username: <strong>{username}</strong>
+            Passkey
+            {username && (
+              <>
+                , username: <strong>{username}</strong>
+              </>
+            )}
+          </p>
+        )}
+        {account.kind === 'wallet' && (
+          <p>
+            Wallet: <code title={address}>{shortAddress(address)}</code>
           </p>
         )}
         <p className="dash-muted">Your Fundit account address on Arc:</p>
@@ -304,9 +320,9 @@ function DashPanel({ id, label, open, onClose, children }: { id: string; label: 
   )
 }
 
-function Dashboard({ sender, stored }: { sender: Sender; stored: StoredPasskey }) {
-  const address = stored.address
-  const [username] = useState(() => readPasskeyUsername(address))
+function Dashboard({ sender, account, stored }: { sender: Sender; account: Account; stored: StoredPasskey | null }) {
+  const address = account.address
+  const [username] = useState(() => (account.kind === 'passkey' ? readPasskeyUsername(address) : null))
   const [params, setParams] = useSearchParams()
   // The open panel lives in the address bar (?add=1 or ?send=1), so every Add money link can open it.
   const open: Panel | null = params.get('add') === '1' ? 'add' : params.get('send') === '1' ? 'send' : null
@@ -377,7 +393,7 @@ function Dashboard({ sender, stored }: { sender: Sender; stored: StoredPasskey }
         {opened.send && <AccountWithdraw sender={sender} />}
       </DashPanel>
 
-      {showBackup && (
+      {showBackup && stored && (
         <section ref={banner} tabIndex={-1} className="dash-recovery" aria-label="Recovery key">
           {backupOpen ? (
             <Banner tone="attention">
@@ -399,7 +415,7 @@ function Dashboard({ sender, stored }: { sender: Sender; stored: StoredPasskey }
         <TabPanel id={tab} active>
           {tab === 'dash-fundits' && <YourFundits address={address} />}
           {tab === 'dash-gifts' && <YourGifts address={address} />}
-          {tab === 'dash-account' && <AccountTab address={address} username={username} backup={backupState} onSaveNow={saveNow} />}
+          {tab === 'dash-account' && <AccountTab account={account} username={username} backup={backupState} onSaveNow={saveNow} />}
         </TabPanel>
       </div>
     </div>
@@ -408,9 +424,10 @@ function Dashboard({ sender, stored }: { sender: Sender; stored: StoredPasskey }
 
 export function Profile() {
   const sender = useSender()
-  const session = usePasskeySession()
+  const account = useAccount()
+  const passkey = usePasskeySession()
 
-  if (!sender || !session) {
+  if (!sender || !account) {
     return (
       <PageHeader
         width="narrow"
@@ -421,5 +438,5 @@ export function Profile() {
     )
   }
 
-  return <Dashboard sender={sender} stored={session} />
+  return <Dashboard sender={sender} account={account} stored={account.kind === 'passkey' ? passkey : null} />
 }

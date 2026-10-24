@@ -58,8 +58,10 @@ vi.mock('wagmi', () => ({
   useDisconnect: () => ({ mutate: disconnect }),
 }))
 vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: openWallet }) }))
-// The real setup creates AppKit. The wallet tabs only need its config, which the wagmi mocks above ignore.
+// The real setup creates the wagmi config. The wallet tabs only need it, and the wagmi mocks above ignore it.
 vi.mock('../wagmi', () => ({ wagmiConfig: {} }))
+// The wallet list itself talks to wagmi. Here only whether Connect a wallet opens it matters.
+vi.mock('./ConnectWallet', () => ({ ConnectWallet: () => <p>Wallet list</p> }))
 // Bridge Kit itself is covered in lib/bridge.test.ts. Here only the panel's busy state matters.
 const bridgeKit = vi.hoisted(() => ({ donateCrossChain: vi.fn(), estimateCrossChain: vi.fn() }))
 vi.mock('../lib/bridge', async (importOriginal) => ({
@@ -146,11 +148,12 @@ describe('AddMoneyPanel', () => {
     expect(screen.getByText('Card and bank coming soon.')).toBeTruthy()
   })
 
-  it('asks to connect a wallet when none is connected, using the wallet modal', async () => {
+  it("asks to connect a wallet when none is connected, using Fundit's wallet list", async () => {
     renderPage()
     const user = await openWalletTab()
     await user.click(screen.getByRole('button', { name: 'Connect a wallet' }))
-    expect(openWallet).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('Wallet list')).toBeTruthy()
+    expect(openWallet).not.toHaveBeenCalled()
   })
 
   // The person must see which wallet pays, and be able to drop it to use another one.
@@ -198,7 +201,7 @@ describe('AddMoneyPanel', () => {
     expect((screen.getByRole('button', { name: 'Disconnect' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
-  // Without a Reown project id AppKit cannot connect. The person gets a plain sentence, never a raw error.
+  // Without a Reown project id Add money offers no wallet. The person gets a plain sentence, never a raw error.
   it('says connecting a wallet is not available when the Reown project id is missing', async () => {
     flags.reown = ''
     renderPage()
@@ -206,16 +209,6 @@ describe('AddMoneyPanel', () => {
     expect(screen.getByText('Connecting a wallet is not available on this site right now.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Connect a wallet' })).toBeNull()
     expect(openWallet).not.toHaveBeenCalled()
-  })
-
-  // AppKit can still fail to open (a blocked script, a bad id). The same plain sentence shows, not the error.
-  it('shows the plain sentence when the wallet modal fails to open', async () => {
-    openWallet.mockRejectedValueOnce(new Error('Project ID Not Configured: 403 from api.web3modal.org'))
-    renderPage()
-    const user = await openWalletTab()
-    await user.click(screen.getByRole('button', { name: 'Connect a wallet' }))
-    expect(await screen.findByText('Connecting a wallet is not available on this site right now.')).toBeTruthy()
-    expect(document.body.textContent).not.toMatch(/403|Project ID/)
   })
 
   // Review focus 4: a deposit must never go out on another chain.

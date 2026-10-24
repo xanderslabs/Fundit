@@ -66,6 +66,7 @@ const env = {
   VITE_CIRCLE_CLIENT_KEY: import.meta.env?.VITE_CIRCLE_CLIENT_KEY,
   VITE_CROSSCHAIN: import.meta.env?.VITE_CROSSCHAIN,
   VITE_BETA: import.meta.env?.VITE_BETA,
+  VITE_EMAIL_SIGNIN: import.meta.env?.VITE_EMAIL_SIGNIN,
 }
 
 // Free public RPCs. Every host here must also be in public/_headers connect-src.
@@ -264,6 +265,8 @@ export const ENTRY_POINT: Address = '0x0000000071727De22E5E9d8BAf0edAc6f37da032'
 // Add money from another chain (bridging USDC into the Fundit account). Off by default. A transfer already saved
 // in the browser is still tracked either way.
 export const CROSSCHAIN_ENABLED: boolean = env.VITE_CROSSCHAIN === '1'
+// Continue with email in the sign-in dialog. Off unless VITE_EMAIL_SIGNIN=1.
+export const EMAIL_SIGNIN: boolean = env.VITE_EMAIL_SIGNIN === '1'
 
 export const IRIS_URL: string = NETWORK.irisUrl
 export const MODULAR_WALLETS_URL = 'https://modular-sdk.circle.com'

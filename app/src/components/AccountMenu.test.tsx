@@ -5,6 +5,7 @@ import type { Address } from 'viem'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { storageKey } from '../config'
 import type { StoredPasskey } from '../lib/passkey'
+import { readWalletSession, saveWalletSession } from '../lib/walletAccount'
 import { AccountControl } from './AccountMenu'
 
 const ACCOUNT: StoredPasskey = { address: '0x1111111111111111111111111111111111111111' as Address, credentialId: 'cred-1' }
@@ -175,6 +176,28 @@ describe('AccountControl signed in', () => {
     state.session = null
     rerender(ui())
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Sign in' }))
+  })
+
+  // A wallet account has no passkey username. The pill shows its short address, like Name does elsewhere.
+  it('the pill shows the short address for a wallet account', () => {
+    saveWalletSession({ address: ACCOUNT.address, connectorId: 'io.metamask' })
+    render(ui())
+    expect(pill().getAttribute('aria-haspopup')).toBe('menu')
+    expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull()
+    localStorage.clear()
+  })
+
+  // Sign out must end a wallet account too, or the next person on this browser would act as this one.
+  it('sign out clears the wallet session', async () => {
+    saveWalletSession({ address: ACCOUNT.address, connectorId: 'io.metamask' })
+    render(ui())
+    const user = userEvent.setup()
+    await user.click(pill())
+    await user.click(screen.getByRole('menuitem', { name: 'Sign out' }))
+    expect(readWalletSession()).toBeNull()
+    expect(disconnect).toHaveBeenCalledTimes(1)
+    expect(await screen.findByRole('button', { name: 'Sign in' })).toBeTruthy()
+    localStorage.clear()
   })
 
   // On My page with recovery words on screen, Sign out would drop them, so it asks first like any other exit.

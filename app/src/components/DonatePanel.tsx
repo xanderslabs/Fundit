@@ -18,6 +18,7 @@ import type { CampaignView } from '../lib/campaigns'
 import { arcClient } from '../lib/clients'
 import { BALANCES_KEY, balancesKey, fetchAccountBalances } from '../lib/deposit'
 import { buildDonateCalls, donationBreakdown, fetchDonorFunds } from '../lib/donate'
+import { confirmLine } from '../lib/account'
 import { CANCELLED, CHECK_FAILED, explainError, needsAddMoney } from '../lib/errors'
 import { bpsToPercent, formatAmount, formatExact, parseAmount } from '../lib/format'
 import { addAtLeast } from '../lib/passkey'
@@ -395,7 +396,7 @@ export function DonatePanel({ view }: { view: CampaignView }) {
 
         {/* status-error stays on the error boxes: the e2e suite finds a failed send by it. */}
         <div className="give-status" aria-live="polite">
-          {phase.kind === 'sending' && <p>Confirm with your passkey, then wait for the network. This can take a few seconds.</p>}
+          {phase.kind === 'sending' && <p>{confirmLine(sender?.kind ?? 'passkey')}, then wait for the network. This can take a few seconds.</p>}
           {phase.kind === 'checking' && <p>Checking the transaction again...</p>}
           {phase.kind === 'success' && (
             <StatusBox tone="success">

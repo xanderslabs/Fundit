@@ -1,12 +1,14 @@
 import { type KeyboardEvent, type Ref, type RefObject, useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import type { Address } from 'viem'
+import { type AccountKind, useAccount } from '../lib/account'
 import { dismissBackupPrompt, logoutPasskey, readPasskeyUsername, type StoredPasskey, useBackupPrompt, usePasskeySession } from '../lib/passkey'
 import { ADD_MONEY_PATH } from '../lib/urls'
+import { clearWalletSession } from '../lib/walletAccount'
 import { disconnectWallet } from '../lib/walletSession'
 import { AddBackupPasskey, confirmLeave } from './AddBackupPasskey'
 import { Name } from './Name'
-import { PasskeyLogin } from './PasskeyLogin'
+import { SignInOptions } from './SignInOptions'
 import { Dialog } from './ui'
 import './AccountMenu.css'
 
@@ -25,14 +27,13 @@ function useOutsideClose(open: boolean, root: RefObject<HTMLElement | null>, clo
 type SignInProps = {
   className?: string
   label?: string
-  // Runs after a passkey sign-in. The top bar sends a new passkey user to add money to their account.
-  onPasskeyDone?: () => void
+  // Runs after a sign-in with the kind of account that opened. The top bar sends a passkey user to add money.
+  onSignedIn?: (kind: AccountKind) => void
   buttonRef?: Ref<HTMLButtonElement>
 }
 
-// Sign-in is passkey only: the dialog opens the Fundit account sign-in and nothing else. The wallet modal never
-// opens from here; it opens only inside Add money.
-export function SignInButton({ className = 'ui-btn ui-btn-primary', label = 'Sign in', onPasskeyDone, buttonRef }: SignInProps) {
+// One dialog with every way to sign in: passkey first, then email (when on) and Connect a wallet.
+export function SignInButton({ className = 'ui-btn ui-btn-primary', label = 'Sign in', onSignedIn, buttonRef }: SignInProps) {
   const [open, setOpen] = useState(false)
   const trigger = useRef<HTMLButtonElement | null>(null)
   const headingId = useId()
@@ -64,12 +65,12 @@ export function SignInButton({ className = 'ui-btn ui-btn-primary', label = 'Sig
         {label}
       </button>
       <Dialog open={open} size="sm" labelledBy={headingId} onClose={dismiss}>
-        <PasskeyLogin
+        <SignInOptions
           headingId={headingId}
           onLeave={() => setOpen(false)}
-          onDone={() => {
+          onSignedIn={(kind) => {
             setOpen(false)
-            onPasskeyDone?.()
+            onSignedIn?.(kind)
           }}
         />
       </Dialog>
@@ -107,47 +108,58 @@ const ChevronDown = () => (
 
 // The top bar control: Sign in when signed out, else the account pill and its menu.
 export function AccountControl() {
-  const session = usePasskeySession()
-  const backupPrompt = useBackupPrompt(session)
+  const account = useAccount()
+  const passkey = usePasskeySession()
+  const stored = account?.kind === 'passkey' ? passkey : null
+  const backupPrompt = useBackupPrompt(stored)
   const navigate = useNavigate()
   const signIn = useRef<HTMLButtonElement>(null)
   const [focusSignIn, setFocusSignIn] = useState(false)
 
   // After Sign out the pill is gone, so focus lands on the Sign in button that replaces it.
   useEffect(() => {
-    if (focusSignIn && session === null) {
+    if (focusSignIn && account === null) {
       signIn.current?.focus()
       setFocusSignIn(false)
     }
-  }, [focusSignIn, session])
+  }, [focusSignIn, account])
 
-  if (!session) {
-    return <SignInButton className="ui-btn ui-btn-primary" buttonRef={signIn} onPasskeyDone={() => navigate(ADD_MONEY_PATH)} />
+  if (!account) {
+    return (
+      <SignInButton
+        className="ui-btn ui-btn-primary"
+        buttonRef={signIn}
+        onSignedIn={(kind) => {
+          if (kind === 'passkey') void navigate(ADD_MONEY_PATH)
+        }}
+      />
+    )
   }
   return (
     <>
-      <AccountMenu address={session.address} onSignedOut={() => setFocusSignIn(true)} />
-      {backupPrompt && <BackupDialog stored={session} />}
+      <AccountMenu address={account.address} passkey={account.kind === 'passkey'} onSignedOut={() => setFocusSignIn(true)} />
+      {backupPrompt && stored && <BackupDialog stored={stored} />}
     </>
   )
 }
 
 // Sign out for the account menu and My page. Recovery words on screen would be lost, so it asks first like any
-// other way out. A wallet connected to add money goes too; with none connected that does nothing. True when the
-// person signed out.
+// other way out. It ends a passkey or wallet account, and a connected wallet goes too; with none connected that
+// does nothing. True when the person signed out.
 export function useSignOut(): () => boolean {
   return useCallback(() => {
     if (!confirmLeave()) return false
     disconnectWallet()
+    clearWalletSession()
     logoutPasskey()
     return true
   }, [])
 }
 
-function AccountMenu({ address, onSignedOut }: { address: Address; onSignedOut: () => void }) {
+function AccountMenu({ address, passkey, onSignedOut }: { address: Address; passkey: boolean; onSignedOut: () => void }) {
   const signOutNow = useSignOut()
   // The passkey's username when this browser knows it, else the name or short address.
-  const username = readPasskeyUsername(address)
+  const username = passkey ? readPasskeyUsername(address) : null
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   const button = useRef<HTMLButtonElement>(null)

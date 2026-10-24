@@ -1,0 +1,72 @@
+/* The sign-in dialog: passkey first, then the other ways in. The wallet list (ConnectWallet) uses it too. */
+.signin-options,
+.connect-wallet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* Between the passkey views and the other choices. */
+.signin-or {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-line);
+}
+
+.signin-or::before,
+.signin-or::after {
+  flex: 1;
+  border-top: 1px solid var(--line);
+  content: "";
+}
+
+.signin-back {
+  align-self: center;
+}
+
+.connect-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.connect-icon {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+}
+
+.connect-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-line);
+  text-align: center;
+}
+
+.connect-phone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.connect-qr {
+  display: block;
+  width: 100%;
+  max-width: 220px;
+  aspect-ratio: 1;
+}
+
+.connect-qr-loading {
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}

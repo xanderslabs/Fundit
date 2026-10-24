@@ -89,8 +89,9 @@ describe('Sign in', () => {
     )
   }
 
-  // One step: the dialog opens straight on the passkey sign-in, with no wallet option and no extra Continue step.
-  it('opens on Sign in with one passkey button, no wallet option and no Continue step', async () => {
+  // One step: the dialog opens straight on the passkey sign-in, passkey first, with no extra Continue step. The
+  // wallet choice sits below it and opens Fundit's own wallet list, never the old wallet modal.
+  it('opens on Sign in with the passkey button first, Connect a wallet below and no Continue step', async () => {
     renderControl()
     await openSignIn()
     const dialog = screen.getByRole('dialog', { name: 'Sign in' })
@@ -100,7 +101,7 @@ describe('Sign in', () => {
     expect(within(dialog).queryByRole('button', { name: /Continue/ })).toBeNull()
     expect(dialog.textContent).toContain("Don't have an account? Create one now")
     expect(dialog.textContent).toContain('Lost access to your account? Recover it now')
-    expect(dialog.textContent).not.toMatch(/wallet/i)
+    expect(within(dialog).getByRole('button', { name: 'Connect a wallet' })).toBeTruthy()
     expect(openWallet).not.toHaveBeenCalled()
   })
 

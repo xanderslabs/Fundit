@@ -141,7 +141,7 @@ function CreateFunditButton() {
     <SignInButton
       className="ui-btn ui-btn-secondary ui-btn-lg"
       label="Create a Fundit"
-      onPasskeyDone={() => void navigate('/create')}
+      onSignedIn={() => void navigate('/create')}
     />
   )
 }

@@ -10,6 +10,7 @@ import { AmountInput, Button, ButtonLink, Card, Field, PageHeader, StatusBox } f
 import { EXPLORER_URL, FACTORY_ADDRESS, type TokenSymbol } from '../config'
 import { useFactoryFees } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
+import { confirmLine } from '../lib/account'
 import { CANCELLED, CHECK_FAILED, explainError, needsAddMoney } from '../lib/errors'
 import { bpsToPercent } from '../lib/format'
 import type { Sender, TxResult } from '../lib/sender'
@@ -384,7 +385,7 @@ export function Create() {
 
         {/* create-status and status-error stay: the e2e suite finds a failed create by them. */}
         <div className="create-status form-status" aria-live="polite">
-          {phase.kind === 'sending' && <p>Confirm with your passkey, then wait for the network. This can take a few seconds.</p>}
+          {phase.kind === 'sending' && <p>{confirmLine(sender?.kind ?? 'passkey')}, then wait for the network. This can take a few seconds.</p>}
           {phase.kind === 'checking' && <p>Checking the transaction again...</p>}
           {phase.kind === 'timeout' && (
             <StatusBox>

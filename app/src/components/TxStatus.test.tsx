@@ -13,14 +13,14 @@ const success: TxResult = { status: 'success', hash: TX_HASH, receipt: { status:
 const waitForResult = vi.hoisted(() => vi.fn())
 vi.mock('../lib/sender', async (importOriginal) => ({ ...(await importOriginal<typeof import('../lib/sender')>()), waitForResult }))
 
-function Harness({ sender, wallet }: { sender: Sender; wallet?: boolean }) {
+function Harness({ sender }: { sender: Sender }) {
   const tx = useTx(() => {})
   return (
     <>
       <button type="button" onClick={() => void tx.run(sender, () => CALL, 'Test')}>
         Go
       </button>
-      <TxStatus tx={tx} noun="change" successText="Saved." startOverWarning="Start over?" wallet={wallet} />
+      <TxStatus tx={tx} noun="change" successText="Saved." startOverWarning="Start over?" />
     </>
   )
 }
@@ -31,8 +31,8 @@ afterEach(() => {
 })
 
 describe('useTx with TxStatus', () => {
-  // Sign-in is passkey only, so a send asks for the passkey. Only Add money sends from a regular wallet.
-  it('asks for the passkey while sending, or the wallet when told it is one', async () => {
+  // The line names the prompt the sender shows next: the passkey, or the wallet's own.
+  it('asks for the passkey while sending, or the wallet for a wallet sender', async () => {
     const sender: Sender = { kind: 'passkey', address: '0x00000000000000000000000000000000000000cc', send: () => new Promise(() => {}) }
     const user = userEvent.setup()
     const { unmount } = render(<Harness sender={sender} />)
@@ -40,7 +40,7 @@ describe('useTx with TxStatus', () => {
     expect(await screen.findByText(/^Confirm with your passkey, then wait for the network\./)).toBeTruthy()
     expect(screen.queryByText(/wallet/)).toBeNull()
     unmount()
-    render(<Harness sender={{ ...sender, kind: 'wallet' }} wallet />)
+    render(<Harness sender={{ ...sender, kind: 'wallet' }} />)
     await user.click(screen.getByRole('button', { name: 'Go' }))
     expect(await screen.findByText(/^Confirm in your wallet, then wait for the network\./)).toBeTruthy()
   })

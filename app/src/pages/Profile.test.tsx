@@ -62,7 +62,7 @@ const backup = vi.hoisted(() => ({ needed: false, chain: (): Promise<boolean> =>
 const logoutPasskey = vi.hoisted(() => vi.fn())
 vi.mock('../lib/passkey', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/passkey')>()),
-  usePasskeySession: (): StoredPasskey | null => (state.sender ? { address: state.sender.address, credentialId: 'c' } : null),
+  usePasskeySession: (): StoredPasskey | null => (state.sender?.kind === 'passkey' ? { address: state.sender.address, credentialId: 'c' } : null),
   useBackupNeeded: () => backup.needed,
   useBackupPending: () => false,
   syncBackupFromChain: () => backup.chain(),
@@ -70,6 +70,10 @@ vi.mock('../lib/passkey', async (importOriginal) => ({
   passkeyReserve: async () => 50_000n,
   readPasskeyUsername: () => state.username,
   logoutPasskey: () => logoutPasskey(),
+}))
+vi.mock('../lib/account', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/account')>()),
+  useAccount: () => (state.sender ? { kind: state.sender.kind, address: state.sender.address } : null),
 }))
 const confirmLeave = vi.hoisted(() => vi.fn(() => true))
 vi.mock('../components/AddBackupPasskey', async (importOriginal) => ({
@@ -114,8 +118,8 @@ function view(): CampaignView {
   }
 }
 
-function signIn() {
-  state.sender = { kind: 'passkey', address: ME, send: vi.fn() }
+function signIn(kind: Sender['kind'] = 'passkey') {
+  state.sender = { kind, address: ME, send: vi.fn() }
 }
 
 function Where() {
@@ -341,6 +345,18 @@ describe('My page recovery key banner', () => {
     expect(await screen.findByText(BANNER)).toBeTruthy()
   })
 
+  // A wallet account has the wallet's own backup. A recovery key belongs to passkey accounts only.
+  it('a wallet account shows no recovery key banner or row', async () => {
+    signIn('wallet')
+    backup.needed = true
+    const user = renderProfile()
+    expect(screen.queryByRole('region', { name: 'Recovery key' })).toBeNull()
+    await user.click(screen.getByRole('tab', { name: 'Account' }))
+    const panel = screen.getByRole('tabpanel', { name: 'Account' })
+    expect(within(panel).queryByRole('heading', { name: 'Recovery key' })).toBeNull()
+    expect(within(panel).queryByText('Not saved yet')).toBeNull()
+  })
+
   it('shows no banner once a recovery key is saved', () => {
     signIn()
     renderProfile()
@@ -451,6 +467,15 @@ describe('My page Account tab', () => {
     expect(within(panel).getByText(ME)).toBeTruthy()
     expect(within(panel).getByRole('button', { name: 'Copy address' })).toBeTruthy()
     expect(within(panel).getByRole('link', { name: 'View on the Arc explorer' }).getAttribute('href')).toBe(`${EXPLORER_URL}/address/${ME}`)
+  })
+
+  // The section says how the person signs in, whatever the kind of account.
+  it('the Account tab heading is Sign-in and shows the short wallet address', async () => {
+    signIn('wallet')
+    const { panel } = await openAccount()
+    expect(within(panel).getByRole('heading', { name: 'Sign-in' })).toBeTruthy()
+    expect(within(panel).queryByRole('heading', { name: 'Passkey' })).toBeNull()
+    expect(within(panel).getByText('0x0000...00cC').closest('p')?.textContent).toBe('Wallet: 0x0000...00cC')
   })
 
   // A transfer started before the cross-chain flag went off may still arrive. Its row stays in view.

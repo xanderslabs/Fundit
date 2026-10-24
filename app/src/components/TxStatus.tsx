@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { Link } from 'react-router'
 import type { Hex } from 'viem'
 import { EXPLORER_URL, TX_TIMEOUT_MS } from '../config'
+import { type AccountKind, confirmLine } from '../lib/account'
 import { CANCELLED, CHECK_FAILED, explainError, needsAddMoney, PlainError } from '../lib/errors'
 import { arcReceipts, type Call, type Sender, type TxResult, waitForResult } from '../lib/sender'
 import { ADD_MONEY_PATH } from '../lib/urls'
@@ -10,7 +11,8 @@ import './Form.css'
 
 export type TxPhase =
   | { kind: 'idle' }
-  | { kind: 'sending' }
+  // by: the kind of sender, so the line under the button names the prompt that follows.
+  | { kind: 'sending'; by: AccountKind }
   | { kind: 'checking'; hash: Hex }
   | { kind: 'success'; hash: Hex }
   // The outcome is unknown. note explains a re-check that failed to answer. userop marks a passkey user
@@ -79,7 +81,7 @@ export function useTx(onSuccess: (hash: Hex) => void) {
   async function run(sender: Sender, build: () => Call | Call[] | Promise<Call | Call[]>, label: string, usdcOut?: bigint) {
     if (inFlight.current) return
     inFlight.current = true
-    setPhase({ kind: 'sending' })
+    setPhase({ kind: 'sending', by: sender.kind })
     lastSender.current = sender
     try {
       const built = await build()
@@ -120,21 +122,18 @@ export function TxStatus({
   noun,
   successText,
   startOverWarning,
-  wallet = false,
 }: {
   tx: ReturnType<typeof useTx>
   noun: string
   successText: string
   startOverWarning: string
-  // A regular wallet sends this one (Add money). Every other send is from the Fundit account, with a passkey.
-  wallet?: boolean
 }) {
   const { phase } = tx
   // status-error stays on the error box: the e2e suite finds a failed send by it.
   return (
     <div className="tx-status form-status" aria-live="polite">
       {phase.kind === 'sending' && (
-        <p>Confirm {wallet ? 'in your wallet' : 'with your passkey'}, then wait for the network. This can take a few seconds.</p>
+        <p>{confirmLine(phase.by)}, then wait for the network. This can take a few seconds.</p>
       )}
       {phase.kind === 'checking' && <p>Checking the transaction again...</p>}
       {phase.kind === 'success' && (

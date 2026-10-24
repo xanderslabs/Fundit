@@ -8,6 +8,7 @@ import { buildAccountSendCalls, maxAccountSend, OWN_ADDRESS, TOO_SMALL } from '.
 import { chainByKey, pendingPayoutFrom, savePendingPayout, subscribePending } from '../lib/bridge'
 import { arcClient } from '../lib/clients'
 import { BALANCES_KEY, balancesKey, fetchAccountBalances } from '../lib/deposit'
+import { confirmLine } from '../lib/account'
 import { PlainError } from '../lib/errors'
 import { formatAmount, parseAmount } from '../lib/format'
 import { fetchForwardFee } from '../lib/iris'
@@ -31,10 +32,10 @@ const QUOTE_DEBOUNCE_MS = 400
 
 // Sends USDC or EURC out of a Fundit account, on Arc or as USDC to another chain. The organiser's payout form
 // in Manage is the model: the same fee preview, a fresh quote at send time, and Fast as the default.
-// Passkey senders only: they send approve and burn as one user operation. A wallet would send them as two
-// transactions, and a failed burn would leave an open approval behind.
+// Every kind of account: approve and burn go out as one operation (a passkey user operation, or one transaction
+// through Multicall3From), so a failed burn never leaves an open approval behind.
 export function AccountWithdraw({ sender }: { sender: Sender }) {
-  return sender.kind === 'passkey' ? <SendOutForm sender={sender} /> : null
+  return <SendOutForm sender={sender} />
 }
 
 // An approve and a burn of 1 USDC to another chain, to estimate the reserve. Not sent.
@@ -188,7 +189,7 @@ function SendOutForm({ sender }: { sender: Sender }) {
     <Panel
       title="Send money out"
       headingId="send-out-heading"
-      description="Send money from your Fundit account to any address you choose. You confirm with your passkey once."
+      description={`Send money from your Fundit account to any address you choose. ${confirmLine(sender.kind)} once.`}
     >
       <form className="form" onSubmit={submit} noValidate>
         <fieldset className="form-fields" disabled={tx.locked}>

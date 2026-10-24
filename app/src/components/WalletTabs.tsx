@@ -1,4 +1,3 @@
-import { useAppKit } from '@reown/appkit/react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react'
 import { type Address, type EIP1193Provider, formatUnits } from 'viem'
@@ -22,11 +21,12 @@ import { fetchForwardFee } from '../lib/iris'
 import { shortAddress } from '../lib/names'
 import { wagmiSender } from '../lib/wagmiSender'
 import { wagmiConfig } from '../wagmi'
+import { ConnectWallet } from './ConnectWallet'
 import { TxStatus, useTx } from './TxStatus'
 import { AmountInput, Button, Field, StatusBox } from './ui'
 
 // The wallet tabs of Add money. AddMoneyPanel loads this module only when From a wallet or From another chain
-// first opens, and importing it creates AppKit (../wagmi). The rest of the app never loads wagmi or Reown.
+// first opens, and importing it loads wagmi (../wagmi). The rest of the app loads wagmi only for a wallet account.
 
 const BALANCE_POLL_MS = 15_000
 const QUOTE_DEBOUNCE_MS = 400
@@ -35,20 +35,12 @@ const BRIDGE_PENDING =
   'A transfer to your Fundit account is still on its way. Wait for it to arrive before you send another. Follow it in the Account tab.'
 const NO_WALLETS = 'Connecting a wallet is not available on this site right now.'
 
-// Opens the AppKit wallet modal. Without a Reown project id, or when the modal fails to open, the person sees
-// NO_WALLETS instead of a raw error.
+// Shows Fundit's wallet list (ConnectWallet) in place of the Connect button. Without a Reown project id the
+// person sees NO_WALLETS instead.
 function useWalletModal() {
-  const { open } = useAppKit()
-  const [failed, setFailed] = useState(false)
-  const available = REOWN_PROJECT_ID !== '' && !failed
-  async function connect() {
-    try {
-      await open()
-    } catch {
-      setFailed(true)
-    }
-  }
-  return { available, connect }
+  const [open, setOpen] = useState(false)
+  const available = REOWN_PROJECT_ID !== ''
+  return { available, open, connect: () => setOpen(true), close: () => setOpen(false) }
 }
 
 function useBalances(address: Address | null) {
@@ -216,9 +208,13 @@ function BridgeToAccountForm({ recipient, onBusyChange }: { recipient: Address; 
           {busy ? 'Sending...' : 'Bridge USDC'}
         </Button>
       ) : modal.available ? (
-        <Button block onClick={() => void modal.connect()}>
-          Connect the wallet that holds the USDC
-        </Button>
+        modal.open ? (
+          <ConnectWallet onConnected={modal.close} />
+        ) : (
+          <Button block onClick={modal.connect}>
+            Connect the wallet that holds the USDC
+          </Button>
+        )
       ) : (
         <p>{NO_WALLETS}</p>
       )}
@@ -260,8 +256,9 @@ function WalletDepositForm({ account, bridging }: { account: Address; bridging: 
 
   if (external === null) {
     if (!modal.available) return <p>{NO_WALLETS}</p>
+    if (modal.open) return <ConnectWallet onConnected={modal.close} />
     return (
-      <Button block onClick={() => void modal.connect()}>
+      <Button block onClick={modal.connect}>
         Connect a wallet
       </Button>
     )
@@ -323,7 +320,6 @@ function WalletDepositForm({ account, bridging }: { account: Address; bridging: 
       <TxStatus
         tx={tx}
         noun="transfer"
-        wallet
         successText="Money added to your Fundit account."
         startOverWarning="The earlier transfer may still go through. If it does and you send again, you will add the money twice. Start over anyway?"
       />
@@ -336,8 +332,7 @@ function WalletDepositForm({ account, bridging }: { account: Address; bridging: 
 
 // Each wallet tab gives its forms the one shared config, so both see the same connection. Only the context, not
 // WagmiProvider: its Hydrate step runs on every render, and with reconnectOnMount={false} it cleared the
-// connections each time My page re-rendered (WalletTabs.rerender.test.tsx). AppKit already reconnects a
-// remembered wallet when ../wagmi creates it, which happens only here, because the person opened a wallet tab.
+// connections each time My page re-rendered (WalletTabs.rerender.test.tsx).
 function WalletScope({ children }: { children: ReactNode }) {
   return <WagmiContext.Provider value={wagmiConfig}>{children}</WagmiContext.Provider>
 }
