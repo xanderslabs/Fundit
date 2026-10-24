@@ -59,7 +59,7 @@ export function Privacy() {
         </li>
         <li>A note that you saved a recovery key for your account, so Fundit does not ask you again.</li>
         <li>
-          Your wallet connection, if you sign in with a wallet or connect one to add money. The wallet connection tools
+          Your wallet connection, if you sign in with a wallet. The wallet connection tools
           (wagmi and WalletConnect) save it so you stay connected after a reload.
         </li>
       </ul>
@@ -98,7 +98,7 @@ export function Privacy() {
           Circle, for your Fundit account and passkeys (Modular Wallets and its bundler), for email accounts
           (user-controlled wallets), and for cross-chain transfers (CCTP, Bridge Kit and the Forwarding Service).
         </li>
-        <li>WalletConnect, only when you sign in with a phone wallet or connect one to add money.</li>
+        <li>WalletConnect, only when you sign in with a phone wallet.</li>
         <li>The sites that host fundraiser images and avatars.</li>
       </ul>
       <p>
@@ -121,8 +121,7 @@ export function Privacy() {
       <h2>7. Security</h2>
       <p>
         No website or network is fully secure. Keep your devices, passkeys, recovery key, email address and wallet safe, and check every
-        transaction before you confirm it with your passkey, in Circle's window or in your wallet. If you connect a
-        wallet to add money, check each transaction in that wallet too.
+        transaction before you confirm it with your passkey, in Circle's window or in your wallet.
       </p>
 
       <h2>8. Changes to this policy</h2>

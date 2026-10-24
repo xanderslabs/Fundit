@@ -71,7 +71,7 @@ export function Terms() {
       </p>
       <h3>3.3 Adding and sending money</h3>
       <p>
-        You add money to your Fundit account by sending USDC or EURC on Arc to its address, from a wallet you connect,
+        You add money to your Fundit account by sending USDC or EURC on Arc to its address, from any wallet or exchange,
         or from another chain through Circle's Cross-Chain Transfer Protocol (CCTP) where Fundit offers it. You can send
         money out on Arc, or send USDC to another supported chain through CCTP. EURC moves on Arc only.
       </p>

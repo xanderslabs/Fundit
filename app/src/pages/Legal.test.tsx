@@ -59,6 +59,13 @@ describe.each(['terms', 'privacy'] as const)('%s page', (page) => {
     expect(t).not.toMatch(/passkey wallet/i)
   })
 
+  // Connecting a wallet to add money was dropped. Adding money is sending to the account address.
+  it('does not say a wallet is connected to add money', () => {
+    const t = text(page)
+    expect(t).not.toMatch(/connect (a wallet|one) to add money/i)
+    expect(t).not.toMatch(/from a wallet you connect/i)
+  })
+
   // Gateway unified balances are no longer used anywhere, so the policy must not name them.
   it.each([false, true])('never mentions Gateway (cross-chain flag %s)', (on) => {
     flags.crosschain = on
