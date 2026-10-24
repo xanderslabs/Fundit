@@ -1,11 +1,12 @@
 import { type KeyboardEvent, type Ref, type RefObject, useCallback, useEffect, useId, useRef, useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import type { Address } from 'viem'
 import { type AccountKind, useAccount } from '../lib/account'
 import { signOutEmail } from '../lib/circleEmail'
-import { clearEmailSession, readEmailSession } from '../lib/emailAccount'
+import { clearEmailSession } from '../lib/emailAccount'
 import { clearWalletSession } from '../lib/walletAccount'
 import { disconnectWallet } from '../lib/walletSession'
+import { Blockie } from './Blockie'
 import { Name } from './Name'
 import { SignInOptions } from './SignInOptions'
 import { Dialog } from './ui'
@@ -98,25 +99,26 @@ export function AccountControl() {
   if (!account) {
     return <SignInButton className="ui-btn ui-btn-primary" buttonRef={signIn} />
   }
-  return <AccountMenu address={account.address} kind={account.kind} onSignedOut={() => setFocusSignIn(true)} />
+  return <AccountMenu address={account.address} onSignedOut={() => setFocusSignIn(true)} />
 }
 
 // Sign out for the account menu and My page. It clears both account stores, and a wallet sign-in's connection goes
 // too; with none connected that does nothing. An email account's Worker cookies are cleared in the background.
+// Then it goes to the home page, so nobody is left on a page that needs an account.
 export function useSignOut(): () => void {
+  const navigate = useNavigate()
   return useCallback(() => {
     disconnectWallet()
     clearWalletSession()
     // Reads the email store before it is cleared below, and never throws.
     void signOutEmail()
     clearEmailSession()
-  }, [])
+    navigate('/')
+  }, [navigate])
 }
 
-function AccountMenu({ address, kind, onSignedOut }: { address: Address; kind: AccountKind; onSignedOut: () => void }) {
+function AccountMenu({ address, onSignedOut }: { address: Address; onSignedOut: () => void }) {
   const signOutNow = useSignOut()
-  // The email address for an email account, else the name or short address.
-  const label = kind === 'email' ? (readEmailSession()?.email ?? null) : null
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   const button = useRef<HTMLButtonElement>(null)
@@ -182,13 +184,9 @@ function AccountMenu({ address, kind, onSignedOut }: { address: Address; kind: A
         onClick={() => setOpen((v) => !v)}
         onKeyDown={onButtonKeyDown}
       >
-        {label ? (
-          <span className="name" title={address}>
-            <span className="name-text">{label}</span>
-          </span>
-        ) : (
-          <Name address={address} link={false} />
-        )}
+        {/* The account's picture and its name or short address. Never the email address, which would show on a shared screen. */}
+        <Blockie address={address} />
+        <Name address={address} link={false} avatar={false} />
         <ChevronDown />
       </button>
       {open && (

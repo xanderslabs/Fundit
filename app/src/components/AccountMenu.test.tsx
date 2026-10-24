@@ -29,9 +29,9 @@ afterEach(() => {
   signOutEmail.mockClear()
 })
 
-function ui() {
+function ui(start = '/') {
   return (
-    <MemoryRouter initialEntries={['/']}>
+    <MemoryRouter initialEntries={[start]}>
       <AccountControl />
       <Routes>
         <Route path="/" element={<p>Home page</p>} />
@@ -153,6 +153,18 @@ describe('AccountControl signed in', () => {
     expect(document.activeElement).toBe(signInButton)
   })
 
+  // A page that needs an account would only show "Sign in to continue" after sign out, so it goes home.
+  it('Sign out from My page lands on the home page', async () => {
+    signIn()
+    render(ui('/me'))
+    expect(screen.getByText('My page content')).toBeTruthy()
+    const user = userEvent.setup()
+    await user.click(pill())
+    await user.click(screen.getByRole('menuitem', { name: 'Sign out' }))
+    expect(await screen.findByText('Home page')).toBeTruthy()
+    expect(screen.queryByText('My page content')).toBeNull()
+  })
+
   // A wallet account has no name of its own. The pill shows its short address, like Name does elsewhere.
   it('the pill shows the short address for a wallet account', () => {
     signIn()
@@ -167,8 +179,9 @@ describe('AccountControl signed in', () => {
     localStorage.setItem(storageKey('session.email'), JSON.stringify({ address: ACCOUNT.address, walletId: 'w-1', email: 'ana@example.com' }))
     render(ui())
     const user = userEvent.setup()
-    // An email account's pill shows its email address.
-    await user.click(screen.getByRole('button', { name: 'ana@example.com' }))
+    // The pill never shows the email address, which anyone looking at the screen would see. It shows the short address.
+    expect(screen.queryByText('ana@example.com')).toBeNull()
+    await user.click(pill())
     await user.click(screen.getByRole('menuitem', { name: 'Sign out' }))
     expect(localStorage.getItem(storageKey('session.email'))).toBeNull()
     // The Worker drops Circle's token cookies too.
