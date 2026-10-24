@@ -3,7 +3,7 @@ import headers from '../public/_headers?raw'
 import redirects from '../public/_redirects?raw'
 import { campaignAbi } from './abi/campaign'
 import { factoryAbi } from './abi/factory'
-import { ARC_RPC_FALLBACKS, ARC_RPC_URL, CCTP_CHAINS, cctpChainNames, EXTERNAL_HOSTS, FORWARD_HOOK_DATA, NETWORK, NETWORKS, networkHosts, networkTag, storageKey, TOKENS } from './config'
+import { ARC_RPC_FALLBACKS, ARC_RPC_URL, CCTP_CHAINS, cctpChainNames, EMAIL_SIGNIN_SOURCES, EXTERNAL_HOSTS, FORWARD_HOOK_DATA, NETWORK, NETWORKS, networkHosts, networkTag, storageKey, TOKENS } from './config'
 import { connectSrcAllows } from './deployConfig'
 
 describe('config', () => {
@@ -199,6 +199,22 @@ describe('_headers CSP', () => {
       expect(connectSrcAllows(headers, url)).toBe(true)
     }
     expect(headers).toContain('https://*.walletconnect.com https://*.walletconnect.org wss://*.walletconnect.com wss://*.walletconnect.org')
+  })
+
+  // Circle's code and approval screens run in a pw-auth.circle.com frame, and Turnstile loads a script and a
+  // frame from challenges.cloudflare.com. A missing source blocks email sign-in in the browser with no build error.
+  it('the CSP allows pw-auth.circle.com and challenges.cloudflare.com where the SDK and Turnstile need them', () => {
+    const csp = rule('/*').find((h) => h.startsWith('Content-Security-Policy:')) ?? ''
+    const directive = (name: string) => csp.split(';').map((d) => d.trim()).find((d) => d.startsWith(`${name} `))?.split(/\s+/).slice(1) ?? []
+    for (const [name, urls] of Object.entries(EMAIL_SIGNIN_SOURCES)) {
+      for (const url of urls) expect(directive(name)).toContain(url)
+    }
+    expect(EMAIL_SIGNIN_SOURCES['frame-src']).toContain('https://pw-auth.circle.com')
+    expect(EMAIL_SIGNIN_SOURCES['frame-src']).toContain('https://challenges.cloudflare.com')
+    expect(EMAIL_SIGNIN_SOURCES['script-src']).toContain('https://challenges.cloudflare.com')
+    // The page itself calls neither host, so connect-src stays as it was.
+    expect(connectSrcAllows(headers, 'https://pw-auth.circle.com')).toBe(false)
+    expect(connectSrcAllows(headers, 'https://challenges.cloudflare.com')).toBe(false)
   })
 
   it('refuses a host or scheme connect-src does not list', () => {

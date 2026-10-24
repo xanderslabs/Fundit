@@ -1,7 +1,9 @@
 import { type KeyboardEvent, type Ref, type RefObject, useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import type { Address } from 'viem'
-import { type AccountKind, clearEmailSession, useAccount } from '../lib/account'
+import { type AccountKind, useAccount } from '../lib/account'
+import { signOutEmail } from '../lib/circleEmail'
+import { clearEmailSession, readEmailSession } from '../lib/emailAccount'
 import { dismissBackupPrompt, logoutPasskey, readPasskeyUsername, type StoredPasskey, useBackupPrompt, usePasskeySession } from '../lib/passkey'
 import { ADD_MONEY_PATH } from '../lib/urls'
 import { clearWalletSession } from '../lib/walletAccount'
@@ -137,7 +139,7 @@ export function AccountControl() {
   }
   return (
     <>
-      <AccountMenu address={account.address} passkey={account.kind === 'passkey'} onSignedOut={() => setFocusSignIn(true)} />
+      <AccountMenu address={account.address} kind={account.kind} onSignedOut={() => setFocusSignIn(true)} />
       {backupPrompt && stored && <BackupDialog stored={stored} />}
     </>
   )
@@ -145,22 +147,24 @@ export function AccountControl() {
 
 // Sign out for the account menu and My page. Recovery words on screen would be lost, so it asks first like any
 // other way out. It clears all three account stores, and a connected wallet goes too; with none connected that
-// does nothing. True when the person signed out.
+// does nothing. An email account's Worker cookies are cleared in the background. True when the person signed out.
 export function useSignOut(): () => boolean {
   return useCallback(() => {
     if (!confirmLeave()) return false
     disconnectWallet()
     clearWalletSession()
+    // Reads the email store before it is cleared below, and never throws.
+    void signOutEmail()
     clearEmailSession()
     logoutPasskey()
     return true
   }, [])
 }
 
-function AccountMenu({ address, passkey, onSignedOut }: { address: Address; passkey: boolean; onSignedOut: () => void }) {
+function AccountMenu({ address, kind, onSignedOut }: { address: Address; kind: AccountKind; onSignedOut: () => void }) {
   const signOutNow = useSignOut()
-  // The passkey's username when this browser knows it, else the name or short address.
-  const username = passkey ? readPasskeyUsername(address) : null
+  // The passkey's username when this browser knows it, or the email address, else the name or short address.
+  const label = kind === 'passkey' ? readPasskeyUsername(address) : kind === 'email' ? (readEmailSession()?.email ?? null) : null
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   const button = useRef<HTMLButtonElement>(null)
@@ -226,9 +230,9 @@ function AccountMenu({ address, passkey, onSignedOut }: { address: Address; pass
         onClick={() => setOpen((v) => !v)}
         onKeyDown={onButtonKeyDown}
       >
-        {username ? (
+        {label ? (
           <span className="name" title={address}>
-            <span className="name-text">{username}</span>
+            <span className="name-text">{label}</span>
           </span>
         ) : (
           <Name address={address} link={false} />

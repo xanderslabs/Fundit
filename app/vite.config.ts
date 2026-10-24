@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { loadEnv, type Plugin } from 'vite'
 import { configDefaults, defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import { checkBuildEnv, loadConfig } from './src/deployConfig.ts'
 
 // /embed/c/:address is served by embed.html, a separate page with no wallet code. Cloudflare does the same
@@ -33,7 +34,15 @@ export default defineConfig(({ command, mode }) => {
   }
 
   return {
-    plugins: [react(), embedRewrite()],
+    // Circle's user-controlled wallets SDK (email accounts) imports jsonwebtoken, which needs these Node built-ins in
+    // the browser. Only these modules are polyfilled, and they load with the SDK's lazy chunk. No globals are
+    // injected: injection reaches every module (react-dom reads process), so the first load would grow. The SDK's
+    // process, Buffer and global are set by lib/circleEmail.ts just before it loads.
+    plugins: [
+      react(),
+      embedRewrite(),
+      nodePolyfills({ include: ['buffer', 'crypto', 'stream', 'util'], globals: { Buffer: false, global: false, process: false } }),
+    ],
     // Unit tests run on the defaults (mainnet), never on a developer's .env.local, which the e2e suite sets to
     // testnet.
     ...(mode === 'test' && { envDir: false as const }),

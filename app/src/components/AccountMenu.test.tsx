@@ -14,12 +14,14 @@ const state: { session: StoredPasskey | null } = { session: null }
 const disconnect = vi.fn()
 const logoutPasskey = vi.fn()
 const confirmLeave = vi.fn(() => true)
+const signOutEmail = vi.fn(async () => {})
 
 // Nothing here connects a wallet: the wallet setup loads only inside Add money, so importing it fails the test.
 vi.mock('../wagmi', () => {
   throw new Error('AccountMenu loaded the wallet setup')
 })
 vi.mock('../lib/walletSession', () => ({ disconnectWallet: () => disconnect() }))
+vi.mock('../lib/circleEmail', () => ({ signOutEmail: () => signOutEmail() }))
 vi.mock('../hooks/useName', () => ({ useName: () => ({ data: undefined }) }))
 vi.mock('../lib/passkey', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/passkey')>()),
@@ -37,6 +39,7 @@ afterEach(() => {
   state.session = null
   disconnect.mockReset()
   logoutPasskey.mockReset()
+  signOutEmail.mockClear()
   confirmLeave.mockReset()
   confirmLeave.mockReturnValue(true)
 })
@@ -205,9 +208,12 @@ describe('AccountControl signed in', () => {
     localStorage.setItem(storageKey('session.email'), JSON.stringify({ address: ACCOUNT.address, walletId: 'w-1', email: 'ana@example.com' }))
     render(ui())
     const user = userEvent.setup()
-    await user.click(pill())
+    // An email account's pill shows its email address.
+    await user.click(screen.getByRole('button', { name: 'ana@example.com' }))
     await user.click(screen.getByRole('menuitem', { name: 'Sign out' }))
     expect(localStorage.getItem(storageKey('session.email'))).toBeNull()
+    // The Worker drops Circle's token cookies too.
+    expect(signOutEmail).toHaveBeenCalledTimes(1)
     expect(logoutPasskey).toHaveBeenCalledTimes(1)
     expect(await screen.findByRole('button', { name: 'Sign in' })).toBeTruthy()
     localStorage.clear()

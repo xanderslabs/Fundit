@@ -24,6 +24,12 @@
   content: "";
 }
 
+/* Turnstile's check in Continue with email, centred like the buttons around it. */
+.email-turnstile {
+  display: flex;
+  justify-content: center;
+}
+
 .signin-back {
   align-self: center;
 }

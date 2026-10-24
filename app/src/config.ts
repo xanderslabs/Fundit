@@ -67,6 +67,8 @@ const env = {
   VITE_CROSSCHAIN: import.meta.env?.VITE_CROSSCHAIN,
   VITE_BETA: import.meta.env?.VITE_BETA,
   VITE_EMAIL_SIGNIN: import.meta.env?.VITE_EMAIL_SIGNIN,
+  VITE_CIRCLE_UCW_APP_ID: import.meta.env?.VITE_CIRCLE_UCW_APP_ID,
+  VITE_TURNSTILE_SITE_KEY: import.meta.env?.VITE_TURNSTILE_SITE_KEY,
 }
 
 // Free public RPCs. Every host here must also be in public/_headers connect-src.
@@ -267,6 +269,19 @@ export const ENTRY_POINT: Address = '0x0000000071727De22E5E9d8BAf0edAc6f37da032'
 export const CROSSCHAIN_ENABLED: boolean = env.VITE_CROSSCHAIN === '1'
 // Continue with email in the sign-in dialog. Off unless VITE_EMAIL_SIGNIN=1.
 export const EMAIL_SIGNIN: boolean = env.VITE_EMAIL_SIGNIN === '1'
+// Circle's App ID for user-controlled wallets (email accounts) and the Cloudflare Turnstile site key the email
+// form shows. Both public. A production build with VITE_EMAIL_SIGNIN=1 fails without them (checkBuildEnv).
+export const CIRCLE_UCW_APP_ID: string = env.VITE_CIRCLE_UCW_APP_ID ?? ''
+export const TURNSTILE_SITE_KEY: string = env.VITE_TURNSTILE_SITE_KEY ?? ''
+// Circle's code and approval screens are a frame from this origin. The SDK talks to it by postMessage only.
+export const CIRCLE_PW_AUTH_URL = 'https://pw-auth.circle.com'
+export const TURNSTILE_ORIGIN = 'https://challenges.cloudflare.com'
+export const TURNSTILE_SCRIPT_URL = `${TURNSTILE_ORIGIN}/turnstile/v0/api.js?render=explicit`
+// The CSP sources email sign-in needs beyond connect-src. config.test.ts checks each one against public/_headers.
+export const EMAIL_SIGNIN_SOURCES: Readonly<Record<'frame-src' | 'script-src', readonly string[]>> = {
+  'frame-src': [CIRCLE_PW_AUTH_URL, TURNSTILE_ORIGIN],
+  'script-src': [TURNSTILE_ORIGIN],
+}
 
 export const IRIS_URL: string = NETWORK.irisUrl
 export const MODULAR_WALLETS_URL = 'https://modular-sdk.circle.com'

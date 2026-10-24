@@ -21,6 +21,7 @@ import { pendingCrossChain, pendingPayouts, subscribePending } from '../lib/brid
 import { myCampaigns } from '../lib/campaigns'
 import { arcClient } from '../lib/clients'
 import { balancesKey, fetchAccountBalances } from '../lib/deposit'
+import { readEmailSession } from '../lib/emailAccount'
 import { formatAmount } from '../lib/format'
 import { shortAddress } from '../lib/names'
 import { readPasskeyUsername, type StoredPasskey, syncBackupFromChain, useBackupNeeded, usePasskeySession } from '../lib/passkey'
@@ -207,6 +208,11 @@ function AccountTab({
                 , username: <strong>{username}</strong>
               </>
             )}
+          </p>
+        )}
+        {account.kind === 'email' && (
+          <p>
+            Email: <strong>{readEmailSession()?.email}</strong>
           </p>
         )}
         {account.kind === 'wallet' && (

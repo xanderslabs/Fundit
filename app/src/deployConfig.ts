@@ -36,6 +36,9 @@ export type BuildEnv = {
   VITE_CIRCLE_CLIENT_KEY?: string
   VITE_ARC_RPC_URL?: string
   VITE_MAINNET_RPC_URL?: string
+  VITE_EMAIL_SIGNIN?: string
+  VITE_CIRCLE_UCW_APP_ID?: string
+  VITE_TURNSTILE_SITE_KEY?: string
 }
 
 // True when the Content-Security-Policy connect-src in this _headers text lets the page call url. A source
@@ -86,9 +89,15 @@ export function checkBuildEnv(env: BuildEnv, headers: string): void {
   if (network === 'testnet' && env.VITE_ALLOW_TESTNET_BUILD !== '1') {
     throw new Error('VITE_ARC_NETWORK=testnet is refused in a production build unless VITE_ALLOW_TESTNET_BUILD=1 is also set.')
   }
-  // Sign-in is passkey only, so a site with no client key would have no way in.
+  // Passkey sign-in and every passkey account need the client key.
   if (!env.VITE_CIRCLE_CLIENT_KEY) {
-    throw new Error('VITE_CIRCLE_CLIENT_KEY is required in a production build: sign-in is passkey only')
+    throw new Error('VITE_CIRCLE_CLIENT_KEY is required in a production build: passkey sign-in needs it')
+  }
+  // Continue with email shows only with VITE_EMAIL_SIGNIN=1, and then needs Circle's App ID and a Turnstile key.
+  if (env.VITE_EMAIL_SIGNIN === '1') {
+    for (const name of ['VITE_CIRCLE_UCW_APP_ID', 'VITE_TURNSTILE_SITE_KEY'] as const) {
+      if (!env[name]) throw new Error(`${name} is required in a production build with VITE_EMAIL_SIGNIN=1`)
+    }
   }
   for (const name of ['VITE_ARC_RPC_URL', 'VITE_MAINNET_RPC_URL'] as const) {
     const url = env[name]

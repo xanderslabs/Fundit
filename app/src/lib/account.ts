@@ -1,6 +1,6 @@
 import { useMemo, useSyncExternalStore } from 'react'
-import { type Address, isAddress } from 'viem'
-import { storageKey } from '../config'
+import type { Address } from 'viem'
+import { clearEmailSession, EMAIL_KEY, readEmailSession } from './emailAccount'
 import { clearPasskeySession, usePasskeySession } from './passkey'
 import { clearWalletSession, readWalletSession, WALLET_KEY } from './walletAccount'
 
@@ -11,35 +11,9 @@ export type Account = { kind: AccountKind; address: Address }
 // Fired in this tab when the email or wallet store changes. The passkey store has its own event (PASSKEY_EVENT).
 export const ACCOUNT_EVENT = 'fundit:account'
 
-function notifyAccount() {
-  if (typeof window !== 'undefined') window.dispatchEvent(new Event(ACCOUNT_EVENT))
-}
-
-// The email account's store. The Circle tokens are never in it.
-export const EMAIL_KEY = storageKey('session.email')
-export type EmailSession = { address: Address; walletId: string; email: string }
-
-export function readEmailSession(): EmailSession | null {
-  try {
-    const x = JSON.parse(localStorage.getItem(EMAIL_KEY) ?? 'null') as Partial<EmailSession> | null
-    if (!x || typeof x.address !== 'string' || !isAddress(x.address) || typeof x.walletId !== 'string' || typeof x.email !== 'string') return null
-    return { address: x.address, walletId: x.walletId, email: x.email }
-  } catch {
-    return null
-  }
-}
-
-export function clearEmailSession() {
-  try {
-    localStorage.removeItem(EMAIL_KEY)
-  } catch {
-    // Nothing stored to clear.
-  }
-  notifyAccount()
-}
-
 // useSyncExternalStore needs the same object back while nothing changed, so each parsed value is cached by its text.
-// The key is read on each call: walletAccount.ts imports this module too, so its constants are not ready yet here.
+// The key is read on each call: emailAccount.ts and walletAccount.ts import this module too, so their constants are
+// not ready yet here.
 function cached<T>(key: () => string, read: () => T | null) {
   let last: { raw: string | null; value: T | null } = { raw: null, value: null }
   return (): T | null => {

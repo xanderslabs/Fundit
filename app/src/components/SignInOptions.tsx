@@ -1,7 +1,9 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { EMAIL_SIGNIN } from '../config'
 import { type AccountKind, clearOtherSessions } from '../lib/account'
+import { saveEmailSession } from '../lib/emailAccount'
 import { saveWalletSession } from '../lib/walletAccount'
+import { EmailLogin } from './EmailLogin'
 import { PasskeyLogin } from './PasskeyLogin'
 import { Button } from './ui'
 import './SignInOptions.css'
@@ -67,6 +69,15 @@ export function SignInOptions({ onSignedIn, headingId, onLeave }: { onSignedIn: 
             }}
           />
         </Suspense>
+      )}
+      {view === 'email' && (
+        <EmailLogin
+          onDone={(session) => {
+            saveEmailSession(session)
+            clearOtherSessions('email')
+            onSignedIn('email')
+          }}
+        />
       )}
       <button ref={back} type="button" className="link-button signin-back" onClick={() => setView('choose')}>
         Back to all sign-in options

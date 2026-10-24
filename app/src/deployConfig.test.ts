@@ -90,7 +90,7 @@ describe('checkBuildEnv', () => {
     expect(() => checkBuildEnv({ ...ok, VITE_ARC_RPC_URL: 'https://rpc.mainnet.arc.io', VITE_MAINNET_RPC_URL: 'https://ethereum-rpc.publicnode.com' }, headers)).not.toThrow()
   })
 
-  // Sign-in is passkey only. With no client key every sign-in fails, so nobody could use the site.
+  // Passkey sign-in needs the client key. Without it no passkey account can sign in or send.
   it('fails a production build without VITE_CIRCLE_CLIENT_KEY', () => {
     expect(() => checkBuildEnv({ PROD: true }, headers)).toThrow(/VITE_CIRCLE_CLIENT_KEY/)
     expect(() => checkBuildEnv({ ...ok, VITE_CIRCLE_CLIENT_KEY: '' }, headers)).toThrow(/VITE_CIRCLE_CLIENT_KEY/)
@@ -109,6 +109,18 @@ describe('checkBuildEnv', () => {
 
   it('checks nothing outside production', () => {
     expect(() => checkBuildEnv({ PROD: false, VITE_ARC_RPC_URL: 'http://127.0.0.1:8545' }, headers)).not.toThrow()
+  })
+
+  // Continue with email needs Circle's App ID for its code screen and a Turnstile key before any code is sent.
+  // A site that shows the button without them offers a way in that always fails.
+  it('requires the App ID and Turnstile site key only when VITE_EMAIL_SIGNIN is 1', () => {
+    const email = { ...ok, VITE_EMAIL_SIGNIN: '1', VITE_CIRCLE_UCW_APP_ID: 'app', VITE_TURNSTILE_SITE_KEY: 'site' }
+    expect(() => checkBuildEnv(email, headers)).not.toThrow()
+    expect(() => checkBuildEnv({ ...email, VITE_CIRCLE_UCW_APP_ID: '' }, headers)).toThrow(/VITE_CIRCLE_UCW_APP_ID/)
+    expect(() => checkBuildEnv({ ...email, VITE_TURNSTILE_SITE_KEY: undefined }, headers)).toThrow(/VITE_TURNSTILE_SITE_KEY/)
+    // Email off: neither is needed.
+    expect(() => checkBuildEnv(ok, headers)).not.toThrow()
+    expect(() => checkBuildEnv({ ...ok, VITE_EMAIL_SIGNIN: '' }, headers)).not.toThrow()
   })
 })
 
