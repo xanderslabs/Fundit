@@ -54,6 +54,8 @@ describe('wagmiSender', () => {
     expect(estimateGas).toHaveBeenCalledTimes(1)
     expect(onHash).toHaveBeenCalledTimes(1)
     expect(onHash).toHaveBeenCalledWith(HASH, CALLS.length - 1)
+    // A reload while the receipt is awaited must still know the gift went out, so the hash is reported first.
+    expect(onHash.mock.invocationCallOrder[0]!).toBeLessThan(waitForResult.mock.invocationCallOrder[0]!)
   })
 
   // The person can switch accounts inside the wallet while signed in. Never send from the other address.

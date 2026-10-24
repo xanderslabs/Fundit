@@ -550,6 +550,19 @@ describe('DonatePanel', () => {
     expectExplorerLink()
   })
 
+  // A wallet sends the approval and the donation as one transaction, so its timeout is the donation's even
+  // though completed is 0.
+  it('shows the donation as pending when a wallet batch times out', async () => {
+    const send = vi.fn(async (_calls: Call[]) => ({ status: 'timeout', hash: HASH, completed: 0 }) as TxResult)
+    state.sender = { kind: 'wallet', address: ME, send }
+    state.balance = 1000_000000n
+    renderPanel(view('USDC'))
+    await fillAndDonate()
+    expect(await screen.findByText(/donation is not confirmed yet/)).toBeTruthy()
+    expect(screen.queryByText(/approval is not confirmed yet/)).toBeNull()
+    expect(send.mock.calls[0]![0]).toHaveLength(2)
+  })
+
   it('stays blocked when Check again still cannot confirm', async () => {
     fakeSender({ status: 'timeout', hash: HASH, completed: 1 })
     state.balance = 1000_000000n

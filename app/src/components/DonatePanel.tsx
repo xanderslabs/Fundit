@@ -171,10 +171,11 @@ export function DonatePanel({ view }: { view: CampaignView }) {
       return
     }
     if (res.status === 'timeout') {
-      // completed counts the calls mined before this one, so 0 with an approval means the approval timed out.
-      // A user operation runs the approval and the donation together, so its timeout is the donation's.
+      // A user operation (passkey) and a wallet or email batch (one Multicall3From transaction) run the approval
+      // and the donation together, so their timeout is the donation's. completed is always 0 there.
       const userop = res.hashKind === 'userop'
-      setPhase({ kind: 'timeout', hash: res.hash, approve: !userop && hadApprove && res.completed === 0, userop })
+      const together = userop || sender?.kind !== 'passkey'
+      setPhase({ kind: 'timeout', hash: res.hash, approve: !together && hadApprove && res.completed === 0, userop })
       return
     }
     if (hadApprove && res.completed >= 1) {
