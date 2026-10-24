@@ -151,6 +151,36 @@ The account address must stay the same and its balance must not be zero. At the 
 back to the funder. Before the recovery it tops the account up to 1 USDC if needed. A run costs about 1.5
 USDC in gas, and Circle counts one more active wallet each run.
 
+## Wallet journey
+
+`wallet.spec.ts` checks sign-in with a wallet. It needs no passkey, so it runs on `localhost` before a deploy as
+well as on `https://fundit.fun`. Playwright starts the dev server on `http://localhost:5174` when
+`E2E_BASE_URL` is not set:
+
+```shell
+npm --prefix app run e2e -- wallet.spec.ts
+```
+
+`e2e/wallet.ts` adds a test wallet to the page: an EIP-1193 provider that the page announces through EIP-6963
+as "Fundit Test Wallet". The page side only forwards each request to the Node test process
+(`page.exposeFunction`). The key is a new `generatePrivateKey()` per run, kept in that process and never printed.
+It signs `eth_sendTransaction` there and broadcasts through the Arc testnet RPC. The wallet starts on chain 1, so
+the app's switch to Arc and the add-network request are part of every run.
+
+The run funds the new account with 0.1 USDC from the funder, then:
+
+1. Signs in: **Sign in**, **Connect a wallet**, **Fundit Test Wallet**. The account pill shows the short address.
+2. Starts a Fundit.
+3. Gives 0.01 USDC to it. The wallet sends one transaction, to `Multicall3From`
+   (`0x522fAf9A91c41c443c66765030741e4AaCe147D0`) from the test address: approve and donate in one call.
+4. Sends 0.01 USDC out to the funder from **My page**, signs out, and returns what is left to the funder.
+
+A run costs the funder about 0.03 USDC in gas and leaves about 0.002 USDC in the test account. The Fundit it
+makes is not by a creator in `testCreators`, so on testnet it shows in the public lists.
+
+The spec also prints every host the page talked to and any request or WebSocket to a WalletConnect or Reown
+host, with the step it happened in.
+
 ## Cost
 
 The shared account keeps its money, so the funder sends only what a run is missing. The account should hold
