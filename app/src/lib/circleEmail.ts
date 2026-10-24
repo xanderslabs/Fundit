@@ -3,6 +3,7 @@ import type { Error as SdkError, ThemeColor } from '@circle-fin/w3s-pw-web-sdk/d
 import { getAddress, isAddress } from 'viem'
 import { CIRCLE_UCW_APP_ID } from '../config'
 import { openCircleWindow } from './circleWindow'
+import { PlainError } from './errors'
 import {
   clearEmailTokens,
   EmailError,
@@ -71,6 +72,10 @@ const appSettings = () => ({ appId: CIRCLE_UCW_APP_ID })
 const FRAME_ID = 'sdkIframe'
 const WALLET_TRIES = 8
 const WALLET_WAIT_MS = 1500
+// How long Circle's frame may stay silent before Fundit gives up on it. The SDK's own 10 second checks never fire
+// after getDeviceId, so a frame that never loads would otherwise hide the sign-in dialog for good.
+export const CIRCLE_SILENT_MS = 20_000
+export const CIRCLE_SILENT = 'Circle did not respond. Try again in a moment.'
 
 type Ready = { sdk: W3SSdk; deviceId: string }
 let ready: Promise<Ready> | null = null
@@ -131,6 +136,25 @@ function onFrameClosed(then: () => void): () => void {
   return () => observer.disconnect()
 }
 
+// Runs then if Circle's frame has posted nothing within CIRCLE_SILENT_MS. Its first message (asking for its
+// settings) means it loaded; after that a person may take as long as they need. Returns a stop function.
+function onCircleSilent(then: () => void): () => void {
+  const stop = () => {
+    clearTimeout(timer)
+    window.removeEventListener('message', onMessage)
+  }
+  const onMessage = (e: MessageEvent) => {
+    const frame = document.getElementById(FRAME_ID) as HTMLIFrameElement | null
+    if (frame && e.source === frame.contentWindow) stop()
+  }
+  const timer = setTimeout(() => {
+    stop()
+    then()
+  }, CIRCLE_SILENT_MS)
+  window.addEventListener('message', onMessage)
+  return stop
+}
+
 function closeFrame() {
   document.getElementById(FRAME_ID)?.remove()
 }
@@ -155,9 +179,14 @@ export async function sendEmailCode(email: string, turnstile: string, onWrongCod
         if (done) return
         done = true
         stopWatching()
+        stopWaiting()
         fn()
       }
       const stopWatching = onFrameClosed(() => finish(() => reject(new EmailLoginStopped(false))))
+      const stopWaiting = onCircleSilent(() => {
+        closeFrame()
+        finish(() => reject(new PlainError(CIRCLE_SILENT)))
+      })
       sdk.updateConfigs({ appSettings: appSettings(), loginConfigs: { deviceToken, deviceEncryptionKey, otpToken } }, (error, result) => {
         if (error || !result) {
           const err = sdkError(error, 'Login failed')
@@ -260,11 +289,18 @@ async function executeChallenge(sdk: W3SSdk, tokens: EmailTokens, challengeId: s
         if (done) return
         done = true
         stopWatching()
+        stopWaiting()
         fn()
       }
       const stopWatching = onFrameClosed(() => finish(() => resolve({ kind: 'cancelled' })))
+      const stopWaiting = onCircleSilent(() => {
+        closeFrame()
+        finish(() => reject(new PlainError(CIRCLE_SILENT)))
+      })
       sdk.execute(challengeId, (error, result) => {
         if (error) {
+          // Circle's onError calls back but leaves its frame on screen, so it goes before the dialog comes back.
+          closeFrame()
           if (error.code === CIRCLE_CODE.userCanceled) finish(() => resolve({ kind: 'cancelled' }))
           else finish(() => reject(sdkError(error, 'Challenge failed')))
           return

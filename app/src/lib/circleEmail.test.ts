@@ -186,6 +186,12 @@ describe('Circle window signal', () => {
 
   afterEach(() => document.getElementById('sdkIframe')?.remove())
 
+  function frame() {
+    const f = document.createElement('iframe')
+    f.id = 'sdkIframe'
+    return f
+  }
+
   it('is up while the code screen is open and down after a right code', async () => {
     worker(login)
     const { sendEmailCode, isCircleWindowOpen } = await loadWithSignal()
@@ -267,5 +273,89 @@ describe('Circle window signal', () => {
     document.getElementById('sdkIframe')!.remove()
     await expect(pending).resolves.toEqual({ kind: 'cancelled' })
     expect(isCircleWindowOpen()).toBe(false)
+  })
+
+  // Circle's onError calls back but leaves its frame on screen. Fundit removes it before the dialog comes back, or
+  // the dialog would sit over a dead Circle window.
+  it('removes Circle\'s frame on a challenge error before the dialog returns', async () => {
+    const { runChallenge, isCircleWindowOpen } = await loadWithSignal()
+    await signedIn()
+    sdk.execute.mockImplementation((_id: string, done: ChallengeCallback) => {
+      document.body.append(frame())
+      done({ code: 155000, message: 'Failed' }, undefined)
+    })
+    await expect(runChallenge('create-1')).rejects.toMatchObject({ code: 155000 })
+    expect(document.getElementById('sdkIframe')).toBeNull()
+    expect(isCircleWindowOpen()).toBe(false)
+  })
+
+  it('removes Circle\'s frame when a cancel (155701) comes through onError', async () => {
+    const { runChallenge } = await loadWithSignal()
+    await signedIn()
+    sdk.execute.mockImplementation((_id: string, done: ChallengeCallback) => {
+      document.body.append(frame())
+      done({ code: 155701, message: 'User canceled' }, undefined)
+    })
+    await expect(runChallenge('create-1')).resolves.toEqual({ kind: 'cancelled' })
+    expect(document.getElementById('sdkIframe')).toBeNull()
+  })
+
+  // Circle's own 10 second timeouts never fire after getDeviceId, so a frame that never loads would hide the dialog
+  // for good. Fundit gives up after CIRCLE_SILENT_MS if Circle's frame has said nothing.
+  describe('when Circle never answers', () => {
+    afterEach(() => vi.useRealTimers())
+
+    it('closes the code screen, lowers the signal and says so', async () => {
+      worker(login)
+      const { sendEmailCode, isCircleWindowOpen, CIRCLE_SILENT, CIRCLE_SILENT_MS } = await loadWithSignal()
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      sdk.verifyOtp.mockImplementation(() => document.body.append(frame()))
+      const pending = sendEmailCode('ana@example.com', 'turnstile-token')
+      const outcome = expect(pending).rejects.toThrow(CIRCLE_SILENT)
+      await vi.waitFor(() => expect(document.getElementById('sdkIframe')).not.toBeNull())
+      await vi.advanceTimersByTimeAsync(CIRCLE_SILENT_MS)
+      await outcome
+      expect(CIRCLE_SILENT).toBe('Circle did not respond. Try again in a moment.')
+      expect(document.getElementById('sdkIframe')).toBeNull()
+      expect(isCircleWindowOpen()).toBe(false)
+    })
+
+    it('closes a challenge window that never loads', async () => {
+      const { runChallenge, isCircleWindowOpen, CIRCLE_SILENT, CIRCLE_SILENT_MS } = await loadWithSignal()
+      await signedIn()
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      sdk.execute.mockImplementation(() => document.body.append(frame()))
+      const outcome = expect(runChallenge('create-1')).rejects.toThrow(CIRCLE_SILENT)
+      await vi.waitFor(() => expect(document.getElementById('sdkIframe')).not.toBeNull())
+      await vi.advanceTimersByTimeAsync(CIRCLE_SILENT_MS)
+      await outcome
+      expect(document.getElementById('sdkIframe')).toBeNull()
+      expect(isCircleWindowOpen()).toBe(false)
+    })
+
+    // A person typing a code can take minutes. Once Circle's frame has spoken, nothing cuts them off.
+    it('never cuts off a code screen that Circle loaded', async () => {
+      worker(login)
+      const { sendEmailCode, isCircleWindowOpen, CIRCLE_SILENT_MS } = await loadWithSignal()
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      sdk.verifyOtp.mockImplementation(() => {
+        const f = frame()
+        document.body.append(f)
+        window.dispatchEvent(new MessageEvent('message', { data: { showUi: true }, source: f.contentWindow }))
+      })
+      let settled = false
+      const pending = sendEmailCode('ana@example.com', 'turnstile-token').finally(() => {
+        settled = true
+      })
+      pending.catch(() => {})
+      await vi.waitFor(() => expect(document.getElementById('sdkIframe')).not.toBeNull())
+      await vi.advanceTimersByTimeAsync(CIRCLE_SILENT_MS * 10)
+      expect(settled).toBe(false)
+      expect(document.getElementById('sdkIframe')).not.toBeNull()
+      expect(isCircleWindowOpen()).toBe(true)
+      sdk.onLogin?.(undefined, { ...TOKENS })
+      await pending
+      expect(isCircleWindowOpen()).toBe(false)
+    })
   })
 })
