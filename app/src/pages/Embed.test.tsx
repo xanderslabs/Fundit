@@ -5,13 +5,13 @@ import { type NetworkTagLabel, TOKENS } from '../config'
 import type { ReadClient, Summary } from '../lib/campaigns'
 import { Embed } from './Embed'
 
-// The embed page must not load wallet code. If anything on its import graph pulls wagmi or AppKit in, these
+// The embed page must not load wallet code. If anything on its import graph pulls wagmi or the wallet setup in, these
 // factories throw and the import fails.
 vi.mock('wagmi', () => {
   throw new Error('the embed page loaded wagmi')
 })
-vi.mock('@reown/appkit/react', () => {
-  throw new Error('the embed page loaded AppKit')
+vi.mock('../wagmi', () => {
+  throw new Error('the embed page loaded the wallet setup')
 })
 
 const state = vi.hoisted(() => ({ tag: null as NetworkTagLabel | null }))
@@ -142,7 +142,7 @@ describe('Embed network tag', () => {
 })
 
 describe('embed entry', () => {
-  it('mounts without loading wagmi or AppKit', async () => {
+  it('mounts without loading wagmi or the wallet setup', async () => {
     const root = document.createElement('div')
     root.id = 'root'
     document.body.append(root)

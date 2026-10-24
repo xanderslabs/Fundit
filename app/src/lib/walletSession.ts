@@ -1,5 +1,5 @@
-// Keys that wagmi and AppKit write to localStorage once a wallet has connected in Add money.
-const REMEMBERED_WALLET_KEYS = ['wagmi.recentConnectorId', '@appkit/connections']
+// Keys wagmi writes to localStorage once a wallet has connected in Add money.
+const REMEMBERED_WALLET_KEYS = ['wagmi.recentConnectorId', 'wagmi.store']
 
 function forgetWallet() {
   try {
@@ -24,7 +24,7 @@ export function disconnectWallet(): void {
   if (!rememberedWallet()) return
   void import('../wagmi')
     .then((m) => m.disconnectWallet())
-    // wagmi keeps its recent connector after a disconnect. Forget it, or every later sign-out loads AppKit again.
+    // wagmi keeps its recent connector after a disconnect. Forget it, or every later sign-out loads the wallet code again.
     .then(forgetWallet)
     .catch(() => {})
 }

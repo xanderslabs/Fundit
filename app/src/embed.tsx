@@ -6,7 +6,7 @@ import './styles/base.css'
 import './styles/embed.css'
 
 // Entry for /embed/c/:address, the card other sites put in an iframe. It is its own page (embed.html), so it
-// loads none of the wallet code (wagmi, AppKit) the main app needs.
+// loads none of the wallet code (wagmi) the main app needs.
 const match = /^\/embed\/c\/([^/]+)\/?$/.exec(window.location.pathname)
 
 createRoot(document.getElementById('root')!).render(

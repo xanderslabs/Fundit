@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { disconnectWallet } from './walletSession'
 
-// Loading ../wagmi creates AppKit. Sign out must not do that for a person who never connected a wallet here.
+// Loading ../wagmi loads the wallet code. Sign out must not do that for a person who never connected a wallet here.
 const wallet = vi.hoisted(() => ({ loads: 0, disconnect: vi.fn(async () => {}) }))
 vi.mock('../wagmi', () => {
   wallet.loads++
@@ -25,12 +25,12 @@ describe('disconnectWallet', () => {
     await vi.waitFor(() => expect(wallet.disconnect).toHaveBeenCalledTimes(1))
   })
 
-  // wagmi never clears its recent connector, so without this every later sign-out would load AppKit again.
+  // wagmi never clears its recent connector, so without this every later sign-out would load the wallet code again.
   it('forgets the wallet once it is disconnected, so the next sign-out loads nothing', async () => {
     localStorage.setItem('wagmi.recentConnectorId', '"io.metamask"')
-    localStorage.setItem('@appkit/connections', '{}')
+    localStorage.setItem('wagmi.store', '{}')
     disconnectWallet()
     await vi.waitFor(() => expect(localStorage.getItem('wagmi.recentConnectorId')).toBeNull())
-    expect(localStorage.getItem('@appkit/connections')).toBeNull()
+    expect(localStorage.getItem('wagmi.store')).toBeNull()
   })
 })

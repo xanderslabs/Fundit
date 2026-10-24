@@ -23,8 +23,6 @@ const state: { sender: Sender | null; balance: bigint; usdc?: bigint; allowance:
   balance: 0n,
   allowance: 0n,
 }
-// AppKit is mocked only to prove the donate panel never opens it. It opens only inside Add money.
-const open = vi.fn()
 const reads: { address: Address; functionName: string; args: readonly unknown[] }[] = []
 
 // What "Check again" gets back. Each test sets it; the default throws so an unplanned re-check is loud.
@@ -35,7 +33,10 @@ vi.mock('../lib/sender', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/sender')>()),
   waitForResult: () => recheck.next(),
 }))
-vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open }) }))
+// Nothing here connects a wallet: the wallet setup loads only inside Add money, so importing it fails the test.
+vi.mock('../wagmi', () => {
+  throw new Error('DonatePanel loaded the wallet setup')
+})
 // What the Fundit account keeps for the network fee, as the form estimates it. The sender checks again.
 const reserve = vi.hoisted(() => ({ form: 300_000n }))
 const passkeyReserve = vi.hoisted(() =>
@@ -117,7 +118,6 @@ afterEach(() => {
   state.allowance = 0n
   reads.length = 0
   localStorage.clear()
-  open.mockClear()
   recheck.next = async () => {
     throw new Error('no re-check planned')
   }
@@ -473,7 +473,6 @@ describe('DonatePanel', () => {
     expect(screen.queryByRole('button', { name: 'Give' })).toBeNull()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in to give' }))
     expect(within(screen.getByRole('dialog', { name: 'Sign in' })).getByRole('button', { name: 'Sign in with your passkey' })).toBeTruthy()
-    expect(open).not.toHaveBeenCalled()
   })
 
   // After a success the campaign total and the activity list are stale, so both are reloaded.

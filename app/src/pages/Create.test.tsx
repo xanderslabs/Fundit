@@ -23,9 +23,10 @@ const HASH = `0x${'ab'.repeat(32)}` as Hex
 
 const state: { sender: Sender | null } = { sender: null }
 vi.mock('../hooks/useSender', () => ({ useSender: () => state.sender }))
-// AppKit is mocked only to prove Create never opens it. It opens only inside Add money.
-const openWallet = vi.hoisted(() => vi.fn())
-vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: openWallet }) }))
+// Nothing here connects a wallet: the wallet setup loads only inside Add money, so importing it fails the test.
+vi.mock('../wagmi', () => {
+  throw new Error('Create loaded the wallet setup')
+})
 // What "Check again" gets back on the wallet path. The default throws so an unplanned re-check is loud.
 const recheck: { next: () => Promise<TxResult> } = { next: async () => { throw new Error('no re-check planned') } }
 vi.mock('../lib/sender', async (importOriginal) => ({
@@ -114,7 +115,6 @@ describe('Create signed out', () => {
     renderCreate()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }))
     expect(within(screen.getByRole('dialog', { name: 'Sign in' })).getByRole('button', { name: 'Sign in with your passkey' })).toBeTruthy()
-    expect(openWallet).not.toHaveBeenCalled()
   })
 
   it('shows the form once signed in, without leaving /create', () => {

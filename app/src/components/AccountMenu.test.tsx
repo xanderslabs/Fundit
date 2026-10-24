@@ -11,13 +11,14 @@ import { AccountControl } from './AccountMenu'
 const ACCOUNT: StoredPasskey = { address: '0x1111111111111111111111111111111111111111' as Address, credentialId: 'cred-1' }
 
 const state: { session: StoredPasskey | null } = { session: null }
-const openWallet = vi.fn()
 const disconnect = vi.fn()
 const logoutPasskey = vi.fn()
 const confirmLeave = vi.fn(() => true)
 
-// AppKit is mocked only to prove that nothing here opens it. It opens only inside Add money.
-vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: openWallet }) }))
+// Nothing here connects a wallet: the wallet setup loads only inside Add money, so importing it fails the test.
+vi.mock('../wagmi', () => {
+  throw new Error('AccountMenu loaded the wallet setup')
+})
 vi.mock('../lib/walletSession', () => ({ disconnectWallet: () => disconnect() }))
 vi.mock('../hooks/useName', () => ({ useName: () => ({ data: undefined }) }))
 vi.mock('../lib/passkey', async (importOriginal) => ({
@@ -34,7 +35,6 @@ vi.mock('./AddBackupPasskey', async (importOriginal) => ({
 afterEach(() => {
   cleanup()
   state.session = null
-  openWallet.mockReset()
   disconnect.mockReset()
   logoutPasskey.mockReset()
   confirmLeave.mockReset()
@@ -64,7 +64,6 @@ describe('AccountControl signed out', () => {
     const dialog = screen.getByRole('dialog', { name: 'Sign in' })
     expect(within(dialog).getByRole('button', { name: 'Sign in with your passkey' })).toBeTruthy()
     expect(within(dialog).queryByText(/crypto wallet/i)).toBeNull()
-    expect(openWallet).not.toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: /0x/ })).toBeNull()
   })
 })

@@ -60,7 +60,7 @@ export default defineConfig(({ command, mode }) => {
     // testnet.
     ...(mode === 'test' && { envDir: false as const }),
     build: {
-      // AppKit and wagmi load only when a wallet tab in Add money opens, and the passkey and bridge SDKs load
+      // wagmi loads only when a wallet tab in Add money opens, and the passkey and bridge SDKs load
       // on demand too. Their largest chunks are about 700 kB minified, none on the first load. Raise the
       // limit above them.
       chunkSizeWarningLimit: 1400,
@@ -68,16 +68,15 @@ export default defineConfig(({ command, mode }) => {
         input: {
           main: fileURLToPath(new URL('./index.html', import.meta.url)),
           embed: fileURLToPath(new URL('./embed.html', import.meta.url)),
-          // Gate 0 test page, temporary (Plan 7 Task 0), only with VITE_GATE0=1.
+          // Gate 1 test page, temporary (Plan 7 Task 0), only with VITE_GATE0=1.
           ...(gate0 && {
-            gate0: fileURLToPath(new URL('./gate0.html', import.meta.url)),
             gate1: fileURLToPath(new URL('./gate1.html', import.meta.url)),
           }),
         },
         output: {
           // Keep the libraries on the first load in their own long-cached chunks, apart from app code. The
-          // $initial tag limits each group to modules on the first-load graph. AppKit and wagmi are not on it:
-          // they load with the Add money wallet tabs (components/WalletTabs.tsx).
+          // $initial tag limits each group to modules on the first-load graph. wagmi is not on it:
+          // it loads with the Add money wallet tabs (components/WalletTabs.tsx).
           codeSplitting: {
             groups: [
               { name: 'query', test: /node_modules[\\/]@tanstack[\\/]/, tags: ['$initial'], priority: 2 },

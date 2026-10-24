@@ -26,7 +26,6 @@ vi.mock('../lib/clients', () => ({ arcClient: { readContract: async () => 0n } }
 
 // No wallet connected: the donate panel shows its connect prompt. DonatePanel.test.tsx covers donating.
 vi.mock('../hooks/useSender', () => ({ useSender: () => null }))
-vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: () => {} }) }))
 vi.mock('wagmi', () => ({ useConnection: () => ({ isConnected: false }) }))
 // Names come from Ethereum mainnet; lib/names.test.ts covers the lookup.
 vi.mock('../hooks/useName', () => ({ useName: () => ({ data: undefined }) }))

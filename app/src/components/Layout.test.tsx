@@ -11,7 +11,6 @@ vi.mock('../config', async (importOriginal) => ({
     return state.tag
   },
 }))
-vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: () => {} }) }))
 vi.mock('../lib/walletSession', () => ({ disconnectWallet: () => {} }))
 
 afterEach(() => {

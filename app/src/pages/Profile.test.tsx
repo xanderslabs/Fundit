@@ -32,9 +32,10 @@ const state: { sender: Sender | null; mine: Promise<CampaignView[]> | null; gift
   username: null,
 }
 vi.mock('../hooks/useSender', () => ({ useSender: () => state.sender }))
-// AppKit opens only when the person asks to connect a wallet inside Add money.
-const openWallet = vi.hoisted(() => vi.fn())
-vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: openWallet }) }))
+// Nothing here connects a wallet: the wallet setup loads only inside Add money, so importing it fails the test.
+vi.mock('../wagmi', () => {
+  throw new Error('Profile loaded the wallet setup')
+})
 const disconnect = vi.hoisted(() => vi.fn())
 vi.mock('../lib/walletSession', () => ({ disconnectWallet: disconnect }))
 vi.mock('wagmi', () => ({
@@ -154,7 +155,6 @@ describe('My page signed out', () => {
     expect(screen.queryByRole('link', { name: 'Start a Fundit' })).toBeNull()
     await user.click(screen.getByRole('button', { name: 'Sign in' }))
     expect(within(screen.getByRole('dialog', { name: 'Sign in' })).getByRole('button', { name: 'Sign in with your passkey' })).toBeTruthy()
-    expect(openWallet).not.toHaveBeenCalled()
   })
 })
 

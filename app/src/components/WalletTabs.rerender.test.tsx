@@ -20,14 +20,13 @@ vi.mock('../wagmi', async () => {
   const wagmiConfig = createConfig({
     chains: [ARC_CHAIN],
     connectors: [mock({ accounts: [EXTERNAL] })],
-    // Storage on, as the AppKit adapter sets it: the wipe happened only with storage.
+    // Storage on, as the site's config has it: the wipe happened only with storage.
     storage: createStorage({ storage: localStorage }),
     transports: { [ARC_CHAIN.id]: custom({ request: async () => null }) },
     multiInjectedProviderDiscovery: false,
   })
   return { wagmiConfig }
 })
-vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: vi.fn() }) }))
 vi.mock('../config', async (importOriginal) => ({ ...(await importOriginal<typeof import('../config')>()), REOWN_PROJECT_ID: 'test-project' }))
 vi.mock('../lib/deposit', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/deposit')>()),

@@ -27,7 +27,6 @@ vi.mock('../hooks/useCampaigns', () => ({
   useCampaign: () => ({ data: state.view, isPending: state.view === undefined, isError: false, refetch: () => {} }),
 }))
 vi.mock('../hooks/useSender', () => ({ useSender: () => state.sender }))
-vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: () => {} }) }))
 const reads: { functionName: string; address: Address; args?: readonly unknown[] }[] = []
 vi.mock('../lib/clients', () => ({
   arcClient: {

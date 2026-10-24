@@ -187,6 +187,20 @@ describe('_headers CSP', () => {
     expect(headers).not.toMatch(/gateway-api/)
   })
 
+  // AppKit's UI hosts are gone. Only the WalletConnect relay, verify, RPC and analytics hosts pair a phone wallet.
+  it('the CSP allows no Reown hosts', () => {
+    for (const host of ['fonts.reown.com', '*.reown.com', 'reown.com', 'api.web3modal.org', 'secure.walletconnect.org']) {
+      expect(headers).not.toContain(host)
+    }
+  })
+
+  it('the CSP still allows WalletConnect over https and wss for phone wallets', () => {
+    for (const url of ['https://relay.walletconnect.org', 'https://rpc.walletconnect.org', 'https://pulse.walletconnect.org', 'https://echo.walletconnect.com', 'wss://relay.walletconnect.org', 'wss://relay.walletconnect.com']) {
+      expect(connectSrcAllows(headers, url)).toBe(true)
+    }
+    expect(headers).toContain('https://*.walletconnect.com https://*.walletconnect.org wss://*.walletconnect.com wss://*.walletconnect.org')
+  })
+
   it('refuses a host or scheme connect-src does not list', () => {
     expect(connectSrcAllows(headers, 'https://evil.example.com')).toBe(false)
     expect(connectSrcAllows(headers, 'http://rpc.mainnet.arc.io')).toBe(false)

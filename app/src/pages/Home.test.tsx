@@ -24,9 +24,10 @@ vi.mock('../hooks/useCampaigns', () => ({
 }))
 const state: { sender: Sender | null } = { sender: null }
 vi.mock('../hooks/useSender', () => ({ useSender: () => state.sender }))
-// AppKit is mocked only to prove Home never opens it. It opens only inside Add money.
-const openWallet = vi.hoisted(() => vi.fn())
-vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: openWallet }) }))
+// Nothing here connects a wallet: the wallet setup loads only inside Add money, so importing it fails the test.
+vi.mock('../wagmi', () => {
+  throw new Error('Home loaded the wallet setup')
+})
 const loginPasskey = vi.hoisted(() => vi.fn())
 vi.mock('../lib/passkey', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/passkey')>()),
@@ -41,7 +42,6 @@ afterEach(() => {
   lists.newest = []
   flags.crosschain = false
   state.sender = null
-  openWallet.mockReset()
   loginPasskey.mockReset()
 })
 
@@ -123,7 +123,6 @@ describe('Home hero', () => {
     await user.click(within(hero()).getByRole('button', { name: 'Create a Fundit' }))
     await user.click(within(screen.getByRole('dialog', { name: 'Sign in' })).getByRole('button', { name: 'Sign in with your passkey' }))
     expect(await screen.findByText('Create page')).toBeTruthy()
-    expect(openWallet).not.toHaveBeenCalled()
   })
 
   it('signed out, closing sign-in without signing in stays on Home, and a later sign-in does not jump', async () => {

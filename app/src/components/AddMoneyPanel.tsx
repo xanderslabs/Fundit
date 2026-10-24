@@ -1,13 +1,14 @@
 import { lazy, Suspense, useState } from 'react'
 import type { Address } from 'viem'
 import { CROSSCHAIN_ENABLED } from '../config'
+import { useAccount } from '../lib/account'
 import { AddressQr } from './AddressTools'
 import { ErrorBoundary } from './ErrorBoundary'
 import { AddressChip, ContentTabs } from './ui'
 import './AddMoneyPanel.css'
 import './Form.css'
 
-// The wallet tabs load AppKit and wagmi, so they load only when one first opens (see WalletTabs.tsx).
+// The wallet tabs load wagmi, so they load only when one first opens (see WalletTabs.tsx).
 const loadWalletTabs = () => import('./WalletTabs')
 const WalletDeposit = lazy(() => loadWalletTabs().then((m) => ({ default: m.WalletDeposit })))
 const BridgeToAccount = lazy(() => loadWalletTabs().then((m) => ({ default: m.BridgeToAccount })))
@@ -18,6 +19,8 @@ const LOADING = <p className="form-hint">Loading...</p>
 export function AddMoneyPanel({ account }: { account: Address }) {
   // True while a transfer from another chain is being signed in the shared wallet connection.
   const [bridging, setBridging] = useState(false)
+  // A wallet account is the wallet, so there is no other wallet to add money from.
+  const isWalletAccount = useAccount()?.kind === 'wallet'
   const tabs = [
     {
       id: 'address',
@@ -33,20 +36,24 @@ export function AddMoneyPanel({ account }: { account: Address }) {
         </div>
       ),
     },
-    {
-      id: 'wallet',
-      label: 'From a wallet',
-      content: (
-        <div className="deposit-tab">
-          <p className="form-hint">Send USDC or EURC from a regular wallet on Arc.</p>
-          <ErrorBoundary>
-            <Suspense fallback={LOADING}>
-              <WalletDeposit account={account} bridging={bridging} />
-            </Suspense>
-          </ErrorBoundary>
-        </div>
-      ),
-    },
+    ...(isWalletAccount
+      ? []
+      : [
+          {
+            id: 'wallet',
+            label: 'From a wallet',
+            content: (
+              <div className="deposit-tab">
+                <p className="form-hint">Send USDC or EURC from a regular wallet on Arc.</p>
+                <ErrorBoundary>
+                  <Suspense fallback={LOADING}>
+                    <WalletDeposit account={account} bridging={bridging} />
+                  </Suspense>
+                </ErrorBoundary>
+              </div>
+            ),
+          },
+        ]),
     ...(CROSSCHAIN_ENABLED
       ? [
           {

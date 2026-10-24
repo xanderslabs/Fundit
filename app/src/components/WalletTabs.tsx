@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { reconnect } from '@wagmi/core'
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react'
 import { type Address, type EIP1193Provider, formatUnits } from 'viem'
 import { useConfig, useConnection, useDisconnect, WagmiContext } from 'wagmi'
@@ -333,7 +334,16 @@ function WalletDepositForm({ account, bridging }: { account: Address; bridging: 
 // Each wallet tab gives its forms the one shared config, so both see the same connection. Only the context, not
 // WagmiProvider: its Hydrate step runs on every render, and with reconnectOnMount={false} it cleared the
 // connections each time My page re-rendered (WalletTabs.rerender.test.tsx).
+// A wallet connected on an earlier visit comes back once, when a wallet tab first opens (AppKit used to do this).
+// It never runs on page load: this module loads only when a wallet tab opens.
+let reconnected = false
+
 function WalletScope({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    if (reconnected) return
+    reconnected = true
+    void reconnect(wagmiConfig).catch(() => {})
+  }, [])
   return <WagmiContext.Provider value={wagmiConfig}>{children}</WagmiContext.Provider>
 }
 

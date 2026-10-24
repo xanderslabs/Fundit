@@ -26,12 +26,16 @@ vi.mock('../config', async (importOriginal) => ({
   },
 }))
 
-const state = vi.hoisted(() => ({ external: null as Address | null, balances: new Map<string, { usdc: bigint; eurc: bigint }>() }))
+const state = vi.hoisted(() => ({ kind: 'passkey' as 'passkey' | 'email' | 'wallet', external: null as Address | null, balances: new Map<string, { usdc: bigint; eurc: bigint }>() }))
 const passkeySend = vi.hoisted(() => vi.fn())
 vi.mock('../lib/passkey', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/passkey')>()),
   usePasskeySession: () => ({ address: '0x00000000000000000000000000000000000000cc', credentialId: 'cred-1' }),
   storedPasskeySender: () => ({ kind: 'passkey', address: '0x00000000000000000000000000000000000000cc', send: passkeySend }),
+}))
+vi.mock('../lib/account', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/account')>()),
+  useAccount: () => ({ kind: state.kind, address: ACCOUNT }),
 }))
 const fetchAccountBalances = vi.hoisted(() =>
   vi.fn(async (_client: unknown, who: Address) => state.balances.get(who.toLowerCase()) ?? { usdc: 0n, eurc: 0n }),
@@ -41,11 +45,10 @@ vi.mock('../lib/deposit', async (importOriginal) => ({
   fetchAccountBalances,
 }))
 
-const core = vi.hoisted(() => ({ getAccount: vi.fn(), getChainId: vi.fn(), switchChain: vi.fn(), sendTransaction: vi.fn() }))
+const core = vi.hoisted(() => ({ reconnect: vi.fn(async () => []), getAccount: vi.fn(), getChainId: vi.fn(), switchChain: vi.fn(), sendTransaction: vi.fn() }))
 vi.mock('@wagmi/core', () => core)
 const arc = vi.hoisted(() => ({ estimateGas: vi.fn(), waitForTransactionReceipt: vi.fn(), getTransaction: vi.fn(), call: vi.fn() }))
 vi.mock('../lib/clients', () => ({ arcClient: arc }))
-const openWallet = vi.hoisted(() => vi.fn())
 const disconnect = vi.hoisted(() => vi.fn())
 // The Fundit account is signed in. state.external is a regular wallet connected here to add money from.
 vi.mock('wagmi', () => ({
@@ -57,7 +60,6 @@ vi.mock('wagmi', () => ({
       : { isConnected: false },
   useDisconnect: () => ({ mutate: disconnect }),
 }))
-vi.mock('@reown/appkit/react', () => ({ useAppKit: () => ({ open: openWallet }) }))
 // The real setup creates the wagmi config. The wallet tabs only need it, and the wagmi mocks above ignore it.
 vi.mock('../wagmi', () => ({ wagmiConfig: {} }))
 // The wallet list itself talks to wagmi. Here only whether Connect a wallet opens it matters.
@@ -85,6 +87,7 @@ afterEach(() => {
   flags.crosschain = false
   flags.reown = 'test-project'
   state.external = null
+  state.kind = 'passkey'
   state.balances.clear()
 })
 
@@ -148,12 +151,11 @@ describe('AddMoneyPanel', () => {
     expect(screen.getByText('Card and bank coming soon.')).toBeTruthy()
   })
 
-  it("asks to connect a wallet when none is connected, using Fundit's wallet list", async () => {
+  it('From a wallet uses ConnectWallet, not AppKit', async () => {
     renderPage()
     const user = await openWalletTab()
     await user.click(screen.getByRole('button', { name: 'Connect a wallet' }))
     expect(screen.getByText('Wallet list')).toBeTruthy()
-    expect(openWallet).not.toHaveBeenCalled()
   })
 
   // The person must see which wallet pays, and be able to drop it to use another one.
@@ -208,7 +210,14 @@ describe('AddMoneyPanel', () => {
     await openWalletTab()
     expect(screen.getByText('Connecting a wallet is not available on this site right now.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Connect a wallet' })).toBeNull()
-    expect(openWallet).not.toHaveBeenCalled()
+  })
+
+  // The signed-in wallet is the account, so there is nothing to connect or send from.
+  it('a wallet account sees no From a wallet tab', () => {
+    state.kind = 'wallet'
+    renderPage()
+    expect(screen.queryByRole('tab', { name: 'From a wallet' })).toBeNull()
+    expect(screen.getByRole('tab', { name: 'Your address' })).toBeTruthy()
   })
 
   // Review focus 4: a deposit must never go out on another chain.

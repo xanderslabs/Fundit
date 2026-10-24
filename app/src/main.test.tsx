@@ -4,21 +4,17 @@ import { describe, expect, it, vi } from 'vitest'
 // Every page load used to create AppKit and reconnect a wallet from an earlier visit, so Reown showed its
 // Switch Network modal on any page. The wallet code now loads only inside Add money. Each factory below runs
 // only when something imports that module, so a count of zero after the page renders means none of it loaded.
-const loads = vi.hoisted(() => ({ appkit: 0, adapter: 0, wagmi: 0, wagmiCore: 0, walletSetup: 0 }))
-vi.mock('@reown/appkit/react', () => {
-  loads.appkit++
-  return { createAppKit: vi.fn(), useAppKit: () => ({ open: vi.fn() }) }
-})
-vi.mock('@reown/appkit-adapter-wagmi', () => {
-  loads.adapter++
-  return { WagmiAdapter: class {} }
-})
+const loads = vi.hoisted(() => ({ wagmi: 0, wagmiCore: 0, walletConnect: 0, walletSetup: 0 }))
 vi.mock('wagmi', () => {
   loads.wagmi++
   return {}
 })
 vi.mock('@wagmi/core', () => {
   loads.wagmiCore++
+  return {}
+})
+vi.mock('wagmi/connectors/walletConnect', () => {
+  loads.walletConnect++
   return {}
 })
 vi.mock('./wagmi', () => {
@@ -32,13 +28,12 @@ vi.mock('./lib/clients', () => {
 })
 
 describe('app start', () => {
-  it('loads no AppKit, Reown adapter or wagmi code, so no wallet reconnects and no modal is created', async () => {
+  it('loads no wagmi or WalletConnect code, so no wallet reconnects', async () => {
     const root = document.createElement('div')
     root.id = 'root'
     document.body.append(root)
     await import('./main')
     expect(await screen.findByRole('heading', { level: 1, name: 'Fundraising for everyone, everywhere.' })).toBeTruthy()
-    expect(loads).toEqual({ appkit: 0, adapter: 0, wagmi: 0, wagmiCore: 0, walletSetup: 0 })
-    expect(document.querySelector('w3m-modal')).toBeNull()
+    expect(loads).toEqual({ wagmi: 0, wagmiCore: 0, walletConnect: 0, walletSetup: 0 })
   })
 })
