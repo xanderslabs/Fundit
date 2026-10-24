@@ -2,7 +2,7 @@ import { screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 // Every page load used to create AppKit and reconnect a wallet from an earlier visit, so Reown showed its
-// Switch Network modal on any page. The wallet code now loads only inside Add money. Each factory below runs
+// Switch Network modal on any page. The wallet code now loads only for wallet sign-in and the crosschain bridge tab. Each factory below runs
 // only when something imports that module, so a count of zero after the page renders means none of it loaded.
 const loads = vi.hoisted(() => ({ wagmi: 0, wagmiCore: 0, walletConnect: 0, walletSetup: 0, circleUserWallets: 0 }))
 vi.mock('wagmi', () => {

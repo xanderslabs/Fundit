@@ -137,10 +137,9 @@ network fee.
   as an owner with `executeRecovery`. The sign-in dialog links to it as **Lost your passkey? Recover your
   account**. See [`Recover.tsx`](app/src/pages/Recover.tsx).
 - **Add money.** The **Add money** button on **My page** opens a panel. Every Add money link in the app
-  opens `/me?add=1`. The **Your address** tab shows the account address and its QR code, for USDC or EURC
-  sent on Arc from any wallet or exchange. The **From a wallet** tab sends from a connected wallet, shows
-  which wallet is connected and has a **Disconnect** button. The app switches that wallet to Arc first and
-  never sends on another chain. With `VITE_CROSSCHAIN=1`, a **From another chain** tab takes USDC from
+  opens `/me?add=1`. The panel shows the account address, with a copy button and a QR code, for USDC or
+  EURC sent on Arc from any wallet or exchange. Card and bank are coming soon. A wallet connects only for
+  wallet sign-in. With `VITE_CROSSCHAIN=1`, a **From another chain** tab takes USDC from
   another chain through Bridge Kit. See [`AddMoneyPanel.tsx`](app/src/components/AddMoneyPanel.tsx).
 - **Give.** The Fundit account approves the campaign and calls `donate` in one user operation. If the
   balance is too low, the **Give** panel links to **Add money**. See
