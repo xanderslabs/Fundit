@@ -19,7 +19,7 @@ function memo(label: string): string | undefined {
 }
 
 // One sign request to the Worker. An expired user token (155104) is refreshed once through the Worker's cookies
-// and the request sent again; a refresh the Worker refuses signs the account out (refreshEmailTokens).
+// and the request sent again. A 401 (no Worker session, or a refused refresh) signs the account out (ucw).
 async function requestSignature(walletId: string, transaction: string, note: string | undefined): Promise<string> {
   const ask = () => ucw<{ challengeId?: unknown }>('sign-transaction', { walletId, transaction, ...(note && { memo: note }) })
   let out: { challengeId?: unknown }

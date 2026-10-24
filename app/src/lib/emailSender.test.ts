@@ -152,6 +152,18 @@ describe('emailSender', () => {
     expect(runChallenge).not.toHaveBeenCalled()
   })
 
+  // The Worker's cookies expired or were cleared (or another tab signed out). Without this the store would still
+  // show the account while every send failed with a generic message.
+  it('sign-transaction 401 with no code signs out and asks to sign in again', async () => {
+    answers({ status: 401, body: { error: 'Not signed in' } })
+    const err = await emailSender(SESSION).send(CALLS, { label: 'Donate' }).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(PlainError)
+    expect(explainError(err)).toBe('Sign in again to continue')
+    expect(readEmailSession()).toBeNull()
+    expect(signRequests()).toHaveLength(1)
+    expect(runChallenge).not.toHaveBeenCalled()
+  })
+
   // The Worker refuses anything but Fundit's own contracts before Circle is called.
   it('a Worker 403 shows "This action is not available"', async () => {
     answers({ status: 403, body: { error: 'Contract not allowed' } })

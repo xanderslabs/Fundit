@@ -3,7 +3,6 @@ import type { Error as SdkError, ThemeColor } from '@circle-fin/w3s-pw-web-sdk/d
 import { getAddress, isAddress } from 'viem'
 import { CIRCLE_UCW_APP_ID } from '../config'
 import {
-  clearEmailSession,
   clearEmailTokens,
   EmailError,
   type EmailSession,
@@ -11,10 +10,9 @@ import {
   readEmailSession,
   readEmailTokens,
   saveEmailTokens,
-  SIGN_IN_AGAIN,
+  tagEmailTokens,
   ucw,
 } from './emailAccount'
-import { PlainError } from './errors'
 
 // Circle's user-controlled wallets web SDK for email accounts: the code screen at sign-in and the approval window
 // for every challenge. The SDK (with its Node polyfills) loads only from here, on first use, in its own chunk.
@@ -177,7 +175,8 @@ export async function sendEmailCode(email: string, turnstile: string, onWrongCod
   })
   // Once, so the Worker can keep userToken and refreshToken in HttpOnly cookies.
   await ucw('login', tokens)
-  saveEmailTokens({ userToken: tokens.userToken, encryptionKey: tokens.encryptionKey })
+  // Not tied to a wallet until openEmailAccount knows it.
+  saveEmailTokens({ userToken: tokens.userToken, encryptionKey: tokens.encryptionKey }, null)
 }
 
 type CircleWallet = { id?: unknown; address?: unknown }
@@ -201,29 +200,24 @@ export async function openEmailAccount(email: string): Promise<EmailSession> {
   for (let i = 0; i < WALLET_TRIES; i++) {
     const out = await ucw<{ data?: { wallets?: CircleWallet[] } }>('wallets')
     const w = out.data?.wallets?.find((x) => typeof x.id === 'string' && typeof x.address === 'string' && isAddress(x.address))
-    if (w) return { address: getAddress(w.address as string), walletId: w.id as string, email }
+    if (w) {
+      tagEmailTokens(w.id as string)
+      return { address: getAddress(w.address as string), walletId: w.id as string, email }
+    }
     await new Promise((r) => setTimeout(r, WALLET_WAIT_MS))
   }
   throw new EmailError('No wallet found', 502, null)
 }
 
-// New tokens from the Worker's cookies. A refusal (401) means the session is over: the email account is signed
-// out here and the person is asked to sign in again. Anything else (Circle down) is thrown as it is.
+// New tokens from the Worker's cookies. A refusal (401) signs the email account out and asks the person to sign in
+// again (ucw). Anything else (Circle down) is thrown as it is.
 export async function refreshEmailTokens(): Promise<EmailTokens> {
   const { deviceId } = await circle()
-  try {
-    const t = await ucw<Record<string, unknown>>('session', { deviceId })
-    if (typeof t.userToken !== 'string' || typeof t.encryptionKey !== 'string') throw new EmailError('Circle gave no tokens', 502, null)
-    const tokens = { userToken: t.userToken, encryptionKey: t.encryptionKey }
-    saveEmailTokens(tokens)
-    return tokens
-  } catch (err) {
-    if (err instanceof EmailError && err.status === 401) {
-      clearEmailSession()
-      throw new PlainError(SIGN_IN_AGAIN)
-    }
-    throw err
-  }
+  const t = await ucw<Record<string, unknown>>('session', { deviceId })
+  if (typeof t.userToken !== 'string' || typeof t.encryptionKey !== 'string') throw new EmailError('Circle gave no tokens', 502, null)
+  const tokens = { userToken: t.userToken, encryptionKey: t.encryptionKey }
+  saveEmailTokens(tokens)
+  return tokens
 }
 
 // The tokens Circle's window needs: this tab's copy, else fresh ones from the Worker (a new tab or a reload).
