@@ -9,7 +9,7 @@
 import { decodeFunctionResult, encodeFunctionData, isAddress, parseAbi, type Address } from 'viem'
 import { clearTokenCookies, readTokens, TOKEN, tokenCookies } from './cookies'
 import { NETWORKS_WORKER, type WorkerNetwork, type WorkerNetworkConfig } from './networks'
-import { checkSignRequest, type PolicyContext } from './policy'
+import { canonicalTransaction, checkSignRequest, type PolicyContext } from './policy'
 
 // Cloudflare's rate limiting binding (wrangler.jsonc ratelimits).
 type RateLimit = { limit(options: { key: string }): Promise<{ success: boolean }> }
@@ -164,8 +164,10 @@ async function route(name: string, request: Request, env: Env, cfg: Config): Pro
       const email = str(body, 'email', EMAIL)
       const turnstile = str(body, 'turnstile', TURNSTILE_TOKEN)
       if (!deviceId || !email || !turnstile) return json(400, { error: 'deviceId, email or turnstile' })
-      await rateLimit(env, [`ip:${ip || 'unknown'}`, `email:${email.toLowerCase()}`])
+      await rateLimit(env, [`ip:${ip || 'unknown'}`])
       if (!(await verifyTurnstile(env, turnstile, ip))) return json(403, { error: 'Turnstile check failed' })
+      // Per email only after Turnstile, so junk requests cannot use up someone else's budget.
+      await rateLimit(env, [`email:${email.toLowerCase()}`])
       const data = await circle(env, 'POST', '/users/email/token', null, { idempotencyKey, deviceId, email })
       const out = { deviceToken: data.deviceToken, deviceEncryptionKey: data.deviceEncryptionKey, otpToken: data.otpToken }
       if (Object.values(out).some((v) => typeof v !== 'string')) return json(502, { error: 'Circle gave no login values' })
@@ -217,14 +219,22 @@ async function route(name: string, request: Request, env: Env, cfg: Config): Pro
       } catch {
         return json(400, { error: 'transaction is not JSON' })
       }
+      // The string must be plain JSON.stringify output: a duplicate key, -0, 1e-400 or 5042002.0000000001 parses
+      // to something other than what it says, and is refused.
+      if (JSON.stringify(tx) !== transaction) return json(403, { error: 'transaction is not plain JSON' })
       const ctx: PolicyContext = {
         chainId: cfg.net.chainId,
-        fixedTargets: new Set([cfg.net.usdc, cfg.net.eurc, cfg.factory, cfg.net.tokenMessengerV2, cfg.net.multicall3From]),
+        usdc: cfg.net.usdc,
+        eurc: cfg.net.eurc,
+        tokenMessengerV2: cfg.net.tokenMessengerV2,
+        factory: cfg.factory,
         isCampaign: (a) => isCampaign(cfg, a),
       }
       const verdict = await checkSignRequest(tx, ctx)
       if (!verdict.ok) return json(403, { error: verdict.reason })
-      const data = await circle(env, 'POST', '/user/sign/transaction', ut, { walletId, transaction, ...(memo && { memo }) })
+      // Circle signs the checked object, never the client's string.
+      const checked = canonicalTransaction(tx as Record<string, unknown>)
+      const data = await circle(env, 'POST', '/user/sign/transaction', ut, { walletId, transaction: checked, ...(memo && { memo }) })
       if (typeof data.challengeId !== 'string') return json(502, { error: 'Circle gave no challenge' })
       return json(200, { challengeId: data.challengeId })
     }

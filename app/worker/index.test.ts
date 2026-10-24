@@ -103,6 +103,9 @@ describe('worker', () => {
     expect(foreign.status).toBe(403)
 
     expect(circleCalls()).toEqual([])
+    // A failed check uses only the caller's own IP budget, never the email address's, so junk requests cannot
+    // lock someone else out of sign-in.
+    expect(limit.mock.calls.map(([o]) => o.key)).toEqual(['ip:203.0.113.7', 'ip:203.0.113.7'])
     // The secret and the visitor's IP went to Cloudflare's check, not anywhere else.
     const verify = calls.find((c) => c.url.includes('siteverify'))
     const form = new URLSearchParams(String(verify?.init.body))
@@ -149,6 +152,38 @@ describe('worker', () => {
     const res = await worker.fetch(post('sign-transaction', { walletId: WALLET_ID, transaction: '{not json' }, cookie), env())
     expect(res.status).toBe(400)
     expect(circleCalls()).toEqual([])
+  })
+
+  // The policy reads JSON.parse of the string. If Circle read the same string differently (a duplicate key, a
+  // number that parses to something else), it could sign what the policy never saw.
+  it('sign-transaction refuses a string that does not parse to exactly what it says', async () => {
+    // The factory says yes, so only the string check can refuse.
+    replies[net.rpcUrl] = () => Response.json({ jsonrpc: '2.0', id: 1, result: encodeFunctionResult({ abi: factoryAbi, functionName: 'isCampaign', result: true }) })
+    const base = signTx(CAMPAIGN).slice(1, -1)
+    const crafted = [
+      `{"to":"${OTHER}",${base}}`,
+      signTx(CAMPAIGN).replace('"value":"0"', '"value":1e-400'),
+      signTx(CAMPAIGN).replace('"value":"0"', '"value":-0'),
+      signTx(CAMPAIGN).replace(`"chainId":${net.chainId}`, `"chainId":${net.chainId}.0000000001`),
+      signTx(CAMPAIGN).replace('{', '{ '),
+    ]
+    for (const transaction of crafted) {
+      const res = await worker.fetch(post('sign-transaction', { walletId: WALLET_ID, transaction }, cookie), env())
+      expect(res.status, transaction).toBe(403)
+    }
+    expect(circleCalls()).toEqual([])
+  })
+
+  it('sign-transaction sends Circle the canonical JSON of the checked object', async () => {
+    replies[net.rpcUrl] = () => Response.json({ jsonrpc: '2.0', id: 1, result: encodeFunctionResult({ abi: factoryAbi, functionName: 'isCampaign', result: true }) })
+    // The client's own key order; Circle gets the fixed order.
+    const transaction = JSON.stringify({ maxPriorityFeePerGas: '1000000000', to: CAMPAIGN, data: '0x', chainId: net.chainId, nonce: 1, gas: '60000', maxFeePerGas: '41000000000' })
+    const res = await worker.fetch(post('sign-transaction', { walletId: WALLET_ID, transaction }, cookie), env())
+    expect(res.status).toBe(200)
+    const [c] = circleCalls()
+    expect(JSON.parse(String(c!.init.body)).transaction).toBe(
+      `{"chainId":${net.chainId},"nonce":1,"to":"${CAMPAIGN}","data":"0x","gas":"60000","maxFeePerGas":"41000000000","maxPriorityFeePerGas":"1000000000"}`,
+    )
   })
 
   it('sign-transaction sends an allowed campaign call to Circle and returns the challenge id', async () => {

@@ -12,15 +12,11 @@
 		// Unknown paths serve /index.html with 200, so React Router handles them.
 		"not_found_handling": "single-page-application"
 	},
-	// Public values. The secrets CIRCLE_API_KEY and TURNSTILE_SECRET are set with `wrangler secret put`. NETWORK
-	// and FACTORY_ADDRESS must match the site build (VITE_ARC_NETWORK, VITE_FACTORY_ADDRESS); the Worker refuses
-	// every /api/ucw call when one is missing or wrong.
-	"vars": {
-		"NETWORK": "testnet",
-		"FACTORY_ADDRESS": "0x6890D40a9A472D0d05aDb5938D85B07059ad54ab",
-		"SITE_ORIGIN": "https://fundit.fun"
-	},
-	// Keep any variable set in the dashboard that is not listed above.
+	// The variables NETWORK (testnet or mainnet), FACTORY_ADDRESS and SITE_ORIGIN are set in Cloudflare, not here, so
+	// the network switch is an environment change. They must match the site build (VITE_ARC_NETWORK,
+	// VITE_FACTORY_ADDRESS). The Worker refuses every /api/ucw call while one is missing or wrong. The secrets
+	// CIRCLE_API_KEY and TURNSTILE_SECRET are set with `wrangler secret put`. keep_vars stops a deploy from removing
+	// the variables set in Cloudflare.
 	"keep_vars": true,
 	// Per IP for email-token and sign-transaction, and per email address for email-token.
 	"ratelimits": [
