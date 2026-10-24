@@ -20,11 +20,8 @@ suite does not offer one.
 
 Passkey e2e runs only after a deploy, against `https://fundit.fun`. It checks what is live, never a branch
 before it merges. Before deploy, the money paths are covered by unit tests only. These include the wallet
-deposit regression test (`src/components/WalletTabs.rerender.test.tsx`: a connected wallet survives My page
-re-renders and can still send), the sender tests (`src/lib/sender.test.ts`: switch to Arc before sending, and
-send nothing if the switch is refused) and the Add money panel tests. The suite's own wallet step only opens
-the From a wallet tab. It does not connect a wallet, so it would not catch a wallet bug like that one. After
-each deploy, run the suite once against `https://fundit.fun` as a smoke test.
+sender tests (`src/lib/sender.test.ts`: switch to Arc before sending, and send nothing if the switch is
+refused) and the Add money panel tests. After each deploy, run the suite once against `https://fundit.fun` as a smoke test.
 
 ## One shared account
 
@@ -64,7 +61,7 @@ state it finds.
    the shared account.
 2. Adds money: the funder tops the account up to what the run needs with an ERC-20 `transfer`, and sends
    nothing when the account already holds enough. The balance card must show the balance. The **Add money**
-   button then closes and opens the panel, and its tabs switch.
+   button then closes and opens the panel, which shows **Your address** and no wallet tab.
 3. Saves the recovery key if no earlier run did: **Save now** in the banner shows the 12 words, the suite
    types back the three the page asks for, and checks on Arc that the key's address is now an owner of the
    account. If a key is already saved, it checks that there is no banner and that the **Account** tab says
@@ -225,4 +222,4 @@ or reports. The funder key never appears in a trace: it stays in the Node proces
   `a-z`, `0-9` and `_@.:+-` only.
 - A user operation left pending by a run that stopped part way can clash with the next run's first send. The
   page then says another transaction is still going through. Wait a minute and run again.
-- The suite does not cover Add money from a connected wallet (AppKit) or from another chain.
+- The suite does not cover Add money from another chain.

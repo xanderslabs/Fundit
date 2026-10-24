@@ -18,7 +18,7 @@ describe('disconnectWallet', () => {
     expect(wallet.disconnect).not.toHaveBeenCalled()
   })
 
-  // A wallet connected on an earlier visit would come back in Add money for the next person on this browser.
+  // A wallet connected on an earlier visit would stay connected for the next person on this browser.
   it('disconnects a wallet this browser remembers', async () => {
     localStorage.setItem('wagmi.recentConnectorId', '"io.metamask"')
     disconnectWallet()

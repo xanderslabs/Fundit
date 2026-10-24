@@ -147,8 +147,8 @@ test('signs in with the shared passkey', async () => {
   await expect(page).toHaveURL(/\/me$/)
   await page.getByRole('region', { name: 'Your Fundit account' }).getByRole('button', { name: 'Add money' }).click()
   const panel = page.getByRole('region', { name: 'Add money' })
-  await expect(panel.getByRole('tab', { name: 'Your address' })).toHaveAttribute('aria-selected', 'true')
-  const shown = /0x[0-9a-fA-F]{40}/.exec(await panel.getByRole('tabpanel', { name: 'Your address' }).innerText())?.[0]
+  await expect(panel.getByText('Send USDC or EURC on Arc to this address')).toBeVisible()
+  const shown = /0x[0-9a-fA-F]{40}/.exec(await panel.innerText())?.[0]
   expect(shown && getAddress(shown)).toBe(account)
 
   // The one passkey on the virtual authenticator is the stored one, bound to the site's hostname.
@@ -183,9 +183,8 @@ test('adds money: the funder tops the account up to what the run needs', async (
   await addMoney.click()
   await expect(page).toHaveURL(/\/me\?add=1$/)
   const panel = page.getByRole('region', { name: 'Add money' })
-  await panel.getByRole('tab', { name: 'From a wallet' }).click()
-  await expect(panel.getByRole('tabpanel', { name: 'From a wallet' })).toBeVisible()
-  await panel.getByRole('tab', { name: 'Your address' }).click()
+  await expect(panel.getByRole('tab', { name: 'From a wallet' })).toHaveCount(0)
+  await expect(panel.getByText('Card and bank coming soon.')).toBeVisible()
 })
 
 test('saves the recovery key after confirming three words, or shows it saved', async () => {

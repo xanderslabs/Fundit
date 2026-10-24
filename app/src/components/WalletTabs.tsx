@@ -1,35 +1,19 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { reconnect } from '@wagmi/core'
-import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { type Address, type EIP1193Provider, formatUnits } from 'viem'
-import { useConfig, useConnection, useDisconnect, WagmiContext } from 'wagmi'
-import {
-  ARC_DOMAIN,
-  CCTP_CHAINS,
-  CHAIN_LABELS,
-  type CctpChainKey,
-  PASSKEY_GAS_BUFFER,
-  REOWN_PROJECT_ID,
-  TOKENS,
-  type TokenSymbol,
-} from '../config'
+import { useConnection, WagmiContext } from 'wagmi'
+import { ARC_DOMAIN, CCTP_CHAINS, CHAIN_LABELS, type CctpChainKey, REOWN_PROJECT_ID } from '../config'
 import { blockingEntry, chainByKey, donateCrossChain, estimateCrossChain, notifyPending, subscribePending } from '../lib/bridge'
-import { arcClient } from '../lib/clients'
-import { BALANCES_KEY, balancesKey, buildDepositCall, fetchAccountBalances } from '../lib/deposit'
 import { explainAfterApproval } from '../lib/errors'
-import { formatAmount, formatExact, parseAmount } from '../lib/format'
+import { formatAmount, parseAmount } from '../lib/format'
 import { fetchForwardFee } from '../lib/iris'
-import { shortAddress } from '../lib/names'
-import { wagmiSender } from '../lib/wagmiSender'
 import { wagmiConfig } from '../wagmi'
 import { ConnectWallet } from './ConnectWallet'
-import { TxStatus, useTx } from './TxStatus'
 import { AmountInput, Button, Field, StatusBox } from './ui'
 
-// The wallet tabs of Add money. AddMoneyPanel loads this module only when From a wallet or From another chain
-// first opens, and importing it loads wagmi (../wagmi). The rest of the app loads wagmi only for a wallet account.
+// The From another chain tab of Add money (behind VITE_CROSSCHAIN). AddMoneyPanel loads this module only when that
+// tab first opens, and importing it loads wagmi (../wagmi). The rest of the app loads wagmi only for a wallet account.
 
-const BALANCE_POLL_MS = 15_000
 const QUOTE_DEBOUNCE_MS = 400
 
 const BRIDGE_PENDING =
@@ -44,18 +28,8 @@ function useWalletModal() {
   return { available, open, connect: () => setOpen(true), close: () => setOpen(false) }
 }
 
-function useBalances(address: Address | null) {
-  return useQuery({
-    queryKey: balancesKey(address),
-    queryFn: () => fetchAccountBalances(arcClient, address!),
-    enabled: address !== null,
-    refetchInterval: BALANCE_POLL_MS,
-  })
-}
-
 // Bridge Kit from an external wallet on another chain. Circle's forwarder mints the USDC to the Fundit account on Arc.
-// onBusyChange tells the panel while the wallet is signing, so the wallet tab keeps Disconnect locked meanwhile.
-function BridgeToAccountForm({ recipient, onBusyChange }: { recipient: Address; onBusyChange: (busy: boolean) => void }) {
+function BridgeToAccountForm({ recipient }: { recipient: Address }) {
   const modal = useWalletModal()
   const { isConnected, address, connector } = useConnection()
   const wallet = isConnected && connector ? connector : null
@@ -106,7 +80,6 @@ function BridgeToAccountForm({ recipient, onBusyChange }: { recipient: Address; 
   const arrives = amount !== null && quote !== undefined ? amount - quote : null
   const tooSmall = arrives !== null && arrives <= 0n
   const busy = phase.kind === 'sending'
-  useEffect(() => onBusyChange(busy), [busy, onBusyChange])
   const canSubmit = wallet !== null && amount !== null && arrives !== null && !tooSmall && !busy
 
   async function submit(e: FormEvent) {
@@ -223,142 +196,12 @@ function BridgeToAccountForm({ recipient, onBusyChange }: { recipient: Address; 
   )
 }
 
-// A regular wallet on Arc sends USDC or EURC straight to the Fundit account. It uses the connected wallet's own
-// sender: the Fundit account is where the money goes. Add money is the only place a wallet connects.
-function WalletDepositForm({ account, bridging }: { account: Address; bridging: boolean }) {
-  const modal = useWalletModal()
-  const { mutate: disconnect } = useDisconnect()
-  const config = useConfig()
-  const { address, isConnected, connector } = useConnection()
-  const external = isConnected && address ? address : null
-  const queryClient = useQueryClient()
-  const [symbol, setSymbol] = useState<TokenSymbol>('USDC')
-  const [amountText, setAmountText] = useState('')
-  const tx = useTx(() => {
-    setAmountText('')
-    void queryClient.invalidateQueries({ queryKey: [BALANCES_KEY] })
-  })
-  const funds = useBalances(external)
-
-  const parsed = amountText === '' ? null : parseAmount(amountText.trim())
-  const amount = parsed?.ok ? parsed.value : null
-  const held = funds.data ? (symbol === 'USDC' ? funds.data.usdc : funds.data.eurc) : undefined
-  const tooMuch = amount !== null && held !== undefined && amount > held
-  // Arc gas is paid in USDC from this same wallet, so a USDC deposit leaves the usual gas buffer behind.
-  const noGas = !tooMuch && symbol === 'USDC' && amount !== null && held !== undefined && amount > held - PASSKEY_GAS_BUFFER
-  const canSubmit = external !== null && amount !== null && held !== undefined && !tooMuch && !noGas && !tx.locked
-
-  function submit(e: FormEvent) {
-    e.preventDefault()
-    if (!canSubmit || external === null || amount === null) return
-    // wagmiSender switches the wallet to Arc first and refuses to send anywhere else.
-    void tx.run(wagmiSender(config, external), () => buildDepositCall(TOKENS[symbol].address, account, amount), 'Add money')
-  }
-
-  if (external === null) {
-    if (!modal.available) return <p>{NO_WALLETS}</p>
-    if (modal.open) return <ConnectWallet onConnected={modal.close} />
-    return (
-      <Button block onClick={modal.connect}>
-        Connect a wallet
-      </Button>
-    )
-  }
-
+// The bridge form gets the one shared wagmi config through the context only, not WagmiProvider: its Hydrate step
+// runs on every render, and with reconnectOnMount={false} it cleared the connections each time My page re-rendered.
+export function BridgeToAccount(props: { recipient: Address }) {
   return (
-    <form className="form" onSubmit={submit} noValidate>
-      <div className="wallet-connected">
-        <p>
-          Connected: <strong>{connector?.name ?? 'Wallet'}</strong>{' '}
-          <code className="wallet-address" title={external}>
-            {shortAddress(external)}
-          </code>
-        </p>
-        {/* To switch wallets, disconnect this one and connect another. */}
-        <Button variant="secondary" disabled={tx.locked || bridging} onClick={() => disconnect()}>
-          Disconnect
-        </Button>
-      </div>
-      <fieldset className="form-fields" disabled={tx.locked}>
-        <Field label="Currency" id="deposit-token">
-          <select className="select" value={symbol} onChange={(e) => setSymbol(e.target.value as TokenSymbol)}>
-            <option value="USDC">USDC</option>
-            <option value="EURC">EURC</option>
-          </select>
-        </Field>
-        <Field
-          label="Amount"
-          id="deposit-amount"
-          alert
-          error={
-            parsed && !parsed.ok
-              ? parsed.error
-              : tooMuch
-                ? 'That is more than this wallet holds on Arc.'
-                : noGas
-                  ? `Leave at least ${formatExact(PASSKEY_GAS_BUFFER, 'USDC')} in this wallet for the network fee.`
-                  : undefined
-          }
-        >
-          <AmountInput
-            id="deposit-amount"
-            currency={symbol}
-            placeholder="25"
-            value={amountText}
-            onChange={(e) => setAmountText(e.target.value)}
-            aria-invalid={(parsed && !parsed.ok) || tooMuch || noGas ? true : undefined}
-          />
-        </Field>
-      </fieldset>
-      <p className="form-hint">
-        {held !== undefined
-          ? `Your wallet holds ${formatAmount(held, symbol)} on Arc.`
-          : funds.isError
-            ? 'Could not read your wallet balance. Check your connection.'
-            : 'Reading your wallet balance...'}{' '}
-        It also pays a small network fee in USDC.
-      </p>
-      <TxStatus
-        tx={tx}
-        noun="transfer"
-        successText="Money added to your Fundit account."
-        startOverWarning="The earlier transfer may still go through. If it does and you send again, you will add the money twice. Start over anyway?"
-      />
-      <Button type="submit" block disabled={!canSubmit}>
-        {tx.busy ? 'Sending...' : 'Add to my Fundit account'}
-      </Button>
-    </form>
-  )
-}
-
-// Each wallet tab gives its forms the one shared config, so both see the same connection. Only the context, not
-// WagmiProvider: its Hydrate step runs on every render, and with reconnectOnMount={false} it cleared the
-// connections each time My page re-rendered (WalletTabs.rerender.test.tsx).
-// A wallet connected on an earlier visit comes back once, when a wallet tab first opens (AppKit used to do this).
-// It never runs on page load: this module loads only when a wallet tab opens.
-let reconnected = false
-
-function WalletScope({ children }: { children: ReactNode }) {
-  useEffect(() => {
-    if (reconnected) return
-    reconnected = true
-    void reconnect(wagmiConfig).catch(() => {})
-  }, [])
-  return <WagmiContext.Provider value={wagmiConfig}>{children}</WagmiContext.Provider>
-}
-
-export function WalletDeposit(props: { account: Address; bridging: boolean }) {
-  return (
-    <WalletScope>
-      <WalletDepositForm {...props} />
-    </WalletScope>
-  )
-}
-
-export function BridgeToAccount(props: { recipient: Address; onBusyChange: (busy: boolean) => void }) {
-  return (
-    <WalletScope>
+    <WagmiContext.Provider value={wagmiConfig}>
       <BridgeToAccountForm {...props} />
-    </WalletScope>
+    </WagmiContext.Provider>
   )
 }

@@ -52,7 +52,7 @@ async function shownAddress(): Promise<Address> {
   await page.goto('/me')
   await page.getByRole('region', { name: 'Your Fundit account' }).getByRole('button', { name: 'Add money' }).click()
   const panel = page.getByRole('region', { name: 'Add money' })
-  const shown = /0x[0-9a-fA-F]{40}/.exec(await panel.getByRole('tabpanel', { name: 'Your address' }).innerText())?.[0]
+  const shown = /0x[0-9a-fA-F]{40}/.exec(await panel.innerText())?.[0]
   expect(shown, 'no account address on My page').toBeTruthy()
   return getAddress(shown!)
 }

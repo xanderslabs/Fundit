@@ -214,7 +214,8 @@ describe('My page Add money and Send panels', () => {
     expect(toggle('Add money').getAttribute('aria-expanded')).toBe('true')
     const panel = addPanel()!
     expect(document.getElementById(toggle('Add money').getAttribute('aria-controls')!)!.contains(panel)).toBe(true)
-    expect(within(panel).getAllByRole('tab').map((t) => t.textContent)).toEqual(['Your address', 'From a wallet'])
+    expect(within(panel).queryAllByRole('tab')).toEqual([])
+    expect(within(panel).getByText('Card and bank coming soon.')).toBeTruthy()
     expect(where()).toBe('/me?add=1')
     await user.click(screen.getByRole('button', { name: 'Close Add money' }))
     expect(addPanel()).toBeNull()
@@ -289,7 +290,7 @@ describe('My page Add money and Send panels', () => {
     const user = renderProfile()
     await user.click(toggle('Add money'))
     const close = screen.getByRole('button', { name: 'Close Add money' })
-    const firstTab = within(addPanel()!).getByRole('tab', { name: 'Your address' })
+    const firstTab = within(addPanel()!).getByRole('button', { name: 'Copy address' })
     expect(close.compareDocumentPosition(firstTab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     firstTab.focus()
     await user.keyboard('{Escape}')

@@ -146,7 +146,7 @@ export function AccountControl() {
 }
 
 // Sign out for the account menu and My page. Recovery words on screen would be lost, so it asks first like any
-// other way out. It clears all three account stores, and a connected wallet goes too; with none connected that
+// other way out. It clears all three account stores, and a wallet sign-in's connection goes too; with none connected that
 // does nothing. An email account's Worker cookies are cleared in the background. True when the person signed out.
 export function useSignOut(): () => boolean {
   return useCallback(() => {

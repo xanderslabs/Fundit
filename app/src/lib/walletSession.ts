@@ -1,4 +1,4 @@
-// Keys wagmi writes to localStorage once a wallet has connected in Add money.
+// Keys wagmi writes to localStorage once a wallet has connected (wallet sign-in or the bridge tab).
 const REMEMBERED_WALLET_KEYS = ['wagmi.recentConnectorId', 'wagmi.store']
 
 function forgetWallet() {
@@ -17,8 +17,8 @@ function rememberedWallet(): boolean {
   }
 }
 
-// Sign out drops a wallet connected to add money, so the next person on this browser does not get it back in
-// Add money. The wallet code loads only if this browser has connected a wallet before. With none, this does
+// Sign out drops a connected wallet (a wallet sign-in), so the next person on this browser does not inherit it.
+// The wallet code loads only if this browser has connected a wallet before. With none, this does
 // nothing. It never throws: sign out goes ahead whatever happens here.
 export function disconnectWallet(): void {
   if (!rememberedWallet()) return

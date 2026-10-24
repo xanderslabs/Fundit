@@ -7,7 +7,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import './styles/tokens.css'
 import './styles/base.css'
 
-// No wallet code at start. Add money loads wagmi when a wallet tab opens (components/WalletTabs.tsx).
+// No wallet code at start. Wallet sign-in and the bridge tab load wagmi when they open (components/WalletTabs.tsx).
 const queryClient = new QueryClient()
 
 createRoot(document.getElementById('root')!).render(

@@ -1,5 +1,5 @@
-// The wallet setup. Nothing imports this at start: Connect a wallet, a send from a wallet account and the Add
-// money wallet tabs load it with import(). Creating the config does not reconnect a wallet from an earlier visit;
+// The wallet setup. Nothing imports this at start: Connect a wallet, a send from a wallet account and the
+// From another chain tab load it with import(). Creating the config does not reconnect a wallet from an earlier visit;
 // a wallet account reconnects only when it sends (lib/walletAccount.ts).
 import { createConfig, disconnect, injected } from '@wagmi/core'
 import { walletConnect } from 'wagmi/connectors/walletConnect'

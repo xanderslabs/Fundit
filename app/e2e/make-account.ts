@@ -46,7 +46,7 @@ test('makes the shared e2e passkey account', async ({ browser, baseURL }) => {
 
   await expect(page).toHaveURL(/\/me\?add=1$/, { timeout: 60_000 })
   const panel = page.getByRole('region', { name: 'Add money' })
-  const shown = /0x[0-9a-fA-F]{40}/.exec(await panel.getByRole('tabpanel', { name: 'Your address' }).innerText())?.[0]
+  const shown = /0x[0-9a-fA-F]{40}/.exec(await panel.innerText())?.[0]
   expect(shown, `No address on the page. app/${PASSKEY_FILE} has the passkey; sign in with it to read the address.`).toBeTruthy()
   const account = getAddress(shown!)
   save(account, 'w')
