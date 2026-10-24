@@ -1,14 +1,14 @@
 import { expect, type Page, test } from '@playwright/test'
-import { type Address, formatUnits, getAddress, parseUnits } from 'viem'
+import { type Address, erc20Abi, formatUnits, getAddress, parseEventLogs, parseUnits } from 'viem'
 import { campaignAbi } from '../src/abi/campaign'
 import { MULTICALL3_FROM } from '../src/config'
 import { arc, checkChain, checkEnv, fundFromFunder, funderAddress, logTx, NET, txUrl, usdcBalance } from './arc'
-import { installTestWallet, type TestWallet, WALLET_NAME } from './wallet'
+import { installTestWallet, loadWalletKey, type TestWallet, WALLET_NAME } from './wallet'
 
-// Wallet sign-in end to end, with no passkey: a test wallet (a fresh local key in this Node process, announced to
+// Wallet sign-in end to end, with no passkey: a test wallet (the persistent e2e key in this Node process, announced to
 // the page through EIP-6963) signs in, starts a Fundit, gives to it and sends money out. It runs on localhost
-// before a deploy as well as on fundit.fun. A fresh account per run is funded with 0.1 USDC and what is left goes
-// back to the funder at the end.
+// before a deploy as well as on fundit.fun. The wallet (app/.env.testnet.wallet, hidden in testCreators) is topped up to 0.1 USDC and
+// what is left goes back to the funder in afterAll, even when a step fails.
 test.describe.configure({ mode: 'serial' })
 
 const FUNDING = parseUnits('0.1', 6)
@@ -24,9 +24,12 @@ let campaign: Address
 const wcSeen: string[] = []
 const netLog: string[] = []
 let step = 'start'
+let funded = false
 
 test.beforeAll(async ({ browser }) => {
   checkEnv()
+  // Stops here, before anything is spent, when the key file is missing.
+  const key = loadWalletKey()
   await checkChain()
   funder = funderAddress()
   funderStart = await usdcBalance(funder)
@@ -35,8 +38,12 @@ test.beforeAll(async ({ browser }) => {
 
   const context = await browser.newContext()
   page = await context.newPage()
-  wallet = await installTestWallet(page, arc)
+  wallet = await installTestWallet(page, arc, key)
   console.log(`Test wallet ${wallet.address}: ${NET.explorerUrl}/address/${wallet.address}`)
+  // Its Fundits stay off the public lists only while its address is a known test creator.
+  if (!NET.testCreators.includes(wallet.address.toLowerCase())) {
+    throw new Error(`Add the e2e wallet ${wallet.address.toLowerCase()} to testCreators for testnet in src/config.ts.`)
+  }
   // Every request and WebSocket the page opens, to see when it first talks to WalletConnect.
   const note = (kind: string, url: string) => {
     let host = ''
@@ -59,6 +66,15 @@ test.beforeAll(async ({ browser }) => {
 test.afterAll(async () => {
   await page?.context().close()
   if (!wallet) return
+  // Always return the money, whatever failed. A failure here is printed and never hides the test's own failure.
+  if (funded) {
+    try {
+      const back = await wallet.returnTo(funder)
+      console.log(back ? `[tx] Return what is left to the funder: ${txUrl(back)}` : 'Nothing worth returning to the funder')
+    } catch (err) {
+      console.log(`Could not return the test wallet's USDC: ${err instanceof Error ? err.message.split('\n')[0] : 'unknown error'}`)
+    }
+  }
   console.log(`Hosts the page talked to: ${[...new Set(netLog.map((l) => l.split(' ')[1]))].filter(Boolean).sort().join(', ')}`)
   console.log(`WalletConnect traffic seen: ${wcSeen.length === 0 ? 'none' : ''}`)
   for (const line of wcSeen) console.log(`  ${line}`)
@@ -73,9 +89,14 @@ test.afterAll(async () => {
 })
 
 test('funds the wallet and signs in with it', async () => {
-  const hash = await fundFromFunder(wallet.address, FUNDING)
-  logTx('Fund the test wallet', hash)
-  expect(await usdcBalance(wallet.address)).toBe(FUNDING)
+  // The wallet keeps a little dust between runs, so the funder sends only what is missing.
+  const topUp = FUNDING - (await usdcBalance(wallet.address))
+  if (topUp > 0n) {
+    funded = true
+    logTx('Fund the test wallet', await fundFromFunder(wallet.address, topUp))
+  }
+  funded = true
+  expect(await usdcBalance(wallet.address)).toBeGreaterThanOrEqual(FUNDING)
 
   step = 'before sign in'
   await page.goto('/')
@@ -144,13 +165,12 @@ test('gives to it: one transaction to Multicall3From', async () => {
   expect(summary.raised).toBe(parseUnits(GIFT, 6))
 })
 
-test('sends money out, signs out, and returns the rest to the funder', async () => {
+test('sends money out and signs out', async () => {
   step = 'send'
   await page.getByRole('banner').getByRole('button', { name: new RegExp(wallet.address.slice(0, 6)) }).click()
   await page.getByRole('menuitem', { name: 'My page' }).click()
   await page.getByRole('region', { name: 'Your Fundit account' }).getByRole('button', { name: 'Send' }).click()
   const send = page.getByRole('region', { name: 'Send money out' })
-  const before = await usdcBalance(funder)
   await expect(send.getByText(/^You have \d/)).toBeVisible({ timeout: 30_000 })
   await send.getByRole('textbox', { name: 'Amount' }).fill(SEND_OUT)
   await send.getByLabel('Recipient').fill(funder)
@@ -161,17 +181,19 @@ test('sends money out, signs out, and returns the rest to the funder', async () 
   await expect(done.or(failed).first()).toBeVisible({ timeout: 90_000 })
   if (await failed.count()) throw new Error(`The page shows an error: ${await failed.first().innerText()}`)
   expect(wallet.sent.length - sentBefore).toBe(1)
-  logTx('Send money out', wallet.sent.at(-1)!.hash)
-  expect(await usdcBalance(funder)).toBe(before + parseUnits(SEND_OUT, 6))
+  const sendHash = wallet.sent.at(-1)!.hash
+  logTx('Send money out', sendHash)
+  // The transaction itself: it succeeded and moved exactly SEND_OUT from the wallet to the funder.
+  const receipt = await arc.getTransactionReceipt({ hash: sendHash })
+  expect(receipt.status).toBe('success')
+  const moves = parseEventLogs({ abi: erc20Abi, eventName: 'Transfer', logs: receipt.logs }).filter(
+    (l) => l.address.toLowerCase() === NET.usdc.toLowerCase() && getAddress(l.args.from) === wallet.address && getAddress(l.args.to) === funder,
+  )
+  expect(moves).toHaveLength(1)
+  expect(moves[0]!.args.value).toBe(parseUnits(SEND_OUT, 6))
 
   step = 'sign out'
   await page.getByRole('banner').getByRole('button', { name: new RegExp(wallet.address.slice(0, 6)) }).click()
   await page.getByRole('menuitem', { name: 'Sign out' }).click()
   await expect(page.getByRole('banner').getByRole('button', { name: 'Sign in', exact: true })).toBeVisible()
-
-  // What is left goes back, minus the gas of that transfer.
-  step = 'return funds'
-  const back = await wallet.returnTo(funder)
-  if (back) logTx('Return what is left to the funder', back)
-  console.log(`Test wallet keeps ${formatUnits(await usdcBalance(wallet.address), 6)} USDC`)
 })

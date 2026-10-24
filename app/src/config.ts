@@ -155,6 +155,8 @@ export const NETWORKS: Record<ArcNetwork, NetworkConfig> = {
       '0xf785b29641bfe11c7d5b58f315743df6dbf4fbd0',
       '0xcee03a83809543bfd2a379e145df305d2b508f2e',
       '0xd35e225662def377baaa2c61c42749e55a8a934c',
+      // The e2e wallet (app/.env.testnet.wallet), which makes a Fundit on every wallet e2e run.
+      '0x2b35ea205659e5aab183af1c711564fcd86dc71f',
     ],
   },
 }

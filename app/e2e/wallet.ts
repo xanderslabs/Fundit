@@ -1,10 +1,34 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import type { Page } from '@playwright/test'
 import { type Address, createWalletClient, encodeFunctionData, erc20Abi, type Hex, http, numberToHex, type PublicClient } from 'viem'
-import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
+import { privateKeyToAccount } from 'viem/accounts'
 import { NET, USDC } from './arc'
 
+export const WALLET_FILE = '.env.testnet.wallet'
+
+// The one persistent e2e wallet key, from app/.env.testnet.wallet (gitignored). Its address is in testCreators in
+// src/config.ts, so its Fundits stay off the public lists. A missing file stops the run: a new random key would
+// not be hidden. Never printed.
+export function loadWalletKey(): Hex {
+  const path = fileURLToPath(new URL(`../${WALLET_FILE}`, import.meta.url))
+  if (!existsSync(path)) {
+    throw new Error(
+      `Missing app/${WALLET_FILE}. Make it once with a line E2E_WALLET_PRIVATE_KEY=0x... (from viem generatePrivateKey()), mode 600, then add its lower-case address to testCreators for testnet in src/config.ts. See e2e/README.md.`,
+    )
+  }
+  for (const raw of readFileSync(path, 'utf8').split('\n')) {
+    const line = raw.trim()
+    if (!line.startsWith('E2E_WALLET_PRIVATE_KEY=')) continue
+    const key = line.slice('E2E_WALLET_PRIVATE_KEY='.length).trim()
+    if (!/^0x[0-9a-fA-F]{64}$/.test(key)) throw new Error(`E2E_WALLET_PRIVATE_KEY in app/${WALLET_FILE} is not a 32-byte hex key.`)
+    return key as Hex
+  }
+  throw new Error(`app/${WALLET_FILE} has no E2E_WALLET_PRIVATE_KEY line.`)
+}
+
 // A test wallet for the browser: an EIP-1193 provider that the page announces through EIP-6963 as "Fundit Test
-// Wallet". The page side only forwards requests. The key lives in this Node process (a fresh one per run, never
+// Wallet". The page side only forwards requests. The key lives in this Node process (from app/.env.testnet.wallet, never
 // printed) and signs here. Transactions go out through Arc testnet's public RPC.
 
 export const WALLET_NAME = 'Fundit Test Wallet'
@@ -24,8 +48,8 @@ export type TestWallet = {
   returnTo(to: Address): Promise<Hex | null>
 }
 
-export async function installTestWallet(page: Page, arc: PublicClient): Promise<TestWallet> {
-  const account = privateKeyToAccount(generatePrivateKey())
+export async function installTestWallet(page: Page, arc: PublicClient, key: Hex): Promise<TestWallet> {
+  const account = privateKeyToAccount(key)
   const client = createWalletClient({ account, chain: NET.chain, transport: http(NET.rpcUrl) })
   const wallet: TestWallet = {
     address: account.address,

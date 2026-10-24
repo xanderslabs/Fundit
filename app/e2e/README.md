@@ -163,20 +163,32 @@ npm --prefix app run e2e -- wallet.spec.ts
 
 `e2e/wallet.ts` adds a test wallet to the page: an EIP-1193 provider that the page announces through EIP-6963
 as "Fundit Test Wallet". The page side only forwards each request to the Node test process
-(`page.exposeFunction`). The key is a new `generatePrivateKey()` per run, kept in that process and never printed.
+(`page.exposeFunction`). The key is one persistent key from `app/.env.testnet.wallet` (gitignored by `.env.*`), read only in that process and never printed.
 It signs `eth_sendTransaction` there and broadcasts through the Arc testnet RPC. The wallet starts on chain 1, so
 the app's switch to Arc and the add-network request are part of every run.
 
-The run funds the new account with 0.1 USDC from the funder, then:
+The run tops the wallet up to 0.1 USDC from the funder, then:
 
 1. Signs in: **Sign in**, **Connect a wallet**, **Fundit Test Wallet**. The account pill shows the short address.
 2. Starts a Fundit.
 3. Gives 0.01 USDC to it. The wallet sends one transaction, to `Multicall3From`
    (`0x522fAf9A91c41c443c66765030741e4AaCe147D0`) from the test address: approve and donate in one call.
-4. Sends 0.01 USDC out to the funder from **My page**, signs out, and returns what is left to the funder.
+4. Sends 0.01 USDC out to the funder from **My page**, then signs out.
 
-A run costs the funder about 0.03 USDC in gas and leaves about 0.002 USDC in the test account. The Fundit it
-makes is not by a creator in `testCreators`, so on testnet it shows in the public lists.
+A run costs the funder about 0.03 USDC in gas and leaves about 0.002 USDC in the wallet.
+
+### Make the wallet key once
+
+The wallet's address is in `testCreators` for testnet in `src/config.ts`, so the Fundit each run makes stays off
+Home and Explore, also on fundit.fun. Make the file once, with mode 600:
+
+```shell
+node --input-type=module -e "import {generatePrivateKey,privateKeyToAccount} from 'viem/accounts';import {writeFileSync} from 'node:fs';const k=generatePrivateKey();writeFileSync('.env.testnet.wallet','E2E_WALLET_PRIVATE_KEY='+k+'\n',{mode:0o600,flag:'wx'});console.log(privateKeyToAccount(k).address.toLowerCase())"
+```
+
+Run it in `app/`. It prints only the address. Add that lower-case address to `testCreators` for testnet. The
+spec stops before it spends anything when the file is missing or the address is not in `testCreators`, so a new
+unhidden key is never made silently. Never print, commit or share the file.
 
 The spec also prints every host the page talked to and any request or WebSocket to a WalletConnect or Reown
 host, with the step it happened in.
