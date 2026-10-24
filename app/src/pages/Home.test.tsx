@@ -227,13 +227,13 @@ describe('Home FAQ', () => {
     expect(faq().textContent).not.toMatch(/from another chain|unified balance/i)
   })
 
-  // Sign-in is passkey only, so the answer must not send people to a wallet app.
-  it('says no wallet is needed: a passkey opens a Fundit account', () => {
+  // Email sign-in needs no wallet app, so the answer must not send people to one first.
+  it('says no wallet is needed: an email address opens a Fundit account', () => {
     renderHome()
     const text = faq().textContent
-    expect(text).toMatch(/sign in with a passkey/)
+    expect(text).toMatch(/sign in with your email address/)
     expect(text).toMatch(/Fundit account/)
-    expect(text).not.toMatch(/MetaMask|WalletConnect/)
+    expect(text).not.toMatch(/MetaMask|WalletConnect|passkey/i)
   })
 })
 

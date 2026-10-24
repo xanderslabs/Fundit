@@ -10,7 +10,7 @@ export function Privacy() {
       <h2>1. Introduction</h2>
       <p>
         This policy explains what data Fundit uses and where it goes. Fundit has no database of its own. You sign in
-        with a Fundit account, in one of three ways: a passkey on your device, your email address, or your own wallet.
+        with a Fundit account, in one of two ways: with your email address or with your own wallet.
         The website runs in your browser and reads public blockchains. A small Fundit server also serves the site's
         pages. For email accounts it handles sign-in, keeps your session, and passes each transaction you approve to
         Circle for signing, as sections 3 and 5 describe.
@@ -26,10 +26,6 @@ export function Privacy() {
         <li>The amounts you add, send, receive or withdraw.</li>
         <li>Anything you write into a fundraiser, such as its title, description, image link and links.</li>
         <li>Any message you add to a donation.</li>
-        <li>
-          If you use a passkey, the public keys of your passkeys and the address of your recovery key, which are listed
-          as owners of your Fundit account.
-        </li>
       </ul>
       <p>
         If you switch on "Hide my name", Fundit does not show your name next to the gift on its own pages. The gift is
@@ -47,17 +43,13 @@ export function Privacy() {
       </p>
       <ul>
         <li>
-          Reminders of transfers, recovery key backups and account recoveries you started that have not finished yet,
-          so the page can check on them. A recovery in progress also keeps the new passkey's credential ID and public
-          key.
+          Reminders of transfers you started that have not finished yet, so the page can check on them.
         </li>
         <li>
-          Your Fundit account session. For a passkey account, that is your account address and your passkey's
-          credential ID. For an email account, it is your account address, your Circle wallet ID and your email
-          address, which the account menu shows. For a wallet account, it is your wallet address and the type of
-          wallet. It never holds a private key or the words of your recovery key.
+          Your Fundit account session. For an email account, it is your account address, your Circle wallet ID and
+          your email address, which the account menu shows. For a wallet account, it is your wallet address and the
+          type of wallet. It never holds a private key.
         </li>
-        <li>A note that you saved a recovery key for your account, so Fundit does not ask you again.</li>
         <li>
           Your wallet connection, if you sign in with a wallet. The wallet connection tools
           (wagmi and WalletConnect) save it so you stay connected after a reload.
@@ -73,9 +65,7 @@ export function Privacy() {
         reached, the cookies expire on their own.
       </p>
       <p>
-        Your passkey is kept by your device or password manager, not by Fundit. Your recovery key stays in your
-        browser while you save or use it. Fundit never stores it and never sends it anywhere. Your wallet keeps the
-        keys of a wallet account. Circle keeps part of the keys of an email account, and a transaction needs your
+        Your wallet keeps the keys of a wallet account. Circle keeps part of the keys of an email account, and a transaction needs your
         approval too.
       </p>
 
@@ -95,8 +85,7 @@ export function Privacy() {
       <ul>
         <li>Public RPC providers for Arc, Ethereum and the other supported chains, to read and send transactions.</li>
         <li>
-          Circle, for your Fundit account and passkeys (Modular Wallets and its bundler), for email accounts
-          (user-controlled wallets), and for cross-chain transfers (CCTP, Bridge Kit and the Forwarding Service).
+          Circle, for email accounts (user-controlled wallets) and for cross-chain transfers (CCTP, Bridge Kit and the Forwarding Service).
         </li>
         <li>WalletConnect, only when you sign in with a phone wallet.</li>
         <li>The sites that host fundraiser images and avatars.</li>
@@ -120,8 +109,8 @@ export function Privacy() {
 
       <h2>7. Security</h2>
       <p>
-        No website or network is fully secure. Keep your devices, passkeys, recovery key, email address and wallet safe, and check every
-        transaction before you confirm it with your passkey, in Circle's window or in your wallet.
+        No website or network is fully secure. Keep your devices, email address and wallet safe, and check every
+        transaction before you confirm it in Circle's window or in your wallet.
       </p>
 
       <h2>8. Changes to this policy</h2>

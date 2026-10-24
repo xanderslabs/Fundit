@@ -35,15 +35,11 @@ export function Terms() {
       </p>
       <h3>3.2 Your Fundit account</h3>
       <p>
-        To start a fundraiser or donate you sign in with a Fundit account. You can sign in in three ways. Each way
+        To start a fundraiser or donate you sign in with a Fundit account. You can sign in in two ways. Each way
         gives you its own account with its own address. Fundit does not link them. Money moves from one to another
         only when you send it.
       </p>
       <ul>
-        <li>
-          Passkey: a Circle Modular Wallets smart account on Arc, secured by a passkey such as Face ID, Touch ID,
-          Windows Hello or your phone.
-        </li>
         <li>
           Email: a Circle user-controlled wallet. You enter your email address, Circle sends you a code, and you enter
           it. Fundit's server never signs for you. Each transaction goes out only after you approve it in Circle's
@@ -55,19 +51,13 @@ export function Terms() {
         </li>
       </ul>
       <p>
-        With a passkey account you can save a 12-word recovery key. It is added to your account as a second owner.
-        With the recovery key and a new passkey you can recover your account at <Link to="/recover">/recover</Link>.
-        Fundit never sees your recovery key: it stays in your browser.
-      </p>
-      <p>
         You get into an email account with access to your email address. If you lose access to that email address,
         nobody can recover an email account, including Fundit and Circle. A wallet account is as safe as your wallet
         and its own backup. Fundit cannot recover it.
       </p>
       <p>
-        You are responsible for keeping your devices, passkeys, recovery key, email address and wallet safe. If you
-        lose every passkey and your recovery key, nobody can recover a passkey account, including Fundit and Circle.
-        We cannot reverse a transaction.
+        You are responsible for keeping your devices, email address and wallet safe. We cannot reverse a
+        transaction.
       </p>
       <h3>3.3 Adding and sending money</h3>
       <p>
@@ -104,7 +94,7 @@ export function Terms() {
         new fundraisers later. The fundraiser page shows its rates. Donors can also add an optional tip for Fundit.
         Network fees (gas) and any bridge fees are separate and are paid to the network or to Circle, not to Fundit.
         Every Fundit account pays network fees in USDC from its own balance, and nobody pays them for you. Fundit keeps
-        at least 0.05 USDC in a passkey account, and 0.01 USDC in an email or wallet account, for these fees.
+        0.01 USDC in your account for these fees.
       </p>
 
       <h2>6. Donations</h2>
@@ -130,9 +120,8 @@ export function Terms() {
 
       <h2>7. Third-party services</h2>
       <p>
-        Fundit relies on services we do not run: the Arc blockchain, Circle (USDC, EURC, CCTP, Modular Wallets and
-        passkeys, user-controlled wallets for email sign-in, and the bundler that sends a passkey account's
-        transactions), Resend (which sends the email with your sign-in code), Cloudflare Turnstile (which checks your
+        Fundit relies on services we do not run: the Arc blockchain, Circle (USDC, EURC, CCTP and
+        user-controlled wallets for email sign-in), Resend (which sends the email with your sign-in code), Cloudflare Turnstile (which checks your
         browser before a code is sent), WalletConnect for connecting a phone wallet, and public RPC providers for
         reading blockchain data. Their own terms apply to your use of them, and we are not responsible for their
         availability or errors.
@@ -161,10 +150,10 @@ export function Terms() {
         <li>Loss of profits, data or other intangible losses.</li>
         <li>Bugs or failures in smart contracts.</li>
         <li>Problems with the Arc network, other blockchains or bridges.</li>
-        <li>Problems with your passkeys, devices, email address or wallet, or with connecting a wallet.</li>
+        <li>Problems with your devices, email address or wallet, or with connecting a wallet.</li>
         <li>
-          Loss of your Fundit account if you lose every passkey and your recovery key, lose access to the email address
-          of an email account, or lose your wallet.
+          Loss of your Fundit account if you lose access to the email address of an email account, or lose your
+          wallet.
         </li>
         <li>What an organiser does with the money raised.</li>
       </ul>

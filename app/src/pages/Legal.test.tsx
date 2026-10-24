@@ -31,15 +31,16 @@ describe.each(['terms', 'privacy'] as const)('%s page', (page) => {
     expect(heading.nextElementSibling?.textContent).toBe('A Fundit is a fundraiser created on Fundit.')
   })
 
-  // Passkey sign-in is still one of the ways in, so the policy always describes it.
-  it('always mentions passkeys', () => {
-    expect(text(page)).toMatch(/passkey/i)
+  // Passkeys and the recovery key are gone. A policy that still names them would describe a sign-in that does not exist.
+  // "Recovery" stays in the Terms for a Fundit's backup address, so only the account recovery key is checked.
+  it('never mentions passkeys or a recovery key', () => {
+    const t = text(page)
+    expect(t).not.toMatch(/passkey|recovery key|Modular Wallets|bundler|\/recover\b/i)
   })
 
-  // Sign-in has three methods. A policy that names only some of them would misdescribe the others.
-  it('names the three ways to sign in', () => {
+  // Sign-in has two methods. A policy that names only one of them would misdescribe the other.
+  it('names the two ways to sign in', () => {
     const t = text(page)
-    expect(t).toMatch(/passkey/i)
     expect(t).toMatch(/email/i)
     expect(t).toMatch(/sign in[^.]*(with|using) (a|your own|your) wallet|Wallet: your own wallet/i)
     expect(t).not.toMatch(/cannot sign in with a wallet/i)
@@ -52,11 +53,13 @@ describe.each(['terms', 'privacy'] as const)('%s page', (page) => {
     expect(t).not.toMatch(/AppKit/i)
   })
 
-  // Sign-in is a Fundit account only. The old "passkey wallet" wording read as one wallet option among others.
-  it('says Fundit account, never passkey wallet', () => {
-    const t = text(page)
-    expect(t).toMatch(/Fundit account/)
-    expect(t).not.toMatch(/passkey wallet/i)
+  it('says Fundit account', () => {
+    expect(text(page)).toMatch(/Fundit account/)
+  })
+
+  // Every account keeps the same small fee reserve, so the Terms must state one number.
+  it.runIf(page === 'terms')('states the 0.01 USDC fee reserve', () => {
+    expect(text(page)).toMatch(/Fundit keeps\s+0\.01 USDC in your account for these fees/)
   })
 
   // Connecting a wallet to add money was dropped. Adding money is sending to the account address.
