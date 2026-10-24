@@ -83,7 +83,7 @@ Here's what makes Fundit different from a platform:
 - If a creator loses their key, an optional backup can take over after a 7-day wait, and the creator
   can cancel at any time during that wait.
 
-The app is a static site, and no Fundit server ever holds a key that can move money.
+The site is static files plus a small Worker for email sign-in. No Fundit server holds a key that can move money.
 
 ## 3:15 to 3:45. Traction plan
 

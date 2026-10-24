@@ -8,8 +8,9 @@ Fundit is a crowdfunding app where each fundraiser is its own escrow contract on
 stablecoin-native blockchain. Donations arrive in USDC or EURC. The creator withdraws to Arc, or
 receives USDC on another chain through CCTP V2. The platform operator cannot move or freeze any
 creator's balance. People sign in with a Fundit account, by email (a Circle user-controlled wallet) or
-with their own wallet. Fundit runs as a static web app with no
-backend, no database and no server that holds spending keys. The contracts are deployed on Arc mainnet
+with their own wallet. Fundit has no database. The site is static files plus a
+small Cloudflare Worker for email sign-in. The Worker holds the Circle API key and the Turnstile secret,
+never signs for anyone and holds no key that can move money. The contracts are deployed on Arc mainnet
 and Arc testnet. This paper explains the design, the trust model and the plan for launch.
 
 ## 1. Problem
@@ -36,7 +37,7 @@ removes all of it.
 2. **Stablecoins only.** USDC and EURC, so a donation keeps its value between giving and payout.
 3. **One home chain.** Every campaign lives on Arc. Donors and creators on other chains connect
    through Circle's cross-chain products, never through a third-party bridge.
-4. **No servers with keys, no paid infrastructure.** The app is static. All reads come from public
+4. **No server that can move money, no paid infrastructure.** The site is static files plus a small Worker for email sign-in that holds no key that can move money. All reads come from public
    RPC endpoints and on-chain events, plus Circle's public Iris API.
 5. **No wallet app needed.** A person can sign in with an email address. A person who has a wallet can use it instead.
 6. **Honest claims.** Every test that moves money runs on Arc testnet first.
@@ -64,7 +65,7 @@ Fundit has two parts:
 
 - **Contracts.** `CampaignFactory` and `Campaign`, written in Solidity and tested with Foundry.
 - **App.** A React and TypeScript single-page app, live at `fundit.fun` and served as static files
-  from Cloudflare Pages.
+  from a Cloudflare Worker with static assets. The same Worker runs the email sign-in API.
 
 ```
 USDC or EURC sent on Arc, or USDC on another chain (Add money)
@@ -124,7 +125,7 @@ each way gives its own account with its own address.
   code that Circle sends. Circle signs only after the person approves in Circle's window, and Fundit
   sends the transaction to Arc. Fundit's server never signs. Email sign-in is behind the
   `VITE_EMAIL_SIGNIN` flag.
-- **Wallet.** The account is the person's own browser or phone wallet, connected through WalletConnect.
+- **Wallet.** The account is the person's own wallet. Browser wallets connect directly (EIP-6963). Only phone wallets use WalletConnect.
   The wallet asks for approval of each transaction.
 
 There is no paymaster, so the account pays its own gas in USDC. Every account keeps 0.01 USDC in the
@@ -190,9 +191,9 @@ Each transaction waits for its receipt before the app shows success. The app est
 and adds a 25% margin. Names come from ENS and Basenames. Campaign images are links, with no
 uploads.
 
-Hosting is Cloudflare Pages. A content security policy limits scripts to the site itself and network
-calls to the Arc RPC, the CCTP chain RPCs, Circle's APIs and the WalletConnect hosts that **Add money**
-needs.
+Hosting is a Cloudflare Worker with static assets. A content security policy limits scripts to the site
+itself and Cloudflare Turnstile, and network calls to the Arc RPC, the CCTP chain RPCs, Circle's APIs and
+the WalletConnect hosts that phone-wallet sign-in needs.
 
 ## 5. Trust model
 
@@ -260,8 +261,8 @@ Fundit earns the donation fee, the withdrawal fee and optional tips. All three a
 and in the donate form before the donor signs. The fees for a campaign never change after it is
 created.
 
-Fundit has no infrastructure bill. The app is static, hosting uses a free tier, and all reads use
-public RPC endpoints.
+Fundit has little infrastructure cost. The site is static files plus a small Worker, hosting uses a free
+tier, and all reads use public RPC endpoints.
 
 ## 8. Status
 

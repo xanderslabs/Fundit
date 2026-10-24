@@ -2,11 +2,13 @@
 
 Fundit is a crowdfunding app on Arc, Circle's stablecoin-native blockchain. Each fundraiser is its own
 escrow contract that holds USDC or EURC. Only the creator can withdraw, and anyone can read every
-inflow and outflow on chain. Fundit has no backend, no database and no server that holds keys.
+inflow and outflow on chain. Fundit has no database. The site is static files plus a small Cloudflare
+Worker for email sign-in. The Worker holds the Circle API key and the Turnstile secret. It never signs
+for anyone and holds no key that can move money. The contracts hold the money.
 
 ## What Fundit is
 
-- A static React app, live at [fundit.fun](https://fundit.fun) on Cloudflare Pages, and two Solidity
+- A static React app, live at [fundit.fun](https://fundit.fun) as a Cloudflare Worker with static assets (see [`app/wrangler.jsonc`](app/wrangler.jsonc)), and two Solidity
   contracts deployed on Arc mainnet (chain ID `5042`, CCTP domain `26`). See
   [Deployed addresses](#deployed-addresses).
 - People sign in with a Fundit account, in one of two ways. With email, the account is a Circle
@@ -73,8 +75,9 @@ other Circle product not listed above.
 
 ### Wallet connections
 
-Reown (WalletConnect) appears in one place: **Add money**, where a person can connect a wallet to send
-USDC or EURC into their Fundit account. Nobody signs in with a connected wallet.
+Browser wallets connect directly, found through EIP-6963. WalletConnect (through a Reown project ID)
+pairs phone wallets for wallet sign-in. No Reown interface is used. The **From another chain** tab
+(`VITE_CROSSCHAIN`, off by default) also connects a wallet.
 
 ## Architecture
 
@@ -132,7 +135,7 @@ action with several calls, such as approve and donate, goes out as one transacti
 ### What a person can do
 
 - **Sign in.** **Sign in** opens a dialog with **Continue with email** (when `VITE_EMAIL_SIGNIN=1`) and
-  **Connect a wallet**. After a sign-in from the top bar, the app opens **Add money**. See
+  **Connect a wallet**. See
   [`AccountMenu.tsx`](app/src/components/AccountMenu.tsx),
   [`SignInOptions.tsx`](app/src/components/SignInOptions.tsx) and
   [`EmailLogin.tsx`](app/src/components/EmailLogin.tsx).
@@ -154,13 +157,19 @@ action with several calls, such as approve and donate, goes out as one transacti
 
 ### Set up email sign-in
 
-Skip this section if you only offer wallet sign-in. A production build with `VITE_EMAIL_SIGNIN=1` needs
-`VITE_CIRCLE_UCW_APP_ID` and `VITE_TURNSTILE_SITE_KEY`. See [`app/.env.example`](app/.env.example).
+Skip this section if you only offer wallet sign-in.
 
-1. In Circle Console, open **Wallets** > **User Controlled** > **Configurator** and copy the App ID into
-   `VITE_CIRCLE_UCW_APP_ID`.
-2. In Cloudflare, create a Turnstile widget. Put the site key in `VITE_TURNSTILE_SITE_KEY`. Store the
-   secret in the Worker only, with `wrangler secret put TURNSTILE_SECRET`.
+1. In Circle Console, open **Wallets** > **User Controlled** > **Configurator** and copy the App ID.
+2. In Cloudflare, create a Turnstile widget and copy the site key and the secret.
+3. Set these build variables: `VITE_EMAIL_SIGNIN=1`, `VITE_CIRCLE_UCW_APP_ID` (the App ID) and
+   `VITE_TURNSTILE_SITE_KEY`. A production build with `VITE_EMAIL_SIGNIN=1` fails without the last two.
+4. Set the Worker secrets with `wrangler secret put`: `CIRCLE_API_KEY` and `TURNSTILE_SECRET`.
+5. Set the Worker variables in Cloudflare: `NETWORK` (`testnet` or `mainnet`), `FACTORY_ADDRESS` and
+   `SITE_ORIGIN`. They must match the site build (`VITE_ARC_NETWORK`, `VITE_FACTORY_ADDRESS`). The
+   Worker refuses every email sign-in call while one is missing or wrong. `keep_vars` is on in
+   [`app/wrangler.jsonc`](app/wrangler.jsonc), so a deploy does not remove them.
+
+See [`app/.env.example`](app/.env.example).
 
 ## Hide my name
 
@@ -265,7 +274,7 @@ Requirements: Node.js `>=24.15.0 <25`.
    ```
 
 2. Fill in `.env.local`. Every value is public and ships in the bundle. See the table below. The file is
-   gitignored and used only on your machine. Production builds take their values from the Cloudflare Pages
+   gitignored and used only on your machine. Production builds take their values from the Cloudflare Worker
    build variables.
 3. Start the dev server, then run the type check and unit tests:
 
