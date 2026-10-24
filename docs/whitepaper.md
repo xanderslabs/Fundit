@@ -7,8 +7,8 @@ Version 2.0 draft, October 2026. Prepared for the Circle Developer Grants progra
 Fundit is a crowdfunding app where each fundraiser is its own escrow contract on Arc, Circle's
 stablecoin-native blockchain. Donations arrive in USDC or EURC. The creator withdraws to Arc, or
 receives USDC on another chain through CCTP V2. The platform operator cannot move or freeze any
-creator's balance. People sign in with a Fundit account only: a passkey smart account from Circle
-Modular Wallets. This sign-in ships in the next release. Fundit runs as a static web app with no
+creator's balance. People sign in with a Fundit account, by email (a Circle user-controlled wallet) or
+with their own wallet. Fundit runs as a static web app with no
 backend, no database and no server that holds spending keys. The contracts are deployed on Arc mainnet
 and Arc testnet. This paper explains the design, the trust model and the plan for launch.
 
@@ -38,7 +38,7 @@ removes all of it.
    through Circle's cross-chain products, never through a third-party bridge.
 4. **No servers with keys, no paid infrastructure.** The app is static. All reads come from public
    RPC endpoints and on-chain events, plus Circle's public Iris API.
-5. **No wallet app needed.** A person signs in with a passkey (a fingerprint, face or device PIN).
+5. **No wallet app needed.** A person can sign in with an email address. A person who has a wallet can use it instead.
 6. **Honest claims.** Every test that moves money runs on Arc testnet first.
 
 ## 3. Why Arc and Circle
@@ -54,7 +54,7 @@ Fundit uses these Circle and Arc products:
 | --- | --- |
 | Arc | Home chain for every campaign escrow. |
 | USDC and EURC | The two campaign tokens, used through the ERC-20 interface with 6 decimals. |
-| Modular Wallets | The Fundit account: a passkey smart account. It is the only way to sign in. |
+| User-controlled wallets | The Fundit account for email sign-in. Circle signs after the person approves, and Fundit sends the transaction to Arc. |
 | CCTP V2 and the Forwarding Service | USDC payouts and account sends to other chains, in one transaction. |
 | Bridge Kit | **Add money** from another chain, behind the `VITE_CROSSCHAIN` flag. |
 
@@ -67,12 +67,12 @@ Fundit has two parts:
   from Cloudflare Pages.
 
 ```
-Connected wallet on Arc, or USDC on another chain (Add money)
+USDC or EURC sent on Arc, or USDC on another chain (Add money)
                                  |
                                  v
-         Donor's Fundit account (passkey smart account on Arc)
+         Donor's Fundit account (email or wallet account on Arc)
                                  |
-              approve + donate(), one user operation
+              approve + donate(), one transaction
                                  v
      Campaign escrow on Arc (one EIP-1167 clone per fundraiser)
                                  |
@@ -117,30 +117,35 @@ progress bar always shows the total raised.
 
 ### 4.3 Fundit accounts
 
-A Fundit account is a Circle Modular Wallets smart account on Arc. The owner signs with a passkey bound
-to `fundit.fun`. Each action is a user operation sent to Circle's bundler. There is no paymaster, so the
-account pays its own gas in USDC, and every action that spends USDC leaves 0.05 USDC in the account for
-the network fee.
+A Fundit account is a plain account on Arc. A person signs in with email or with their own wallet, and
+each way gives its own account with its own address.
+
+- **Email.** The account is a Circle user-controlled wallet. The person enters an email address and a
+  code that Circle sends. Circle signs only after the person approves in Circle's window, and Fundit
+  sends the transaction to Arc. Fundit's server never signs. Email sign-in is behind the
+  `VITE_EMAIL_SIGNIN` flag.
+- **Wallet.** The account is the person's own browser or phone wallet, connected through WalletConnect.
+  The wallet asks for approval of each transaction.
+
+There is no paymaster, so the account pays its own gas in USDC. Every account keeps 0.01 USDC in the
+account for the network fee. An action with several calls, such as approve and donate, goes out as one
+transaction.
 
 The account offers these flows:
 
-- **Recovery key.** After sign-up, the person saves 12 words. The account registers the key's address as
-  a recovery address. The words never leave the browser.
-- **Recover.** On `/recover`, the 12 words add a new passkey on the current device as an owner.
-- **Add money.** The person sends USDC or EURC on Arc to the account address, or sends from a connected
-  wallet. The app switches that wallet to Arc before it sends. With `VITE_CROSSCHAIN` on, Bridge Kit
+- **Add money.** The person sends USDC or EURC on Arc to the account address, from any wallet or
+  exchange. Card and bank are coming soon. With `VITE_CROSSCHAIN` on, Bridge Kit
   also burns USDC on another CCTP chain with the account as the recipient, and the Forwarding Service
   mints it on Arc.
 - **Send money out.** The account sends USDC or EURC to any address on Arc, or USDC to another CCTP
   chain with the Forwarding Service.
 
-Today, connecting a wallet in **Add money** is the only use of Reown (WalletConnect). Nobody signs in with a
-connected wallet.
+Reown (WalletConnect) pairs phone wallets for wallet sign-in. No Reown interface is used.
 
 ### 4.4 Donations
 
 The donor's Fundit account approves the campaign for `amount + tip` and calls `donate(amount, tip,
-message)` in one user operation. The campaign records the account as `msg.sender`.
+message)` in one transaction. The campaign records the account as `msg.sender`.
 
 **Hide my name** puts the ASCII marker `[anon]` at the start of the message. Fundit pages then show
 "Anonymous" in place of the donor's name. This hides the name on Fundit only. The gift is not private:
@@ -243,8 +248,8 @@ second address that controls the same asset.
 - **Static analysis.** Slither, with every accepted finding listed in `contracts/SECURITY.md`.
 - **Arc testnet.** The app has an Arc testnet build setting. A build with `VITE_ARC_NETWORK=testnet`
   reads every address and URL for testnet, and refuses to run on `fundit.fun`. The end-to-end suite
-  runs on Arc testnet against the testnet factory. It signs up with a virtual passkey through Circle's
-  real flow and runs each money flow: add money, create, give with Hide my name on, withdraw and send money out.
+  runs on Arc testnet against the testnet factory. It signs in with a test wallet and runs
+  each money flow: add money, create, give with Hide my name on, withdraw and send money out.
   It checks every result on chain.
 
 The contracts have not had a third-party audit. A grant would fund one (section 10).
@@ -266,9 +271,9 @@ As of October 2026:
   the Arc explorer, which blocks automated verification. The addresses and deploy block are in the
   table below.
 - Contracts on Arc testnet: deployed at block `67870064`. The addresses are in the table below.
-- App: `fundit.fun` runs on Arc mainnet. Passkey sign-in ships with the next release, once the
-  `fundit.fun` Circle client key is set. In that release, sign-in is passkey only. Add money from
-  another chain is behind `VITE_CROSSCHAIN`.
+- App: `fundit.fun` runs on Arc mainnet. Sign-in is by wallet, or by email when
+  `VITE_EMAIL_SIGNIN=1`. Email sign-in stays off on mainnet until the mainnet email check passes. Add
+  money from another chain is behind `VITE_CROSSCHAIN`.
 - Traction: none yet. Metrics in this paper are placeholders until launch.
 
 Arc mainnet contracts (deploy block `26452579`):
@@ -290,10 +295,10 @@ Arc testnet contracts (deploy block `67870064`):
 ## 9. Launch plan
 
 1. Done: deploy the factory to Arc testnet and record its address.
-2. Done: run the end-to-end specs on Arc testnet with a virtual passkey: sign up, save a recovery key,
-   add money, create a fundraiser, give, withdraw and send money out.
-3. Run a manual passkey check on a testnet build.
-4. Set the `fundit.fun` client key and release passkey sign-in on `fundit.fun`.
+2. Done: run the end-to-end specs on Arc testnet with a test wallet: sign in, create a fundraiser,
+   give, withdraw and send money out.
+3. Run a manual email sign-in check on the mainnet build.
+4. Turn on email sign-in on `fundit.fun`.
 
 ## 10. Roadmap and grant milestones
 
@@ -302,7 +307,7 @@ brackets are placeholders to agree with the program.
 
 | Milestone | Deliverable | Evidence |
 | --- | --- | --- |
-| M1: Mainnet launch | Factory deployed and app live on `fundit.fun` (both done), passkey sign-in released | Arc explorer links, live transactions |
+| M1: Mainnet launch | Factory deployed and app live on `fundit.fun` (both done), email sign-in released | Arc explorer links, live transactions |
 | M2: Add money from other chains | `VITE_CROSSCHAIN` enabled after testnet checks | Live transactions for each source chain |
 | M3: Audit | Third-party review of `Campaign` and `CampaignFactory`, fixes in a new factory if needed | Published report |
 | M4: Adoption | [placeholder: number of campaigns] campaigns and [placeholder: USDC volume] raised | On-chain factory data |
@@ -319,11 +324,9 @@ Later ideas, not milestones yet:
 
 - **Fixed configuration.** The fees for existing campaigns and the EURC payout list cannot change after
   the deploy. A new EURC route needs a new factory.
-- **Passkey domain.** Passkeys are bound to `fundit.fun`. Moving to another domain would give people
-  new passkeys and new account addresses, so the domain must stay.
-- **Lost passkey.** A person who loses every device with their passkey and has no recovery key cannot
-  get the account back. The app asks for a recovery key until one is saved.
-- **Smart account payouts.** A Fundit account may not exist on other chains. The app warns before a
+- **Lost access.** Nobody can recover an email account without its email address, and Fundit cannot
+  recover a wallet account. Each person keeps their own email address and wallet safe.
+- **Account payouts.** A Fundit account may not exist on other chains. The app warns before a
   payout to another chain and asks for an address the person controls there.
 - **No audit yet.** Mitigated by tests, fork tests, Slither and testnet runs. An audit is milestone
   M3.

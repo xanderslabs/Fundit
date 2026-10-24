@@ -9,10 +9,9 @@ inflow and outflow on chain. Fundit has no backend, no database and no server th
 - A static React app, live at [fundit.fun](https://fundit.fun) on Cloudflare Pages, and two Solidity
   contracts deployed on Arc mainnet (chain ID `5042`, CCTP domain `26`). See
   [Deployed addresses](#deployed-addresses).
-- fundit.fun runs on Arc mainnet. Passkey sign-in ships with the next release, once the `fundit.fun`
-  Circle client key is set. The rest of this README describes that release.
-- People sign in with a Fundit account only. A Fundit account is a passkey smart account from Circle
-  Modular Wallets. There is no wallet sign-in.
+- People sign in with a Fundit account, in one of two ways. With email, the account is a Circle
+  user-controlled wallet. With a wallet, the account is the person's own browser or phone wallet. See
+  [Fundit accounts](#fundit-accounts).
 - `CampaignFactory` deploys one `Campaign` per fundraiser as an EIP-1167 clone with CREATE2.
 - Each `Campaign` holds exactly one token, USDC or EURC, chosen by the creator at creation.
 - The contracts are immutable. There are no proxies and no upgrade path.
@@ -24,7 +23,7 @@ inflow and outflow on chain. Fundit has no backend, no database and no server th
    Fundit account. The factory deploys the campaign and copies the current fees into it. Those fees
    never change for that campaign.
 2. **Donate.** The donor's Fundit account approves the campaign and calls `donate(amount, tip,
-   message)` in one user operation. The donor is `msg.sender`.
+   message)` in one transaction. The donor is `msg.sender`.
 3. **Settle other inflows.** USDC that reaches the campaign by a CCTP mint or by a plain transfer is
    "unaccounted". `settle()` books it as a donation and charges the same donation fee. Anyone can
    call `settle()`, and `donate`, `withdraw` and `claimFees` call it first.
@@ -57,7 +56,7 @@ by default ([`app/src/config.ts`](app/src/config.ts)).
 | Arc | Home chain for every campaign. Gas is paid in USDC. | [`app/src/config.ts`](app/src/config.ts) | On |
 | USDC | Campaign token, used through the ERC-20 interface with 6 decimals. | [`app/src/config.ts`](app/src/config.ts), [`CampaignFactory.sol`](contracts/src/CampaignFactory.sol#L105) | On |
 | EURC | Campaign token. EURC campaigns take donations and pay out on Arc only. | [`app/src/config.ts`](app/src/config.ts), [`Create.tsx`](app/src/pages/Create.tsx) | On |
-| Modular Wallets (passkeys) | The Fundit account: a passkey smart account. Every action is a user operation sent to Circle's bundler. | [`app/src/lib/passkey.ts`](app/src/lib/passkey.ts) | On |
+| User-controlled wallets | Email sign-in. Circle holds part of the keys and signs after the person approves in Circle's window. Fundit sends the transaction to Arc. | [`app/src/lib/emailSender.ts`](app/src/lib/emailSender.ts), [`app/src/lib/circleEmail.ts`](app/src/lib/circleEmail.ts) | Behind `VITE_EMAIL_SIGNIN` |
 | CCTP V2 (`TokenMessengerV2`) | Creator payouts, and **Send money out** from a Fundit account, in USDC to the CCTP chains in `CCTP_CHAINS`. | [`Campaign.sol`](contracts/src/Campaign.sol#L217-L231), [`app/src/lib/payout.ts`](app/src/lib/payout.ts), [`app/src/lib/accountWithdraw.ts`](app/src/lib/accountWithdraw.ts) | On |
 | CCTP Forwarding Service | Hook data on every cross-chain payout and send, so Circle submits the destination mint. | [`app/src/config.ts`](app/src/config.ts) (`FORWARD_HOOK_DATA`) | On |
 | CCTP V2 fees API (Iris) | Fast and Standard fee quotes with forwarding. | [`app/src/lib/iris.ts`](app/src/lib/iris.ts) | On |
@@ -68,7 +67,7 @@ testnet, it is Ethereum Sepolia and Base Sepolia.
 
 ### Not used
 
-Fundit sends no user operation through a paymaster. A Fundit account pays its own gas in USDC on Arc.
+Fundit uses no paymaster. A Fundit account pays its own gas in USDC on Arc.
 Fundit does not use Arc Memo, Gateway, Unified Balance Kit, Onramp Kit, Swap, StableFX, USYC or any
 other Circle product not listed above.
 
@@ -81,8 +80,8 @@ USDC or EURC into their Fundit account. Nobody signs in with a connected wallet.
 
 ```mermaid
 flowchart TD
-    W["Connected wallet on Arc, or<br/>USDC on another chain (VITE_CROSSCHAIN)"] -- "Add money" --> A
-    A["Donor's Fundit account<br/>(passkey smart account on Arc)"] -- "approve, then donate()<br/>in one user operation" --> C
+    W["USDC or EURC sent on Arc, or<br/>USDC on another chain (VITE_CROSSCHAIN)"] -- "Add money" --> A
+    A["Donor's Fundit account<br/>(email or wallet account on Arc)"] -- "approve, then donate()<br/>in one transaction" --> C
     F["CampaignFactory<br/>(fees capped at 5%)"] -- "CREATE2 clone,<br/>fees copied once" --> C
     C["Campaign escrow on Arc<br/>(one EIP-1167 clone per fundraiser)"]
     C -- "withdraw(), destDomain 26:<br/>ERC-20 transfer" --> R1["Recipient on Arc"]
@@ -113,56 +112,55 @@ findings. The short version:
   recovery, and after a 7-day wait (`RECOVERY_DELAY`) it becomes the creator. The creator keeps every
   power during the wait and can cancel it at any time.
 
-## Fundit accounts (passkeys)
+## Fundit accounts
 
-A Fundit account is a Circle Modular Wallets smart account on Arc. The owner signs with a passkey (a
-fingerprint, face or device PIN), so no wallet app is needed. It is the only way to sign in. A
-production build fails without `VITE_CIRCLE_CLIENT_KEY`. The account pays its own gas in USDC, with no
-paymaster. Every action that spends USDC leaves 0.05 USDC (`PASSKEY_GAS_BUFFER`) in the account for the
-network fee.
+A Fundit account is a plain account on Arc. There are two ways to sign in, and each gives its own
+account with its own address. Fundit does not link them.
+
+- **Email.** The account is a Circle user-controlled wallet. The person enters an email address and a
+  code that Circle sends. Circle signs only after the person approves in Circle's window, and Fundit
+  sends the transaction to Arc. Fundit's server never signs. **Continue with email** shows only when
+  `VITE_EMAIL_SIGNIN=1`.
+- **Wallet.** The account is the person's own wallet, in the browser or on a phone through WalletConnect.
+  The wallet asks for approval of each transaction.
+
+The account pays its own gas in USDC, with no paymaster. Every account keeps 0.01 USDC
+(`EOA_GAS_RESERVE`) for the network fee, so an action that spends USDC leaves that much behind. An
+action with several calls, such as approve and donate, goes out as one transaction through
+`Multicall3From`.
 
 ### What a person can do
 
-- **Sign in.** **Sign in** opens a dialog with **Continue with passkey**. On the next step the person
-  enters a name for a new passkey and selects **Create my Fundit account**, or selects **Sign in with a
-  passkey** to use one already on the device. After a sign-in from the top bar, the app opens **Add
-  money**. See [`AccountMenu.tsx`](app/src/components/AccountMenu.tsx) and
-  [`PasskeyLogin.tsx`](app/src/components/PasskeyLogin.tsx).
-- **Save a recovery key.** Right after sign-up, a dialog offers a recovery key: 12 words that the person
-  writes down and keeps safe. The person types 3 of the words back. The account then registers the key's
-  address with Circle's `registerRecoveryAddress`. The words never leave the browser. Only the derived
-  address does. The account needs 0.05 USDC first, for the network fee. Until a key is saved, **My page**
-  keeps asking. See [`AddBackupPasskey.tsx`](app/src/components/AddBackupPasskey.tsx).
-- **Recover the account.** `/recover` takes the 12 words, creates a new passkey on this device and adds it
-  as an owner with `executeRecovery`. The sign-in dialog links to it as **Lost your passkey? Recover your
-  account**. See [`Recover.tsx`](app/src/pages/Recover.tsx).
+- **Sign in.** **Sign in** opens a dialog with **Continue with email** (when `VITE_EMAIL_SIGNIN=1`) and
+  **Connect a wallet**. After a sign-in from the top bar, the app opens **Add money**. See
+  [`AccountMenu.tsx`](app/src/components/AccountMenu.tsx),
+  [`SignInOptions.tsx`](app/src/components/SignInOptions.tsx) and
+  [`EmailLogin.tsx`](app/src/components/EmailLogin.tsx).
 - **Add money.** The **Add money** button on **My page** opens a panel. Every Add money link in the app
   opens `/me?add=1`. The panel shows the account address, with a copy button and a QR code, for USDC or
   EURC sent on Arc from any wallet or exchange. Card and bank are coming soon. A wallet connects only for
   wallet sign-in. With `VITE_CROSSCHAIN=1`, a **From another chain** tab takes USDC from
   another chain through Bridge Kit. See [`AddMoneyPanel.tsx`](app/src/components/AddMoneyPanel.tsx).
-- **Give.** The Fundit account approves the campaign and calls `donate` in one user operation. If the
+- **Give.** The Fundit account approves the campaign and calls `donate` in one transaction. If the
   balance is too low, the **Give** panel links to **Add money**. See
   [`DonatePanel.tsx`](app/src/components/DonatePanel.tsx).
 - **Send money out.** The **Send** button on **My page** opens the **Send money out** form. It sends USDC or EURC to any address on
-  Arc, or USDC to another CCTP chain with the Forwarding Service, in one passkey confirmation. It refuses
-  the account's own address, and any USDC amount that leaves less than 0.05 USDC behind. See
+  Arc, or USDC to another CCTP chain with the Forwarding Service, in one confirmation. It refuses
+  the account's own address, and any USDC amount that leaves less than 0.01 USDC behind. See
   [`AccountWithdraw.tsx`](app/src/components/AccountWithdraw.tsx).
 - **Withdraw as an organiser.** **Manage** withdraws a campaign's balance on Arc, or as USDC to any chain
   in `CCTP_CHAINS`. Before a payout to another chain, the app warns that the Fundit account may not exist
   there. See [`Manage.tsx`](app/src/pages/Manage.tsx).
 
-### Set up Circle Console
+### Set up email sign-in
 
-Passkeys are bound to `fundit.fun`. The WebAuthn relying party comes from the client key's domain, so a
-passkey created on one domain does not work on another.
+Skip this section if you only offer wallet sign-in. A production build with `VITE_EMAIL_SIGNIN=1` needs
+`VITE_CIRCLE_UCW_APP_ID` and `VITE_TURNSTILE_SITE_KEY`. See [`app/.env.example`](app/.env.example).
 
-1. In Circle Console, create a client key under **Keys** > **Client Key**. Set the passkey domain and the
-   allowed domain to `fundit.fun`.
-2. Create a second client key for `localhost`. Use it only for development, with throwaway accounts.
-3. Set `VITE_CIRCLE_CLIENT_KEY` to the key. For development, put it in `app/.env.local` with the
-   `localhost` key. For production, put it in the Cloudflare Pages build variables with the `fundit.fun` key. See
-   [`app/.env.example`](app/.env.example).
+1. In Circle Console, open **Wallets** > **User Controlled** > **Configurator** and copy the App ID into
+   `VITE_CIRCLE_UCW_APP_ID`.
+2. In Cloudflare, create a Turnstile widget. Put the site key in `VITE_TURNSTILE_SITE_KEY`. Store the
+   secret in the Worker only, with `wrangler secret put TURNSTILE_SECRET`.
 
 ## Hide my name
 
@@ -285,8 +283,10 @@ From [`app/.env.example`](app/.env.example):
 | --- | --- |
 | `VITE_ARC_NETWORK` | `mainnet` (the default when empty) or `testnet`. Every chain ID, token and contract address, RPC and Circle API URL comes from this value. |
 | `VITE_ALLOW_TESTNET_BUILD` | Set to `1` to let a production build (`npm run build`) use `testnet`. Without it, a production testnet build fails, so running a site on testnet is always an explicit choice. |
-| `VITE_REOWN_PROJECT_ID` | Reown (WalletConnect) project ID, for connecting a wallet in **Add money**. A production build fails without it. |
-| `VITE_CIRCLE_CLIENT_KEY` | Circle client key for Fundit accounts. A production build fails without it. Use the `fundit.fun` key in production and a separate `localhost` key in development. |
+| `VITE_REOWN_PROJECT_ID` | Reown (WalletConnect) project ID, for phone wallets. A production build fails without it. |
+| `VITE_EMAIL_SIGNIN` | Set to `1` to show **Continue with email** in the sign-in dialog. Off by default, and off on mainnet until the mainnet email check passes. |
+| `VITE_CIRCLE_UCW_APP_ID` | Circle App ID for user-controlled wallets. A production build with `VITE_EMAIL_SIGNIN=1` fails without it. |
+| `VITE_TURNSTILE_SITE_KEY` | Cloudflare Turnstile site key. A production build with `VITE_EMAIL_SIGNIN=1` fails without it. |
 | `VITE_FACTORY_ADDRESS` | `CampaignFactory` on the chosen network. Set it together with `VITE_FACTORY_DEPLOY_BLOCK`. A production build fails if either is empty. |
 | `VITE_FACTORY_DEPLOY_BLOCK` | The block the factory was deployed in. |
 | `VITE_ARC_RPC_URL` | Arc RPC override. Leave it empty to use the network's own RPC. If you set it, it must point at the chosen network. |
@@ -305,7 +305,6 @@ tokens have no value. The unit tests use mocks, and the contract fork suite only
 
    ```shell
    VITE_ARC_NETWORK=testnet
-   VITE_CIRCLE_CLIENT_KEY=<localhost-client-key>
    VITE_FACTORY_ADDRESS=<testnet-factory-address>
    VITE_FACTORY_DEPLOY_BLOCK=<testnet-deploy-block>
    ```
@@ -325,11 +324,9 @@ tokens have no value. The unit tests use mocks, and the contract fork suite only
 
 ### End-to-end tests
 
-The Playwright suite runs on Arc testnet with a virtual passkey. It signs up, saves a recovery key, adds
-money from a funder account, creates a Fundit, gives anonymously, withdraws and sends money out. A run
-costs the funder about 2.2 to 2.5 testnet USDC. Most of that is gas: Circle's bundler prices each user
-operation at about 730 to 900 gwei, against an Arc base fee of about 20 gwei, and the first operation also
-deploys the account. See [`app/e2e/README.md`](app/e2e/README.md).
+The Playwright suite runs on Arc testnet with a test wallet that the page finds through EIP-6963. It
+signs in with the wallet, creates a Fundit, gives anonymously, withdraws and sends money out. A run
+costs the funder about 0.02 to 0.03 testnet USDC in gas. See [`app/e2e/README.md`](app/e2e/README.md).
 
 ## Status and roadmap
 
@@ -339,8 +336,9 @@ deploys the account. See [`app/e2e/README.md`](app/e2e/README.md).
   [Deployed addresses](#deployed-addresses). Tested with unit, fuzz, invariant and Arc mainnet fork tests.
 - Contracts on Arc testnet: deployed at block `67870064`. See
   [Arc testnet](#arc-testnet-chain-id-5042002). The end-to-end suite runs on them.
-- App: live at [fundit.fun](https://fundit.fun) on Arc mainnet. Passkey-only sign-in (this branch)
-  ships with the next release, once the `fundit.fun` Circle client key is set. Unit tests run with mocks.
+- App: live at [fundit.fun](https://fundit.fun) on Arc mainnet. Sign-in is by wallet, or by email when
+  `VITE_EMAIL_SIGNIN=1`. Email sign-in stays off on mainnet until the mainnet email check passes. Unit
+  tests run with mocks.
 - `VITE_CROSSCHAIN`: off by default.
 - EURC: Arc only. On Arc mainnet, CCTP cannot burn EURC today
   (`depositForBurn(EURC)` reverts with "Burn token not supported" on a fork for domains 0, 1, 6 and

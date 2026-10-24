@@ -22,15 +22,14 @@ factory is at `0x6890D40a9A472D0d05aDb5938D85B07059ad54ab`.]
 
 Here's the home page. Every card is a campaign contract. On mainnet these contracts are live today.
 
-[Select Sign in, then Continue with passkey, and create a Fundit account.]
+[Select Sign in, then Continue with email, and enter the code. Or select Connect a wallet.]
 
-I sign in with a passkey: my fingerprint. There's no wallet app and no seed phrase to start. Fundit
-offers me a recovery key right away, 12 words I write down in case I lose this device.
+I sign in with my email address, or with a wallet I already have. With email there's no wallet app and
+no seed phrase to start. Circle signs only after I approve in its window.
 
 [Open Add money.]
 
-I add USDC to my Fundit account. I can send it to this address from any wallet or exchange, or connect
-a wallet here and send from it.
+I add USDC to my Fundit account. I send it to this address from any wallet or exchange.
 
 [Click Start a Fundit.]
 
@@ -61,13 +60,14 @@ Fundit is built on Circle from the contract up:
 
 - **Arc** is the home chain for every campaign.
 - **USDC and EURC** are the only two campaign tokens.
-- **Modular Wallets** give every person a Fundit account with a passkey. It's the only way to sign in.
+- **User-controlled wallets** give a person a Fundit account from their email address. A person can also
+  sign in with their own wallet.
 - **CCTP V2 and the Forwarding Service** pay creators on other chains, and let people send money out of
   their Fundit account.
 - **Bridge Kit** brings USDC in from another chain when you add money. It's behind a flag.
 
 The app has an Arc testnet build setting. The end-to-end tests run every money flow on Arc testnet with
-a real passkey sign-up. We'd rather under-claim than ship a path that strands a donation.
+a test wallet. We'd rather under-claim than ship a path that strands a donation.
 
 ## 2:30 to 3:15. The trust model
 
@@ -88,8 +88,8 @@ The app is a static site, and no Fundit server ever holds a key that can move mo
 ## 3:15 to 3:45. Traction plan
 
 We're early. The contracts are deployed on Arc mainnet and verified on Sourcify. They're tested with
-unit, fuzz, invariant and fork tests. fundit.fun runs on Arc mainnet today. Passkey sign-in ships with
-the next release.
+unit, fuzz, invariant and fork tests. fundit.fun runs on Arc mainnet today. Sign-in is by wallet, and by
+email once the mainnet email check passes.
 Our first users come from:
 
 - Diaspora fundraisers, where cross-border payouts hurt most.
@@ -103,7 +103,7 @@ USDC raised. We'll report every number from on-chain data.
 
 We're applying for a Circle Developer Grant with milestone-based USDC payments:
 
-1. Passkey sign-in released on fundit.fun, on the deployed mainnet factory.
+1. Email sign-in released on fundit.fun, on the deployed mainnet factory.
 2. Adding money from other chains switched on after testnet checks.
 3. A third-party audit of the two contracts.
 4. Card donations through Onramp Kit in V2.

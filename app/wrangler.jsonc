@@ -26,7 +26,7 @@
 			"simple": { "limit": 10, "period": 60 }
 		}
 	],
-	// fundit.fun is the permanent home (also the Circle passkey domain).
+	// fundit.fun is the permanent home.
 	"routes": [
 		{ "pattern": "fundit.fun", "custom_domain": true },
 		{ "pattern": "www.fundit.fun", "custom_domain": true }

@@ -79,17 +79,17 @@
   <header class="prose" style="display:grid;gap:12px">
     <div class="eyebrow">Fundit V2 on Arc mainnet</div>
     <h1>Fundit architecture</h1>
-    <p class="lede">Every fundraiser is its own escrow contract on Arc. In the next release, people sign in with a Fundit account, a passkey smart account. Donations arrive in USDC or EURC, the creator withdraws to Arc or to another CCTP chain, and no operator key can move a creator's balance.</p>
+    <p class="lede">Every fundraiser is its own escrow contract on Arc. People sign in with a Fundit account, by email (a Circle user-controlled wallet) or with their own wallet. Donations arrive in USDC or EURC, the creator withdraws to Arc or to another CCTP chain, and no operator key can move a creator's balance.</p>
   </header>
 
-  <div class="note prose"><strong>Live on Arc mainnet.</strong> fundit.fun runs on Arc mainnet, and the factory and implementation are deployed. Passkey sign-in ships with the next release. See <a href="#deployed">Deployed contracts</a>. The app has an Arc testnet build setting, and the end-to-end suite runs every money flow on Arc testnet against the testnet factory.</div>
+  <div class="note prose"><strong>Live on Arc mainnet.</strong> fundit.fun runs on Arc mainnet, and the factory and implementation are deployed. Email sign-in stays off on mainnet until the mainnet email check passes, and wallet sign-in is available. See <a href="#deployed">Deployed contracts</a>. The app has an Arc testnet build setting, and the end-to-end suite runs every money flow on Arc testnet against the testnet factory.</div>
 
   <section aria-labelledby="flow">
     <h2 id="flow">Money flow</h2>
     <div class="diagram">
       <svg viewBox="0 0 900 470" role="img" aria-labelledby="svg-title svg-desc">
         <title id="svg-title">Fundit money flow</title>
-        <desc id="svg-desc">A connected wallet on Arc, or USDC from another chain, adds money to the donor's Fundit account. The Fundit account donates into one campaign escrow on Arc. The factory creates the escrow. The creator withdraws on Arc or through CCTP to another chain, and fees go to the treasury through claimFees.</desc>
+        <desc id="svg-desc">USDC or EURC sent on Arc from any wallet, or USDC from another chain, adds money to the donor's Fundit account. The Fundit account donates into one campaign escrow on Arc. The factory creates the escrow. The creator withdraws on Arc or through CCTP to another chain, and fees go to the treasury through claimFees.</desc>
         <defs>
           <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
           <marker id="af" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-flag" d="M0,0 L10,5 L0,10 z"/></marker>
@@ -97,13 +97,13 @@
 
         <!-- Money in -->
         <rect class="n-box" x="10" y="20" width="230" height="78" rx="12"/>
-        <text class="t-h" x="26" y="48">Connected wallet</text>
+        <text class="t-h" x="26" y="48">Any wallet or exchange</text>
         <text class="t-s" x="26" y="68">Add money on Arc</text>
-        <text class="t-m" x="26" y="86">Reown (WalletConnect)</text>
+        <text class="t-m" x="26" y="86">Send to the account address</text>
 
         <rect class="n-box" x="10" y="130" width="230" height="78" rx="12"/>
         <text class="t-h" x="26" y="158">Donor's Fundit account</text>
-        <text class="t-s" x="26" y="178">Passkey smart account on Arc</text>
+        <text class="t-s" x="26" y="178">Email or wallet account on Arc</text>
         <text class="t-m" x="26" y="196">approve + donate()</text>
 
         <rect class="n-box" x="10" y="240" width="230" height="78" rx="12"/>
@@ -167,7 +167,7 @@
         <tbody>
           <tr><td>Arc</td><td>Home chain. Gas is paid in USDC.</td><td><code>app/src/config.ts</code></td><td><span class="pill on">On</span></td></tr>
           <tr><td>USDC and EURC</td><td>Campaign tokens, ERC-20 interface, 6 decimals</td><td><code>CampaignFactory.sol</code></td><td><span class="pill on">On</span></td></tr>
-          <tr><td>Modular Wallets</td><td>The Fundit account, a passkey smart account. The only way to sign in.</td><td><code>app/src/lib/passkey.ts</code></td><td><span class="pill on">On</span></td></tr>
+          <tr><td>User-controlled wallets</td><td>Email sign-in. Circle signs after the person approves, and Fundit sends the transaction to Arc.</td><td><code>app/src/lib/emailSender.ts</code></td><td><span class="pill off">Flag</span></td></tr>
           <tr><td>CCTP V2 and Forwarding Service</td><td>USDC payouts and account sends to other CCTP chains</td><td><code>Campaign.sol</code>, <code>app/src/lib/payout.ts</code>, <code>app/src/lib/accountWithdraw.ts</code></td><td><span class="pill on">On</span></td></tr>
           <tr><td>Bridge Kit</td><td>Add money from another chain into the Fundit account</td><td><code>app/src/lib/bridge.ts</code></td><td><span class="pill off">Flag</span></td></tr>
         </tbody>
