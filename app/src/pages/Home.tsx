@@ -116,8 +116,9 @@ function faqs(): Faq[] {
       q: 'Do I need a crypto wallet?',
       a: (
         <p>
-          No. You sign in with a passkey, and Fundit opens a Fundit account on Arc for you. You add USDC to it before
-          you give.
+          No. You can sign in with a passkey or your email address, and Fundit opens a Fundit account on Arc for you.
+          If you already have a wallet, you can sign in with that instead. You add USDC to your account before you
+          give.
         </p>
       ),
     },

@@ -9,9 +9,11 @@ export function Privacy() {
 
       <h2>1. Introduction</h2>
       <p>
-        This policy explains what data Fundit uses and where it goes. Fundit has no server of its own that stores your
-        data. You sign in with a Fundit account: a smart account on the Arc blockchain, secured by a passkey on your
-        device. The website runs in your browser and reads public blockchains.
+        This policy explains what data Fundit uses and where it goes. Fundit has no database of its own. You sign in
+        with a Fundit account, in one of three ways: a passkey on your device, your email address, or your own wallet.
+        The website runs in your browser and reads public blockchains. A small Fundit server also serves the site's
+        pages. For email accounts it handles sign-in, keeps your session, and passes each transaction you approve to
+        Circle for signing, as sections 3 and 5 describe.
       </p>
 
       <h2>2. Data on the blockchain</h2>
@@ -25,8 +27,8 @@ export function Privacy() {
         <li>Anything you write into a fundraiser, such as its title, description, image link and links.</li>
         <li>Any message you add to a donation.</li>
         <li>
-          The public keys of your passkeys and the address of your recovery key, which are listed as owners of your
-          Fundit account.
+          If you use a passkey, the public keys of your passkeys and the address of your recovery key, which are listed
+          as owners of your Fundit account.
         </li>
       </ul>
       <p>
@@ -39,7 +41,10 @@ export function Privacy() {
       </p>
 
       <h2>3. Data stored in your browser</h2>
-      <p>Fundit sets no cookies. It uses your browser's local storage only for:</p>
+      <p>
+        Fundit sets cookies only if you sign in with email (described below). It also uses your browser's local
+        storage, only for:
+      </p>
       <ul>
         <li>
           Reminders of transfers, recovery key backups and account recoveries you started that have not finished yet,
@@ -47,19 +52,31 @@ export function Privacy() {
           key.
         </li>
         <li>
-          Your Fundit account session: your account address and your passkey's credential ID. It never holds a private
-          key or the words of your recovery key.
+          Your Fundit account session. For a passkey account, that is your account address and your passkey's
+          credential ID. For an email account, it is your account address, your Circle wallet ID and your email
+          address, which the account menu shows. For a wallet account, it is your wallet address and the type of
+          wallet. It never holds a private key or the words of your recovery key.
         </li>
         <li>A note that you saved a recovery key for your account, so Fundit does not ask you again.</li>
         <li>
-          Your wallet connection, only if you connect a wallet to add money. The wallet connection tools (wagmi, Reown
-          and WalletConnect) save it so you stay connected after a reload.
+          Your wallet connection, if you sign in with a wallet or connect one to add money. The wallet connection tools
+          (wagmi and WalletConnect) save it so you stay connected after a reload.
         </li>
       </ul>
       <p>This data stays on your device. You can remove it at any time by clearing your browser's site data.</p>
       <p>
+        If you sign in with email, Fundit's server sets two cookies on fundit.fun. They hold your Circle login tokens.
+        They are HttpOnly, so page scripts cannot read them, and they last up to 14 days after your last visit. Your
+        browser tab also keeps a Circle user token and encryption key in its session storage until you close the tab.
+        Fundit's server never signs for you. Each transaction goes out only after you approve it in Circle's window.
+        Signing out asks the server to clear the cookies and clears the session storage. If the server cannot be
+        reached, the cookies expire on their own.
+      </p>
+      <p>
         Your passkey is kept by your device or password manager, not by Fundit. Your recovery key stays in your
-        browser while you save or use it. Fundit never stores it and never sends it anywhere.
+        browser while you save or use it. Fundit never stores it and never sends it anywhere. Your wallet keeps the
+        keys of a wallet account. Circle keeps part of the keys of an email account, and a transaction needs your
+        approval too.
       </p>
 
       <h2>4. Names and avatars</h2>
@@ -78,26 +95,34 @@ export function Privacy() {
       <ul>
         <li>Public RPC providers for Arc, Ethereum and the other supported chains, to read and send transactions.</li>
         <li>
-          Circle, for your Fundit account and passkeys (Modular Wallets and its bundler), and for cross-chain transfers
-          (CCTP, Bridge Kit and the Forwarding Service).
+          Circle, for your Fundit account and passkeys (Modular Wallets and its bundler), for email accounts
+          (user-controlled wallets), and for cross-chain transfers (CCTP, Bridge Kit and the Forwarding Service).
         </li>
-        <li>Reown and WalletConnect, only when you connect a wallet to add money.</li>
+        <li>WalletConnect, only when you sign in with a phone wallet or connect one to add money.</li>
         <li>The sites that host fundraiser images and avatars.</li>
       </ul>
+      <p>
+        Email sign-in also uses these. Your browser sends your email address to Fundit's server, which is a
+        Cloudflare Worker. The server passes it to Circle to send you a code, and does not store it. Circle keeps your email address as
+        the login for your email account, so it can recognise you when you return. Circle sends the code through
+        Resend, which handles your email address to deliver it. Cloudflare Turnstile checks your browser
+        before a code is sent, and sees your IP address and browser details. Each one works under its own privacy
+        policy.
+      </p>
       <p>Fundit does not use analytics or advertising trackers.</p>
 
       <h2>6. Your rights</h2>
       <p>
         Depending on where you live, you may have rights to access, correct or delete personal data, to restrict its
-        use, and to move it. Fundit holds no personal data on its own servers, so most requests are best sent to the
+        use, and to move it. Fundit stores no personal data on its own servers, so most requests are best sent to the
         third parties above. Data on a blockchain cannot be corrected or deleted by anyone.
       </p>
 
       <h2>7. Security</h2>
       <p>
-        No website or network is fully secure. Keep your devices, passkeys and recovery key safe, and check every
-        transaction before you confirm it with your passkey. If you connect a wallet to add money, check each
-        transaction in that wallet too.
+        No website or network is fully secure. Keep your devices, passkeys, recovery key, email address and wallet safe, and check every
+        transaction before you confirm it with your passkey, in Circle's window or in your wallet. If you connect a
+        wallet to add money, check each transaction in that wallet too.
       </p>
 
       <h2>8. Changes to this policy</h2>

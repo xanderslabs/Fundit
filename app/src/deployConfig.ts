@@ -107,7 +107,7 @@ export function checkBuildEnv(env: BuildEnv, headers: string): void {
   }
 }
 
-// Fails loudly instead of shipping a production build that points at 0x0 or has no Reown project id.
+// Fails loudly instead of shipping a production build that points at 0x0 or has no WalletConnect project id (the Reown dashboard issues it).
 // Dev and test may run with no factory (both vars unset), which gives zero defaults.
 export function loadConfig(env: DeployEnv): DeployConfig {
   const address = env.VITE_FACTORY_ADDRESS || undefined

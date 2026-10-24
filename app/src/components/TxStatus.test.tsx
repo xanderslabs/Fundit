@@ -31,7 +31,7 @@ afterEach(() => {
 })
 
 describe('useTx with TxStatus', () => {
-  // The line names the prompt the sender shows next: the passkey, or the wallet's own.
+  // The line names the prompt the sender shows next: the passkey, Circle's window for email, or the wallet's own.
   it('asks for the passkey while sending, or the wallet for a wallet sender', async () => {
     const sender: Sender = { kind: 'passkey', address: '0x00000000000000000000000000000000000000cc', send: () => new Promise(() => {}) }
     const user = userEvent.setup()

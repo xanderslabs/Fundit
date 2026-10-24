@@ -60,8 +60,8 @@ function ui() {
 const pill = () => screen.getByRole('button', { name: '0x1111...1111' })
 
 describe('AccountControl signed out', () => {
-  // Sign-in is passkey only. There is no wallet sign-in, so Sign in never opens the wallet modal.
-  it('shows Sign in, which opens the passkey sign-in dialog and never the wallet modal', async () => {
+  // Sign in opens Fundit's own sign-in dialog, passkey first. It never opens a separate wallet modal.
+  it('shows Sign in, which opens the sign-in dialog and never a separate wallet modal', async () => {
     render(ui())
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }))
     const dialog = screen.getByRole('dialog', { name: 'Sign in' })

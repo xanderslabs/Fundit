@@ -91,7 +91,7 @@ describe('Sign in', () => {
   }
 
   // One step: the dialog opens straight on the passkey sign-in, passkey first, with no extra Continue step. The
-  // wallet choice sits below it and opens Fundit's own wallet list, never the old wallet modal.
+  // wallet choice sits below it and opens Fundit's own wallet list (no Reown AppKit modal).
   it('opens on Sign in with the passkey button first, Connect a wallet below and no Continue step', async () => {
     renderControl()
     await openSignIn()

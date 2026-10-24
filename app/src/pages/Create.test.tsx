@@ -111,7 +111,7 @@ describe('Create signed out', () => {
     expect(screen.queryByRole('button', { name: 'Create a Fundit' })).toBeNull()
   })
 
-  it('Sign in opens the passkey sign-in dialog, never the wallet modal', async () => {
+  it('Sign in opens the sign-in dialog with the passkey button, never a separate wallet modal', async () => {
     renderCreate()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }))
     expect(within(screen.getByRole('dialog', { name: 'Sign in' })).getByRole('button', { name: 'Sign in with your passkey' })).toBeTruthy()

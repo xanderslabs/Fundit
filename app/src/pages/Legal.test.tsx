@@ -31,9 +31,25 @@ describe.each(['terms', 'privacy'] as const)('%s page', (page) => {
     expect(heading.nextElementSibling?.textContent).toBe('A Fundit is a fundraiser created on Fundit.')
   })
 
-  // Every account is a Fundit account secured by a passkey, so the policy always describes it.
+  // Passkey sign-in is still one of the ways in, so the policy always describes it.
   it('always mentions passkeys', () => {
     expect(text(page)).toMatch(/passkey/i)
+  })
+
+  // Sign-in has three methods. A policy that names only some of them would misdescribe the others.
+  it('names the three ways to sign in', () => {
+    const t = text(page)
+    expect(t).toMatch(/passkey/i)
+    expect(t).toMatch(/email/i)
+    expect(t).toMatch(/sign in[^.]*(with|using) (a|your own|your) wallet|Wallet: your own wallet/i)
+    expect(t).not.toMatch(/cannot sign in with a wallet/i)
+  })
+
+  // Reown AppKit is gone. Only the WalletConnect protocol stays, for phone wallets.
+  it('never mentions Reown AppKit', () => {
+    const t = text(page)
+    expect(t).not.toMatch(/Reown/i)
+    expect(t).not.toMatch(/AppKit/i)
   })
 
   // Sign-in is a Fundit account only. The old "passkey wallet" wording read as one wallet option among others.
@@ -61,5 +77,19 @@ describe.each(['terms', 'privacy'] as const)('%s page', (page) => {
   // The owner took the draft notice off for launch. The rest of the legal text is unchanged.
   it('shows no draft notice', () => {
     expect(text(page)).not.toMatch(/Draft: review before launch|has not had a legal review/)
+  })
+})
+
+describe('email sign-in text', () => {
+  // A person who loses their email address cannot get an email account back. The terms must say so before sign-up.
+  it('says Fundit and Circle cannot recover an email account without the email', () => {
+    expect(text('terms')).toMatch(/nobody can recover an email account[^.]*including Fundit and Circle/i)
+  })
+
+  // The email flow sends mail through Resend and checks the browser with Turnstile. Both see the person's data.
+  it('names Resend and Turnstile in Privacy', () => {
+    const t = text('privacy')
+    expect(t).toMatch(/Resend/)
+    expect(t).toMatch(/Turnstile/)
   })
 })

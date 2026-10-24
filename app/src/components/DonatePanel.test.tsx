@@ -467,8 +467,8 @@ describe('DonatePanel', () => {
     expect(reads.some((r) => r.functionName === 'allowance' && r.args[1] === CAMPAIGN)).toBe(true)
   })
 
-  // Signed out, giving starts with the passkey sign-in. The wallet modal never opens from here.
-  it('signed out, Sign in to give opens the passkey sign-in dialog, never the wallet modal', async () => {
+  // Signed out, giving starts with Fundit's sign-in dialog, passkey first. No separate wallet modal opens from here.
+  it('signed out, Sign in to give opens the sign-in dialog with the passkey button, never a separate wallet modal', async () => {
     renderPanel(view('USDC'))
     expect(screen.queryByRole('button', { name: 'Give' })).toBeNull()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in to give' }))
