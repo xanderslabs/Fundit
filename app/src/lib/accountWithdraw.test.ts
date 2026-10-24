@@ -25,7 +25,7 @@ describe('buildAccountSendCalls', () => {
     expect(call.args).toEqual([FRIEND, 5_000000n])
   })
 
-  // Both calls go in one user operation, so the approval and the burn succeed or fail together.
+  // Both calls go in one Multicall3From transaction, so the approval and the burn succeed or fail together.
   it('sends to Base fast as approve then depositForBurnWithHook with the forward hook', () => {
     const calls = buildAccountSendCalls({ token: USDC, amount: 20_000000n, dest: 'Base', recipient: FRIEND, maxFee: 150_000n, fast: true, account: ACCOUNT })
     expect(calls).toHaveLength(2)

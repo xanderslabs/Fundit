@@ -18,7 +18,7 @@ export type DonateParams = {
   allowance: bigint
 }
 
-// Gifts come from a Fundit account, a smart account, so they call donate on the campaign directly (Arc Memo
+// Gifts come from a Fundit account, a plain account that calls through Multicall3From, so they call donate on the campaign directly (Arc Memo
 // only accepts an EOA caller). The campaign pulls amount + tip from msg.sender, so the approval names the campaign.
 export function buildDonateCalls(p: DonateParams): Call[] {
   if (byteLength(p.message) > MAX_MESSAGE_BYTES) throw new PlainError(`The message is over ${MAX_MESSAGE_BYTES} bytes. Shorten it and try again.`)

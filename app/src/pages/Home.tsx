@@ -4,7 +4,7 @@ import { SignInButton } from '../components/AccountMenu'
 import { CampaignCard } from '../components/CampaignCard'
 import { CampaignGrid, LoadError } from '../components/CampaignGrid'
 import { ButtonLink } from '../components/ui'
-import { CHAIN_NAMES } from '../config'
+import { CHAIN_NAMES, EMAIL_SIGNIN } from '../config'
 import { useCampaigns, useFeatured } from '../hooks/useCampaigns'
 import { isTestFundit, publicFundits } from '../lib/campaigns'
 import { useSender } from '../hooks/useSender'
@@ -112,16 +112,21 @@ function faqs(): Faq[] {
         </p>
       ),
     },
-    {
-      q: 'Do I need a crypto wallet?',
-      a: (
-        <p>
-          No. You can sign in with your email address, and Fundit opens a Fundit account on Arc for you.
-          If you already have a wallet, you can sign in with that instead. You add USDC to your account before you
-          give.
-        </p>
-      ),
-    },
+    // Without email sign-in a wallet is the only way in, so "No" would be false.
+    ...(EMAIL_SIGNIN
+      ? [
+          {
+            q: 'Do I need a crypto wallet?',
+            a: (
+              <p>
+                No. You can sign in with your email address, and Fundit opens a Fundit account on Arc for you.
+                If you already have a wallet, you can sign in with that instead. You add USDC to your account before you
+                give.
+              </p>
+            ),
+          },
+        ]
+      : []),
   ]
 }
 

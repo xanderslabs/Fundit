@@ -134,8 +134,8 @@ export class WrongWalletAccount extends PlainError {
 const NO_NETWORK_FEE = 'Your Fundit account does not have enough USDC for the network fee. Add money and try again.'
 
 // The line for an account that holds less USDC than it keeps back for the network fee.
-export function addAtLeast(reserve: bigint, what = 'It pays the network fee.'): string {
-  return `Add at least ${formatAmount(reserve, 'USDC')} to your Fundit account first. ${what}`
+export function addAtLeast(reserve: bigint): string {
+  return `Add at least ${formatAmount(reserve, 'USDC')} to your Fundit account first. It pays the network fee.`
 }
 
 // An email or wallet account (a plain EOA) that cannot cover the gas, as viem or the RPC node words it.

@@ -116,7 +116,6 @@ async function fillAndDonate(amount = '10') {
 // Nothing in the panel may start a second donation while one may still be mined.
 function expectBlocked() {
   expect(screen.queryByRole('button', { name: 'Give' })).toBeNull()
-  expect(screen.queryByRole('button', { name: 'Finish donation' })).toBeNull()
   expect(screen.getByLabelText('Amount').matches(':disabled')).toBe(true)
 }
 
@@ -181,7 +180,7 @@ describe('DonatePanel', () => {
     expect(breakdown.getByText('10.849999 USDC')).toBeTruthy()
   })
 
-  // Memo only accepts an EOA caller, and a Fundit account is a smart account. Every gift calls donate on the
+  // Memo only accepts an EOA caller, and a Fundit account is a plain account that calls through Multicall3From. Every gift calls donate on the
   // Fundit itself, after an approval when the allowance is short.
   it('gives by calling donate on the Fundit directly, never through Memo', async () => {
     const send = fakeSender()
@@ -378,7 +377,7 @@ describe('DonatePanel', () => {
     await fillAndDonate()
     expect(await screen.findByText(/Thank you/)).toBeTruthy()
     expect(saved[0]).toBeNull()
-    expect(saved[1]).toMatchObject([{ kind: 'arc', campaign: CAMPAIGN, hash: HASH, approve: false }])
+    expect(saved[1]).toMatchObject([{ kind: 'arc', campaign: CAMPAIGN, hash: HASH }])
     // A known outcome clears it.
     expect(localStorage.getItem('fundit.pendingBridges')).toBeNull()
   })
@@ -440,43 +439,8 @@ describe('DonatePanel', () => {
     expect(keys).toContain(JSON.stringify(['account-balances']))
   })
 
-  // Approve mined, donate was cancelled. Sending both again would ask for a second, useless approval.
-  it('after an approval-only partial send, "Finish donation" sends only the donate call', async () => {
-    const send = fakeSender({ status: 'rejected', completed: 1 }, success)
-    state.balance = 1000_000000n
-    renderPanel(view('USDC'))
-    const user = userEvent.setup()
-    await user.type(screen.getByLabelText('Amount'), '10')
-    await waitFor(() => expect(donateButton().disabled).toBe(false))
-    await user.click(donateButton())
-    expect(await screen.findByText('Your approval went through, but the donation was not sent.')).toBeTruthy()
-    expect(send.mock.calls[0]![0]).toHaveLength(2)
-
-    // The approval is now on chain, and the panel must read it again rather than trust what it had.
-    state.allowance = 10_000000n
-    await user.click(screen.getByRole('button', { name: 'Finish donation' }))
-    expect(await screen.findByText(/Thank you/)).toBeTruthy()
-    const finish = send.mock.calls[1]![0]
-    expect(finish).toHaveLength(1)
-    expect(finish[0]!.to).toBe(CAMPAIGN)
-    expect(decodeFunctionData({ abi: campaignAbi, data: finish[0]!.data }).functionName).toBe('donate')
-  })
-
-  // A donate call that timed out may still be mined. Calling it "not sent" could make the donor give twice.
-  it('treats a timed-out donate call as not confirmed yet, not as unsent', async () => {
-    fakeSender({ status: 'timeout', hash: HASH, completed: 1 })
-    state.balance = 1000_000000n
-    renderPanel(view('USDC'))
-    const user = userEvent.setup()
-    await user.type(screen.getByLabelText('Amount'), '10')
-    await waitFor(() => expect(donateButton().disabled).toBe(false))
-    await user.click(donateButton())
-    expect(await screen.findByText(/not confirmed yet/)).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Finish donation' })).toBeNull()
-  })
-
   it('blocks a new donation after the donate call times out', async () => {
-    fakeSender({ status: 'timeout', hash: HASH, completed: 1 })
+    fakeSender({ status: 'timeout', hash: HASH, completed: 0 })
     state.balance = 1000_000000n
     renderPanel(view('USDC'))
     await fillAndDonate()
@@ -485,22 +449,16 @@ describe('DonatePanel', () => {
     expectExplorerLink()
   })
 
-  // Every sender now sends the approval and the donation as one transaction, but a saved record can still hold a
-  // lone approval that timed out.
-  const savedApproval = () =>
+  // An older build could save an approval hash. It is not a donation, so it must never block or read as one.
+  it('ignores a saved approval record', () => {
     localStorage.setItem(
       'fundit.pendingBridges',
       JSON.stringify([{ kind: 'arc', campaign: CAMPAIGN, hash: HASH, approve: true, createdAt: Date.now() }]),
     )
-
-  it('blocks a new donation while a saved approval is not confirmed', async () => {
-    savedApproval()
     fakeSender()
-    state.balance = 1000_000000n
     renderPanel(view('USDC'))
-    expect(await screen.findByText(/approval is not confirmed yet/)).toBeTruthy()
-    expectBlocked()
-    expectExplorerLink()
+    expect(screen.queryByText(/not confirmed yet/)).toBeNull()
+    expect(donateButton()).toBeTruthy()
   })
 
   // A wallet sends the approval and the donation as one transaction, so its timeout is the donation's even
@@ -517,7 +475,7 @@ describe('DonatePanel', () => {
   })
 
   it('stays blocked when Check again still cannot confirm', async () => {
-    fakeSender({ status: 'timeout', hash: HASH, completed: 1 })
+    fakeSender({ status: 'timeout', hash: HASH, completed: 0 })
     state.balance = 1000_000000n
     renderPanel(view('USDC'))
     const user = await fillAndDonate()
@@ -530,7 +488,7 @@ describe('DonatePanel', () => {
 
   // A failed check is not an answer. It must never leave the panel stuck in "Checking" or unblock it.
   it('stays blocked, not stuck checking, when the re-check throws', async () => {
-    fakeSender({ status: 'timeout', hash: HASH, completed: 1 })
+    fakeSender({ status: 'timeout', hash: HASH, completed: 0 })
     state.balance = 1000_000000n
     renderPanel(view('USDC'))
     const user = await fillAndDonate()
@@ -547,7 +505,7 @@ describe('DonatePanel', () => {
 
   // A reverted transaction moved nothing, so donating again is safe.
   it('allows a new donation once Check again finds the donation reverted', async () => {
-    fakeSender({ status: 'timeout', hash: HASH, completed: 1 })
+    fakeSender({ status: 'timeout', hash: HASH, completed: 0 })
     state.balance = 1000_000000n
     renderPanel(view('USDC'))
     const user = await fillAndDonate()
@@ -557,20 +515,9 @@ describe('DonatePanel', () => {
     expect(screen.getByRole('button', { name: 'Give' })).toBeTruthy()
   })
 
-  it('moves to Finish donation once Check again finds the saved approval mined', async () => {
-    savedApproval()
-    fakeSender()
-    state.balance = 1000_000000n
-    renderPanel(view('USDC'))
-    const user = userEvent.setup()
-    recheck.next = async () => success
-    await user.click(await screen.findByRole('button', { name: 'Check again' }))
-    expect(await screen.findByRole('button', { name: 'Finish donation' })).toBeTruthy()
-  })
-
   // Start over is the donor's own choice, and only after they confirm the risk of giving twice.
   it('Start over needs a confirm, then clears the form', async () => {
-    fakeSender({ status: 'timeout', hash: HASH, completed: 1 })
+    fakeSender({ status: 'timeout', hash: HASH, completed: 0 })
     state.balance = 1000_000000n
     renderPanel(view('USDC'))
     const user = await fillAndDonate()
@@ -586,7 +533,7 @@ describe('DonatePanel', () => {
 
   // A reload must not reopen the door to a second donation while the first may still be mined.
   it('restores the not-confirmed block after a reload', async () => {
-    fakeSender({ status: 'timeout', hash: HASH, completed: 1 })
+    fakeSender({ status: 'timeout', hash: HASH, completed: 0 })
     state.balance = 1000_000000n
     renderPanel(view('USDC'))
     await fillAndDonate()
@@ -603,7 +550,7 @@ describe('DonatePanel', () => {
   it('restores a day-old block with a check-the-explorer note', async () => {
     localStorage.setItem(
       'fundit.pendingBridges',
-      JSON.stringify([{ kind: 'arc', campaign: CAMPAIGN, hash: HASH, approve: false, createdAt: Date.now() - 25 * 60 * 60 * 1000 }]),
+      JSON.stringify([{ kind: 'arc', campaign: CAMPAIGN, hash: HASH, createdAt: Date.now() - 25 * 60 * 60 * 1000 }]),
     )
     fakeSender()
     renderPanel(view('USDC'))
@@ -618,7 +565,7 @@ describe('DonatePanel', () => {
   it('does not restore the block on another campaign', () => {
     localStorage.setItem(
       'fundit.pendingBridges',
-      JSON.stringify([{ kind: 'arc', campaign: '0x00000000000000000000000000000000000000b2', hash: HASH, approve: false, createdAt: 1 }]),
+      JSON.stringify([{ kind: 'arc', campaign: '0x00000000000000000000000000000000000000b2', hash: HASH, createdAt: 1 }]),
     )
     fakeSender()
     renderPanel(view('USDC'))
@@ -626,7 +573,7 @@ describe('DonatePanel', () => {
   })
 
   it('forgets the saved block once Check again settles it', async () => {
-    fakeSender({ status: 'timeout', hash: HASH, completed: 1 })
+    fakeSender({ status: 'timeout', hash: HASH, completed: 0 })
     state.balance = 1000_000000n
     renderPanel(view('USDC'))
     const user = await fillAndDonate()
@@ -640,7 +587,7 @@ describe('DonatePanel', () => {
   })
 
   it('forgets the saved block after a confirmed Start over', async () => {
-    fakeSender({ status: 'timeout', hash: HASH, completed: 1 })
+    fakeSender({ status: 'timeout', hash: HASH, completed: 0 })
     state.balance = 1000_000000n
     renderPanel(view('USDC'))
     const user = await fillAndDonate()
@@ -684,7 +631,7 @@ describe('DonatePanel', () => {
       const user = userEvent.setup()
       await user.type(screen.getByLabelText('Amount'), '10')
       await waitFor(() => expect(donateButton().disabled).toBe(false))
-      store({ kind: 'arc', hash: HASH, approve: false })
+      store({ kind: 'arc', hash: HASH })
       await user.click(donateButton())
       expect(await screen.findByText(/donation is not confirmed yet/)).toBeTruthy()
       expect(send).not.toHaveBeenCalled()
@@ -697,7 +644,7 @@ describe('DonatePanel', () => {
       state.balance = 1000_000000n
       renderPanel(view('USDC'))
       expect(screen.queryByText(/not confirmed yet/)).toBeNull()
-      store({ kind: 'arc', hash: HASH, approve: false })
+      store({ kind: 'arc', hash: HASH })
       act(() => {
         window.dispatchEvent(new StorageEvent('storage', { key: KEY }))
       })

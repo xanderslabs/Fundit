@@ -152,8 +152,7 @@ action with several calls, such as approve and donate, goes out as one transacti
   the account's own address, and any USDC amount that leaves less than 0.01 USDC behind. See
   [`AccountWithdraw.tsx`](app/src/components/AccountWithdraw.tsx).
 - **Withdraw as an organiser.** **Manage** withdraws a campaign's balance on Arc, or as USDC to any chain
-  in `CCTP_CHAINS`. Before a payout to another chain, the app warns that the Fundit account may not exist
-  there. See [`Manage.tsx`](app/src/pages/Manage.tsx).
+  in `CCTP_CHAINS`. See [`Manage.tsx`](app/src/pages/Manage.tsx).
 
 ### Set up email sign-in
 

@@ -93,7 +93,7 @@ describe('pending store', () => {
 
   // Testnet entries on domains 0 and 6 look valid on mainnet, which would then poll mainnet Iris for them.
   it('keeps testnet entries under their own key, apart from mainnet ones', async () => {
-    const entry = { kind: 'arc', campaign: CAMPAIGN, hash: BURN, approve: false, createdAt: Date.now() }
+    const entry = { kind: 'arc', campaign: CAMPAIGN, hash: BURN, createdAt: Date.now() }
     localStorage.setItem(KEY, JSON.stringify([entry]))
     vi.stubEnv('VITE_ARC_NETWORK', 'testnet')
     vi.resetModules()
@@ -126,7 +126,7 @@ describe('pending store', () => {
       KEY,
       JSON.stringify([
         { kind: 'bridge', campaign: CAMPAIGN, burnTx: BURN, srcDomain: 6, amount: '1', createdAt: old },
-        { kind: 'arc', campaign: CAMPAIGN, hash: BURN, approve: false, createdAt: old },
+        { kind: 'arc', campaign: CAMPAIGN, hash: BURN, createdAt: old },
         { kind: 'bridge', campaign: OTHER, burnTx: BURN, srcDomain: 6, amount: '1', createdAt: Date.now() },
       ]),
     )
@@ -137,22 +137,29 @@ describe('pending store', () => {
   it('keeps the first createdAt when the same Arc transaction is saved again', () => {
     // The age decides the "more than a day ago" warning, so a re-save on mount must not reset it.
     const t = Date.now() - 5000
-    localStorage.setItem(KEY, JSON.stringify([{ kind: 'arc', campaign: CAMPAIGN, hash: BURN, approve: false, createdAt: t }]))
-    savePendingArc({ campaign: CAMPAIGN, hash: BURN, approve: false })
+    localStorage.setItem(KEY, JSON.stringify([{ kind: 'arc', campaign: CAMPAIGN, hash: BURN, createdAt: t }]))
+    savePendingArc({ campaign: CAMPAIGN, hash: BURN })
     expect(pendingArc(CAMPAIGN)!.createdAt).toBe(t)
   })
 
   // Older builds saved a passkey user operation hash with hashKind 'userop'. Nothing can check that hash any
   // more, so the record is dropped on read: it must not throw, and it must not block a new gift forever.
   it('a saved userop pending record is ignored without throwing', () => {
-    localStorage.setItem(KEY, JSON.stringify([{ kind: 'arc', campaign: CAMPAIGN, hash: BURN, approve: true, hashKind: 'userop', createdAt: Date.now() }]))
+    localStorage.setItem(KEY, JSON.stringify([{ kind: 'arc', campaign: CAMPAIGN, hash: BURN, approve: false, hashKind: 'userop', createdAt: Date.now() }]))
+    expect(pendingArc(CAMPAIGN)).toBeNull()
+    expect(blockingEntry(CAMPAIGN)).toBeNull()
+  })
+
+  // An approval hash moves nothing to the campaign. Reading it as a donation would show "Your donation went through".
+  it('a saved approve: true record is ignored', () => {
+    localStorage.setItem(KEY, JSON.stringify([{ kind: 'arc', campaign: CAMPAIGN, hash: BURN, approve: true, createdAt: Date.now() }]))
     expect(pendingArc(CAMPAIGN)).toBeNull()
     expect(blockingEntry(CAMPAIGN)).toBeNull()
   })
 
   it('keeps one unconfirmed Arc donation per campaign, apart from bridges', () => {
-    savePendingArc({ campaign: CAMPAIGN, hash: BURN, approve: false })
-    expect(pendingArc(CAMPAIGN)).toMatchObject({ kind: 'arc', campaign: CAMPAIGN, hash: BURN, approve: false })
+    savePendingArc({ campaign: CAMPAIGN, hash: BURN })
+    expect(pendingArc(CAMPAIGN)).toMatchObject({ kind: 'arc', campaign: CAMPAIGN, hash: BURN })
     expect(pendingArc(OTHER)).toBeNull()
     expect(pendingBridges()).toEqual([])
     clearPendingArc(CAMPAIGN)

@@ -9,11 +9,14 @@ import type { CampaignView } from '../lib/campaigns'
 import type { Sender } from '../lib/sender'
 import { Home } from './Home'
 
-const flags = vi.hoisted(() => ({ crosschain: false }))
+const flags = vi.hoisted(() => ({ crosschain: false, email: true }))
 vi.mock('../config', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../config')>()),
   get CROSSCHAIN_ENABLED() {
     return flags.crosschain
+  },
+  get EMAIL_SIGNIN() {
+    return flags.email
   },
   TEST_CREATORS: ['0x2222222222222222222222222222222222222222'],
 }))
@@ -225,6 +228,18 @@ describe('Home FAQ', () => {
     flags.crosschain = on
     renderHome()
     expect(faq().textContent).not.toMatch(/from another chain|unified balance/i)
+  })
+
+  // With email sign-in off, a wallet is the only way in, so the "No" answer would be false.
+  it('hides the wallet question when email sign-in is off, and shows it when on', () => {
+    flags.email = false
+    const off = renderHome()
+    expect(faq().textContent).not.toMatch(/Do I need a crypto wallet/)
+    expect(faq().querySelectorAll('details')).toHaveLength(4)
+    off.unmount()
+    flags.email = true
+    renderHome()
+    expect(faq().textContent).toMatch(/Do I need a crypto wallet/)
   })
 
   // Email sign-in needs no wallet app, so the answer must not send people to one first.

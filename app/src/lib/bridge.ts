@@ -15,7 +15,7 @@ const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 // minted is set once Iris reports the mint on Arc. The entry stays for its thank-you row but no longer blocks.
 export type PendingBridge = { kind: 'bridge'; campaign: Address; burnTx: Hex; srcDomain: number; amount: string; minted?: true; createdAt: number }
 export type PendingSubmitted = { kind: 'submitted'; id: string; campaign: Address; srcDomain: number; amount: string; createdAt: number }
-export type PendingArc = { kind: 'arc'; campaign: Address; hash: Hex; approve: boolean; createdAt: number }
+export type PendingArc = { kind: 'arc'; campaign: Address; hash: Hex; createdAt: number }
 // An organiser's withdrawal burned on Arc (domain 26) and minted on destDomain. Money leaving the campaign, so
 // it never blocks a donation. minted works as for PendingBridge.
 export type PendingPayout = {
@@ -49,8 +49,9 @@ function isEntry(e: unknown): e is Entry {
       (x.minted === undefined || x.minted === true)
     )
   }
-  // An older build saved a user operation hash with a hashKind. Nothing can check it now, so it is dropped.
-  if (x.kind === 'arc') return isTxHash(x.hash) && typeof x.approve === 'boolean' && x.hashKind === undefined
+  // An older build saved a user operation hash (hashKind) or an approval hash (approve: true). Neither is a donation
+  // hash and nothing can check them now, so they are dropped.
+  if (x.kind === 'arc') return isTxHash(x.hash) && x.approve !== true && x.hashKind === undefined
   return false
 }
 
@@ -166,7 +167,7 @@ export function pendingArc(campaign: Address): PendingArc | null {
 }
 
 // Saving the same transaction again keeps its first createdAt, so its age stays true after a reload.
-export function savePendingArc(p: { campaign: Address; hash: Hex; approve: boolean }) {
+export function savePendingArc(p: { campaign: Address; hash: Hex }) {
   const all = readAll()
   const prev = all.find((e): e is PendingArc => e.kind === 'arc' && same(e.campaign, p.campaign))
   const createdAt = prev && same(prev.hash, p.hash) ? prev.createdAt : Date.now()

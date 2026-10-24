@@ -327,8 +327,6 @@ Later ideas, not milestones yet:
   the deploy. A new EURC route needs a new factory.
 - **Lost access.** Nobody can recover an email account without its email address, and Fundit cannot
   recover a wallet account. Each person keeps their own email address and wallet safe.
-- **Account payouts.** A Fundit account may not exist on other chains. The app warns before a
-  payout to another chain and asks for an address the person controls there.
 - **No audit yet.** Mitigated by tests, fork tests, Slither and testnet runs. An audit is milestone
   M3.
 
