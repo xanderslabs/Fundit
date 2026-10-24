@@ -36,11 +36,14 @@ function str(body: Body, key: string, pattern: RegExp): string | null {
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const TOKEN = /^[A-Za-z0-9._-]{20,4096}$/
+// Circle tokens are JWTs or base64, so + / = can appear.
+const TOKEN = /^[A-Za-z0-9._~+/=-]{20,4096}$/
 const DEVICE_ID = /^[A-Za-z0-9._-]{8,256}$/
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,255}$/
 const HEX = /^0x[0-9a-fA-F]*$/
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/
+const GWEI = /^\d{1,4}(\.\d{1,9})?$/
+const GAS = /^\d{4,7}$/
 
 async function circle(env: Env, method: string, path: string, userToken: string | null, body?: Body): Promise<Response> {
   const headers: Record<string, string> = { authorization: `Bearer ${env.CIRCLE_API_KEY}`, accept: 'application/json' }
@@ -98,19 +101,25 @@ async function api(request: Request, env: Env, route: string): Promise<Response>
       const callData = str(body, 'callData', HEX)
       if (!userToken || !walletId || !contractAddress || !callData) return json(400, { error: 'userToken, walletId, contractAddress or callData' })
       if (!ALLOWED_CONTRACTS.has(contractAddress.toLowerCase())) return json(403, { error: 'Contract not allowed' })
-      return circle(env, 'POST', '/user/transactions/contractExecution', userToken, {
-        idempotencyKey,
-        walletId,
-        contractAddress,
-        callData,
-        feeLevel: 'MEDIUM',
-      })
+      // Either a Circle fee level, or our own EIP-1559 fee in gwei with a gas limit (Circle requires all three).
+      const level = body.feeLevel === 'LOW' || body.feeLevel === 'MEDIUM' ? body.feeLevel : null
+      const maxFee = str(body, 'maxFee', GWEI)
+      const priorityFee = str(body, 'priorityFee', GWEI)
+      const gasLimit = str(body, 'gasLimit', GAS)
+      const fee = level ? { feeLevel: level } : maxFee && priorityFee && gasLimit ? { maxFee, priorityFee, gasLimit } : null
+      if (!fee) return json(400, { error: 'feeLevel, or maxFee + priorityFee + gasLimit' })
+      return circle(env, 'POST', '/user/transactions/contractExecution', userToken, { idempotencyKey, walletId, contractAddress, callData, ...fee })
     }
     case 'sign-message': {
       const walletId = str(body, 'walletId', UUID)
       const message = typeof body.message === 'string' && body.message.length <= 500 ? body.message : null
       if (!userToken || !walletId || !message) return json(400, { error: 'userToken, walletId or message' })
       return circle(env, 'POST', '/user/sign/message', userToken, { walletId, message })
+    }
+    case 'latest-transaction': {
+      const walletId = str(body, 'walletId', UUID)
+      if (!userToken || !walletId) return json(400, { error: 'userToken or walletId' })
+      return circle(env, 'GET', `/transactions?walletIds=${walletId}&pageSize=1&order=DESC`, userToken)
     }
     case 'transaction': {
       const id = str(body, 'id', UUID)

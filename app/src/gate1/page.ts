@@ -210,6 +210,75 @@ async function refreshBalance() {
   return bal
 }
 
+// ---------- gift ----------
+
+async function latestTx(): Promise<Record<string, unknown> | undefined> {
+  const { data } = await api('latest-transaction', { userToken: session.userToken, walletId: session.walletId })
+  return ((payload(data).transactions ?? []) as Record<string, unknown>[])[0]
+}
+
+async function gift(id: string, mode: 'LOW' | 'MEDIUM' | 'custom') {
+  if (!session.walletId || !session.address) throw new Error('Run U3 first')
+  const before = await refreshBalance()
+  const callData = encodeFunctionData({
+    abi: multicallAbi,
+    functionName: 'aggregate3',
+    args: [
+      [
+        { target: USDC, allowFailure: false, callData: encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [FUNDER, APPROVE_MARK] }) },
+        { target: USDC, allowFailure: false, callData: encodeFunctionData({ abi: erc20Abi, functionName: 'transfer', args: [FUNDER, GIFT] }) },
+      ],
+    ],
+  })
+  let fee: Record<string, string>
+  if (mode === 'custom') {
+    const block = await arcClient.getBlock()
+    const base = block.baseFeePerGas ?? 20_000_000_000n
+    const gas = await arcClient.estimateGas({ account: session.address, to: MULTICALL3FROM, data: callData })
+    const gwei = (wei: bigint) => (Number(wei) / 1e9).toFixed(9).replace(/\.?0+$/, '')
+    fee = { maxFee: gwei(base * 2n + 1_000_000_000n), priorityFee: '1', gasLimit: ((gas * 125n) / 100n).toString() }
+  } else {
+    fee = { feeLevel: mode }
+  }
+  const previous = (await latestTx())?.id
+  const t0 = performance.now()
+  const ex = await api('execute', { userToken: session.userToken, walletId: session.walletId, contractAddress: MULTICALL3FROM, callData, ...fee })
+  const challengeId = payload(ex.data).challengeId
+  if (!challengeId) {
+    record(`${id}_gift`, { mode, fee, rejected: ex.data })
+    return
+  }
+  const approval = await runChallenge(String(challengeId))
+  // The SDK result carries no transaction id, so the newest transaction for this wallet is followed instead.
+  let tx: Record<string, unknown> | undefined
+  for (let i = 0; i < 60; i++) {
+    const latest = await latestTx()
+    if (latest && latest.id !== previous) {
+      tx = await waitTx(String(latest.id))
+      break
+    }
+    await new Promise((r) => setTimeout(r, 1500))
+  }
+  const hash = tx?.txHash as Hex | undefined
+  let chain: Record<string, unknown> = {}
+  if (hash) {
+    const r = await arcClient.getTransactionReceipt({ hash })
+    const t = await arcClient.getTransaction({ hash })
+    const allowance = await arcClient.readContract({ address: USDC, abi: erc20Abi, functionName: 'allowance', args: [session.address, FUNDER] })
+    chain = {
+      status: r.status,
+      gasUsed: r.gasUsed.toString(),
+      gasLimit: t.gas.toString(),
+      priorityGwei: Number(t.maxPriorityFeePerGas ?? 0n) / 1e9,
+      effectiveGwei: Number(r.effectiveGasPrice) / 1e9,
+      feeUsdc: Number(r.gasUsed * r.effectiveGasPrice) / 1e18,
+      approveFromWallet: allowance === APPROVE_MARK,
+    }
+  }
+  const after = await refreshBalance()
+  record(`${id}_gift`, { mode, fee, approvalMs: approval.ms, totalMs: Math.round(performance.now() - t0), states: tx?.states, hash, chain, balanceBefore: before?.toString(), balanceAfter: after?.toString() })
+}
+
 // ---------- checks ----------
 
 type Check = { id: string; title: string; text: string; run: () => Promise<void>; extra?: () => HTMLElement }
@@ -279,42 +348,18 @@ const checks: Check[] = [
       await refreshBalance()
     },
   },
-  {
-    id: 'U4',
-    title: 'U4 Gift: approve + transfer in one Multicall3From transaction',
-    text: 'One Circle approval. Approves the funder for 7 units and sends 0.01 USDC to the funder. Needs about 0.02 USDC in the wallet.',
-    async run() {
-      if (!session.walletId || !session.address) throw new Error('Run U3 first')
-      const before = await refreshBalance()
-      const callData = encodeFunctionData({
-        abi: multicallAbi,
-        functionName: 'aggregate3',
-        args: [
-          [
-            { target: USDC, allowFailure: false, callData: encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [FUNDER, APPROVE_MARK] }) },
-            { target: USDC, allowFailure: false, callData: encodeFunctionData({ abi: erc20Abi, functionName: 'transfer', args: [FUNDER, GIFT] }) },
-          ],
-        ],
-      })
-      const t0 = performance.now()
-      const ex = await api('execute', { userToken: session.userToken, walletId: session.walletId, contractAddress: MULTICALL3FROM, callData })
-      const challengeId = payload(ex.data).challengeId
-      if (!challengeId) throw new Error(`execute failed: ${toJson(ex.data)}`)
-      const approval = await runChallenge(String(challengeId))
-      const id = (approval.result as { data?: { transactionId?: string } } | undefined)?.data?.transactionId
-      // The SDK result may not carry the id; then the newest transaction for this wallet is read instead.
-      const tx = id ? await waitTx(id) : { note: 'no transactionId in SDK result', result: approval.result }
-      const hash = (tx as { txHash?: Hex }).txHash
-      let chain: Record<string, unknown> = {}
-      if (hash) {
-        const r = await arcClient.getTransactionReceipt({ hash })
-        const allowance = await arcClient.readContract({ address: USDC, abi: erc20Abi, functionName: 'allowance', args: [session.address, FUNDER] })
-        chain = { status: r.status, from: r.from, to: r.to, gasUsed: r.gasUsed.toString(), feeUsdc: Number(r.gasUsed * r.effectiveGasPrice) / 1e18, approveFromWallet: allowance === APPROVE_MARK }
-      }
-      const after = await refreshBalance()
-      record('U4_gift', { approvalMs: approval.ms, totalMs: Math.round(performance.now() - t0), tx, hash, chain, balanceBefore: before?.toString(), balanceAfter: after?.toString() })
-    },
-  },
+  ...(
+    [
+      ['U4a', 'LOW', "Circle's LOW fee level."],
+      ['U4b', 'custom', 'Our own fee: Arc base fee x2 plus a 1 gwei tip, gas limit from our estimate + 25%. Circle may reject a tip below its minimum.'],
+      ['U4c', 'MEDIUM', "Circle's MEDIUM fee level (the first run paid a 234 gwei tip)."],
+    ] as const
+  ).map(([id, mode, text]): Check => ({
+    id,
+    title: `${id} Gift with ${mode} fee: approve + transfer in one Multicall3From transaction`,
+    text: `One Circle approval. Approves the funder for 7 units and sends 0.01 USDC to the funder. ${text}`,
+    run: () => gift(id, mode),
+  })),
   {
     id: 'U5',
     title: 'U5 Sign a message',
