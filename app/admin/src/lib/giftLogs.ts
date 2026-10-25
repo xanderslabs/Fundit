@@ -9,6 +9,8 @@ import type { ByToken } from './stats'
 export const LOG_WINDOW = 9_999n
 export const MAX_WINDOWS = 500
 export const PARALLEL = 4
+// Fundit addresses sent in one getLogs call.
+export const ADDRESS_CHUNK = 100
 
 // The gift message is read off the chain but never kept.
 export type GiftEvent =
@@ -36,13 +38,18 @@ export async function fetchGiftEvents(
   fromBlock: bigint,
 ): Promise<{ status: 'ok'; events: GiftEvent[]; toBlock: bigint } | { status: 'too-long'; windows: number }> {
   const toBlock = await client.getBlockNumber()
-  const ranges = windows(fromBlock, toBlock)
+  const ranges = fundits.length === 0 ? [] : windows(fromBlock, toBlock)
   if (ranges.length > MAX_WINDOWS) return { status: 'too-long', windows: ranges.length }
 
-  // Anyone can deploy a contract that emits Donated, so logs are kept only from the factory's Fundits.
+  // Anyone can deploy a contract that emits Donated, so the RPC is asked only for the Fundit addresses,
+  // and logs from any other address are dropped again here.
   const known = new Set(fundits.map((a) => a.toLowerCase()))
-  const fetchRange: RangeFetch = async (from, to) =>
-    (await client.getLogs({ events: [DONATED, FEES_CLAIMED], fromBlock: from, toBlock: to })) as Log[]
+  const chunks: Address[][] = []
+  for (let i = 0; i < fundits.length; i += ADDRESS_CHUNK) chunks.push(fundits.slice(i, i + ADDRESS_CHUNK))
+  const fetchChunk =
+    (address: Address[]): RangeFetch =>
+    async (from, to) =>
+      (await client.getLogs({ address, events: [DONATED, FEES_CLAIMED], fromBlock: from, toBlock: to })) as Log[]
 
   const results: Log[][] = new Array(ranges.length)
   let next = 0
@@ -50,7 +57,9 @@ export async function fetchGiftEvents(
     while (next < ranges.length) {
       const i = next++
       const [from, to] = ranges[i]!
-      results[i] = await getLogsSplit(fetchRange, from, to)
+      const logs: Log[] = []
+      for (const chunk of chunks) logs.push(...(await getLogsSplit(fetchChunk(chunk), from, to)))
+      results[i] = logs
     }
   }
   await Promise.all(Array.from({ length: PARALLEL }, worker))

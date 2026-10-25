@@ -31,7 +31,8 @@ export function Gifts({ session, showTest }: { session: AdminSession; showTest: 
     enabled: matches,
   })
   const gifts = useQuery({
-    queryKey: ['admin', session.network, 'gifts'],
+    // The count is in the key so a newly created Fundit's gifts are fetched.
+    queryKey: ['admin', session.network, 'gifts', snapshot.data?.length ?? 0],
     queryFn: () =>
       fetchGiftEvents(
         arcClient,

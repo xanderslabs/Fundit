@@ -1,6 +1,6 @@
 import type { Address } from 'viem'
 import { describe, expect, it, vi } from 'vitest'
-import { fetchGiftEvents, type GiftEvent, giftStats, LOG_WINDOW, MAX_WINDOWS, windows } from './giftLogs'
+import { ADDRESS_CHUNK, fetchGiftEvents, type GiftEvent, giftStats, LOG_WINDOW, MAX_WINDOWS, windows } from './giftLogs'
 import type { FunditSnapshot } from './snapshot'
 
 const TEST_DONOR = '0x3333333333333333333333333333333333333333' as Address
@@ -82,6 +82,31 @@ describe('fetchGiftEvents', () => {
     expect(res.status).toBe('ok')
     expect(getLogs.mock.calls.length).toBeGreaterThan(4)
     expect(peak).toBe(4)
+  })
+
+  it('asks the RPC only for the given Fundit addresses', async () => {
+    const getLogs = vi.fn(async (_args: { address: Address[] }) => [])
+    const client = { getLogs, getBlockNumber: async () => 10n } as never
+    await fetchGiftEvents(client, [F1, F2], 0n)
+    expect(getLogs).toHaveBeenCalledTimes(1)
+    expect(getLogs.mock.calls[0]![0].address).toEqual([F1, F2])
+  })
+
+  it('splits more than 100 Fundits into address chunks', async () => {
+    const getLogs = vi.fn(async (_args: { address: Address[] }) => [])
+    const client = { getLogs, getBlockNumber: async () => LOG_WINDOW * 2n - 1n } as never
+    const many = Array.from({ length: 250 }, (_, i) => addr(i + 1000))
+    await fetchGiftEvents(client, many, 0n)
+    expect(ADDRESS_CHUNK).toBe(100)
+    expect(getLogs).toHaveBeenCalledTimes(2 * 3)
+    expect(getLogs.mock.calls.map((c) => c[0].address.length).sort((a, b) => a - b)).toEqual([50, 50, 100, 100, 100, 100])
+  })
+
+  it('makes no getLogs call with no Fundits', async () => {
+    const getLogs = vi.fn()
+    const client = { getLogs, getBlockNumber: async () => LOG_WINDOW * 3n } as never
+    expect(await fetchGiftEvents(client, [], 0n)).toEqual({ status: 'ok', events: [], toBlock: LOG_WINDOW * 3n })
+    expect(getLogs).not.toHaveBeenCalled()
   })
 
   it('keeps no gift message', async () => {
