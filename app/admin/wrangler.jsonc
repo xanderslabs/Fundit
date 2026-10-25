@@ -28,7 +28,7 @@
 		{
 			"binding": "ADMIN_DB",
 			"database_name": "fundit-admin",
-			"database_id": "<O4>",
+			"database_id": "5b45d35c-a171-45d6-8128-d900e70a8330",
 			"migrations_dir": "migrations"
 		}
 	],
