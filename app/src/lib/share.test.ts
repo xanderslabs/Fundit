@@ -7,9 +7,9 @@ const URL_ = funditUrl(ORIGIN, ADDRESS)
 // Spaces, "&", "#", "?" and an emoji: each would cut or corrupt a share link if it went in unencoded.
 const TITLE = 'Water & wells #2? 💧'
 
-const VISITOR = `Help ${TITLE} reach its goal on Fundit: ${URL_}`
-const CREATOR = `I started a Fundit for ${TITLE}. Every gift helps: ${URL_}`
-const VISITOR_TEXT = `Help ${TITLE} reach its goal on Fundit`
+const VISITOR = `Give to "${TITLE}" on Fundit: ${URL_}`
+const CREATOR = `I started a Fundit: "${TITLE}". Every gift helps: ${URL_}`
+const VISITOR_TEXT = `Give to "${TITLE}" on Fundit`
 
 function target(key: string, isCreator = false) {
   const t = shareTargets(TITLE, URL_, isCreator).find((x) => x.key === key)

@@ -63,7 +63,7 @@ describe('SharePanel', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Share from this device' }))
     expect(share).toHaveBeenCalledWith({
       title: 'Clean water',
-      text: `Help Clean water reach its goal on Fundit: ${URL_}`,
+      text: `Give to "Clean water" on Fundit: ${URL_}`,
       url: URL_,
     })
     expect(writeText).not.toHaveBeenCalled()
@@ -89,9 +89,9 @@ describe('SharePanel', () => {
 
   it('shows the visitor message, or the organiser message for the organiser', () => {
     const { rerender } = render(<SharePanel address={ADDRESS} title="Clean water" isCreator={false} />)
-    expect(screen.getByText(`Help Clean water reach its goal on Fundit: ${URL_}`)).toBeTruthy()
+    expect(screen.getByText(`Give to "Clean water" on Fundit: ${URL_}`)).toBeTruthy()
     rerender(<SharePanel address={ADDRESS} title="Clean water" isCreator />)
-    expect(screen.getByText(`I started a Fundit for Clean water. Every gift helps: ${URL_}`)).toBeTruthy()
+    expect(screen.getByText(`I started a Fundit: "Clean water". Every gift helps: ${URL_}`)).toBeTruthy()
   })
 
   // A share link that opens in the same tab takes the person away from the Fundit, and without noopener the
@@ -121,7 +121,7 @@ describe('SharePanel', () => {
   it('renders a hostile title as text', () => {
     const { container } = render(<SharePanel address={ADDRESS} title="<img src=x onerror=alert(1)>" isCreator={false} />)
     expect(container.querySelector('img[src="x"]')).toBeNull()
-    expect(screen.getByText(/^Help <img src=x onerror=alert\(1\)> reach its goal/)).toBeTruthy()
+    expect(screen.getByText(/^Give to "<img src=x onerror=alert\(1\)>" on Fundit/)).toBeTruthy()
   })
 
   it('shows a QR code of the link', async () => {

@@ -11,7 +11,8 @@ export function funditUrl(origin: string, address: string): string {
 
 // The sentence without the link, for services that take the link in its own field.
 export function shareText(title: string, isCreator: boolean): string {
-  return isCreator ? `I started a Fundit for ${title}. Every gift helps` : `Help ${title} reach its goal on Fundit`
+  // The title is quoted, so it reads right whatever its first word is ("Help Help build..." before).
+  return isCreator ? `I started a Fundit: "${title}". Every gift helps` : `Give to "${title}" on Fundit`
 }
 
 export function shareMessage(title: string, url: string, isCreator: boolean): string {

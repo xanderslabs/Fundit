@@ -181,7 +181,7 @@ describe('Create', () => {
     const user = await fillValid()
     await user.click(submitButton())
     expect(await screen.findByRole('heading', { name: 'Share this Fundit' })).toBeTruthy()
-    expect(screen.getByText(/^I started a Fundit for Clean water\. Every gift helps: /)).toBeTruthy()
+    expect(screen.getByText(/^I started a Fundit: "Clean water"\. Every gift helps: /)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Copy link' })).toBeTruthy()
   })
 
