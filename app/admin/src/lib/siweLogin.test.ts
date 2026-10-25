@@ -73,6 +73,9 @@ describe('signIn', () => {
     ['expired', 'The sign-in request expired. Try again.'],
     ['rate_limited', 'Too many tries. Wait a minute and try again.'],
     ['turnstile', "We couldn't confirm you're not a bot. Try again."],
+    ['wrong_chain', 'This panel was built for another network.'],
+    ['wrong_domain', 'Open the admin panel at admin.fundit.fun and try again.'],
+    ['unavailable', "The admin service can't check the owner right now. Try again in a minute."],
   ])('maps %s to its text', async (code, text) => {
     expect(LOGIN_TEXT[code]).toBe(text)
     replies = [
@@ -86,7 +89,7 @@ describe('signIn', () => {
   })
 
   it('falls back to a plain text for an unknown code or no answer', async () => {
-    replies = [{ status: 503, body: { error: 'unavailable' } }]
+    replies = [{ status: 503, body: { error: 'something_new' } }]
     expect(await signIn(CONFIG, ADDRESS, 'tok')).toEqual({ ok: false, text: "Couldn't sign in. Try again." })
     fetchMock.mockRejectedValueOnce(new TypeError('offline'))
     expect(await signIn(CONFIG, ADDRESS, 'tok')).toEqual({ ok: false, text: "Couldn't sign in. Try again." })

@@ -15,6 +15,9 @@ export const LOGIN_TEXT: Record<string, string> = {
   expired: EXPIRED,
   rate_limited: 'Too many tries. Wait a minute and try again.',
   turnstile: "We couldn't confirm you're not a bot. Try again.",
+  wrong_chain: 'This panel was built for another network.',
+  wrong_domain: 'Open the admin panel at admin.fundit.fun and try again.',
+  unavailable: "The admin service can't check the owner right now. Try again in a minute.",
 }
 
 type Failure = { ok: false; text: string }
