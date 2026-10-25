@@ -425,7 +425,6 @@ describe('session', () => {
         expect(await res.json()).toEqual({ error: 'unavailable' })
       }
       expect(calls).toEqual([])
-      if (over.TURNSTILE_SECRET === undefined && 'TURNSTILE_SECRET' in over) continue
       for (const path of ['/', '/index.html', '/assets/panel-f6.js']) {
         expect(await (await worker.fetch(get(path, cookie), e)).text()).not.toMatch(PANEL_TEXT)
       }
