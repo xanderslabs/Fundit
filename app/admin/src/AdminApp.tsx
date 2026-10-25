@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AddressChip, Button, PageHeader } from '../../src/components/ui'
 import { type AdminSession, logout } from './lib/api'
+import { Gifts } from './Gifts'
 import { Overview } from './Overview'
 
 const NETWORK_NAME = { testnet: 'Arc Testnet', mainnet: 'Arc Mainnet' } as const
@@ -51,6 +52,7 @@ export function AdminApp({ session }: { session: AdminSession }) {
           </p>
         )}
         <Overview session={session} showTest={showTest} />
+        <Gifts session={session} showTest={showTest} />
       </main>
     </div>
   )

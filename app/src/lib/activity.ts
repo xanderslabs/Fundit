@@ -76,10 +76,10 @@ function decode(log: Log): Decoded | null {
   }
 }
 
-type RangeFetch = (fromBlock: bigint, toBlock: bigint) => Promise<Log[]>
+export type RangeFetch = (fromBlock: bigint, toBlock: bigint) => Promise<Log[]>
 
 // Fetches [from, to]. If the RPC refuses the range or hits the log cap, halves it and retries each part.
-async function getLogsSplit(fetchRange: RangeFetch, from: bigint, to: bigint): Promise<Log[]> {
+export async function getLogsSplit(fetchRange: RangeFetch, from: bigint, to: bigint): Promise<Log[]> {
   let refused: unknown = null
   try {
     const logs = await fetchRange(from, to)
