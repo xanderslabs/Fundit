@@ -9,6 +9,7 @@ import { ARC_CHAIN_ID } from '../../src/config'
 import { CANCELLED } from '../../src/lib/errors'
 import type { AdminSession } from './lib/api'
 import type { FactoryState } from './lib/factoryState'
+import { fetchSnapshot } from './lib/snapshot'
 import { OwnerControls } from './OwnerControls'
 
 const OWNER = '0x3552E9c14C7b6050839009A5B160A4446a1e916D' as Address
@@ -119,5 +120,27 @@ describe('OwnerControls', () => {
     const text = document.body.textContent ?? ''
     expect(text).not.toMatch(/renounce|transfer ownership|transferOwnership/i)
     expect(within(document.body).queryByRole('button', { name: /owner/i })).toBeNull()
+  })
+
+  it('the featured picker starts on the current featured Fundit', async () => {
+    cleanup()
+    const current = '0x5555555555555555555555555555555555555555' as Address
+    const other = '0x6666666666666666666666666666666666666666' as Address
+    vi.mocked(fetchSnapshot).mockResolvedValue([{ address: current, isTest: false }, { address: other, isTest: false }] as never)
+    state.read.mockResolvedValue({ ...factoryState, featured: current })
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <OwnerControls session={session} />
+      </QueryClientProvider>,
+    )
+    const radios = await screen.findAllByRole('radio')
+    await waitFor(() => expect(radios).toHaveLength(3))
+    const picker = within(screen.getByRole('group', { name: 'Pick the Fundit to feature' }))
+    const [none, first, second] = picker.getAllByRole('radio') as HTMLInputElement[]
+    expect([none!.checked, first!.checked, second!.checked]).toEqual([false, true, false])
+    // A choice the owner makes is kept.
+    await userEvent.setup().click(second!)
+    expect(second!.checked).toBe(true)
+    vi.mocked(fetchSnapshot).mockResolvedValue([])
   })
 })

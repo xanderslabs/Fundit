@@ -79,7 +79,8 @@ export function OwnerControls({ session }: { session: AdminSession }) {
   const [withdraw, setWithdraw] = useState('')
   const [treasury, setTreasury] = useState('')
   const [treasuryAgain, setTreasuryAgain] = useState('')
-  const [featured, setFeatured] = useState('')
+  // null until the owner picks; then the picker shows the factory's current featured Fundit, even after a refetch.
+  const [pickedFeatured, setFeatured] = useState<string | null>(null)
   const [pending, setPending] = useState<OwnerAction | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -87,6 +88,7 @@ export function OwnerControls({ session }: { session: AdminSession }) {
 
   const state = factory.data
   if (!matches || !state) return null
+  const featured = pickedFeatured ?? (isAddressEqual(state.featured, zeroAddress) ? '' : state.featured)
   const can = canAct(account.address, account.chainId, session.address, state)
 
   const isCampaign = (a: Address) => arcClient.readContract({ address: session.factory, abi: factoryAbi, functionName: 'isCampaign', args: [a] })
@@ -209,7 +211,7 @@ export function OwnerControls({ session }: { session: AdminSession }) {
           </label>
           {(snapshot.data ?? []).map((r) => (
             <label key={r.address} className="admin-pick">
-              <input type="radio" name="featured" checked={featured === r.address} onChange={() => setFeatured(r.address)} />
+              <input type="radio" name="featured" checked={featured.toLowerCase() === r.address.toLowerCase()} onChange={() => setFeatured(r.address)} />
               <AddressChip address={r.address} />
               {r.isTest && <Badge>Test</Badge>}
             </label>
