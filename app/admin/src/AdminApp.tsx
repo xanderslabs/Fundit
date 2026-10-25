@@ -3,6 +3,7 @@ import { AddressChip, Button, PageHeader } from '../../src/components/ui'
 import { type AdminSession, logout } from './lib/api'
 import { Gifts } from './Gifts'
 import { Overview } from './Overview'
+import { OwnerControls } from './OwnerControls'
 
 const NETWORK_NAME = { testnet: 'Arc Testnet', mainnet: 'Arc Mainnet' } as const
 
@@ -53,6 +54,7 @@ export function AdminApp({ session }: { session: AdminSession }) {
         )}
         <Overview session={session} showTest={showTest} />
         <Gifts session={session} showTest={showTest} />
+        <OwnerControls session={session} />
       </main>
     </div>
   )

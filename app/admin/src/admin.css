@@ -113,3 +113,35 @@ body {
 .admin-row-value {
   margin: 0;
 }
+
+.admin-control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.admin-control-title {
+  margin: 0;
+  font-size: var(--text-md);
+}
+
+.admin-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.admin-pick {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.admin-confirm-value {
+  overflow-wrap: anywhere;
+}
