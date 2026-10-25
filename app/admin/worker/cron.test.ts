@@ -164,4 +164,42 @@ describe('runCron', () => {
     await runCron(e, NOW + 600_000, broken)
     expect(w.sent[1]).toBe('[Arc Testnet] site is failing: status 500')
   })
+
+  it('alerts after the owner event scan fails two runs in a row', async () => {
+    const e = env()
+    const w = world()
+    await runCron(e, NOW, w.fetcher)
+    w.head = 1100
+    w.getLogsFails = true
+    await runCron(e, NOW + 300_000, w.fetcher)
+    expect(w.sent).toHaveLength(1)
+    w.head = 1101
+    await runCron(e, NOW + 600_000, w.fetcher)
+    expect(w.sent[1]).toBe('[Arc Testnet] events:arc-testnet is failing: owner event scan failed')
+    expect(await meta(e, CURSOR)).toBe('998')
+  })
+
+  it('sends back to normal when the owner event scan recovers', async () => {
+    const e = env()
+    const w = world()
+    await runCron(e, NOW, w.fetcher)
+    w.head = 1100
+    w.getLogsFails = true
+    await runCron(e, NOW + 300_000, w.fetcher)
+    w.head = 1101
+    await runCron(e, NOW + 600_000, w.fetcher)
+    w.getLogsFails = false
+    w.head = 1102
+    await runCron(e, NOW + 900_000, w.fetcher)
+    expect(w.sent[w.sent.length - 1]).toBe('[Arc Testnet] events:arc-testnet is back to normal.')
+  })
+
+  it('does not report the owner event scan as failing without Telegram secrets', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    const e = env({ TELEGRAM_BOT_TOKEN: undefined, TELEGRAM_CHAT_ID: undefined })
+    const w = world({ getLogsFails: true })
+    await runCron(e, NOW, w.fetcher)
+    const rows = await e.ADMIN_DB.prepare('SELECT key FROM alert_state').all<{ key: string }>()
+    expect(rows.results.map((r) => r.key)).not.toContain('events:arc-testnet')
+  })
 })

@@ -1,5 +1,5 @@
-// The 5 minute cron. In order: prune nonces, run the health checks and send their alerts, then announce new owner
-// events from a cursor kept in D1. The cursor moves only past events whose message was sent, so a Telegram outage
+// The 5 minute cron. In order: prune nonces, run the health checks, announce new owner events
+// from a cursor kept in D1, then send the alerts (a failed event scan is one of the checks). The cursor moves only past events whose message was sent, so a Telegram outage
 // delays an event and never drops it. Without the Telegram secrets the checks still run.
 //
 // Never log the token, the chat id or a message. The one log line is the fixed text `telegram not configured`.
@@ -43,14 +43,15 @@ async function writeAlertRows(db: Db, rows: AlertRow[]): Promise<void> {
 
 type Send = (text: string) => Promise<boolean>
 
-async function ownerEvents(db: Db, chain: AdminChain, head: bigint, send: Send, fetcher: typeof fetch): Promise<void> {
+// Returns false only when the scan itself could not read events. A Telegram failure is not a scan failure.
+async function ownerEvents(db: Db, chain: AdminChain, head: bigint, send: Send, fetcher: typeof fetch): Promise<boolean> {
   const confirmed = head - CONFIRMATIONS
   const cursorKey = `owner_events_next:${chain.network}`
   const stored = await getMeta(db, cursorKey)
   if (stored === null) {
     // First run: no history is replayed. Block `confirmed` is the first one scanned.
     if (await send(`[${networkLabel(chain)}] Owner alerts started at block ${confirmed} on ${networkLabel(chain)}.`)) await setMeta(db, cursorKey, String(confirmed))
-    return
+    return true
   }
   let from = BigInt(stored)
   for (let i = 0; i < MAX_EVENT_WINDOWS_PER_RUN && from <= confirmed; i++) {
@@ -59,20 +60,21 @@ async function ownerEvents(db: Db, chain: AdminChain, head: bigint, send: Send, 
     try {
       events = await fetchOwnerEvents(chain.rpcUrl, chain.factory, from, to, fetcher)
     } catch {
-      return
+      return false
     }
     let sent = 0
     for (const event of events) {
       if (!(await send(ownerEventText(event, chain)))) {
         // Earlier events in this window went out; resume at the failed event's block.
         if (sent > 0) await setMeta(db, cursorKey, String(event.blockNumber))
-        return
+        return true
       }
       sent++
     }
     from = to + 1n
     await setMeta(db, cursorKey, String(from))
   }
+  return true
 }
 
 export async function runCron(env: Env, nowMs: number, fetcher: typeof fetch = (i, n) => fetch(i, n)): Promise<void> {
@@ -91,6 +93,12 @@ export async function runCron(env: Env, nowMs: number, fetcher: typeof fetch = (
   if (!configured) console.log('telegram not configured')
   const send: Send = (text) => sendTelegram(env.TELEGRAM_BOT_TOKEN as string, env.TELEGRAM_CHAT_ID as string, text, fetcher)
 
+  // The scan runs before decideAlerts so a failing scan is alerted in the same run. It is skipped without Telegram.
+  if (configured && head !== null) {
+    const ok = await ownerEvents(db, chain, head, send, fetcher)
+    checks.push({ key: `events:arc-${chain.network}`, ok, detail: 'owner event scan failed' })
+  }
+
   const { send: messages, next } = decideAlerts(await readAlertRows(db), checks, nowMs)
   let allSent = true
   if (configured) {
@@ -99,5 +107,4 @@ export async function runCron(env: Env, nowMs: number, fetcher: typeof fetch = (
   // If a send failed the rows stay as they were, so the same alert is decided again next run.
   if (allSent) await writeAlertRows(db, next)
 
-  if (configured && head !== null) await ownerEvents(db, chain, head, send, fetcher)
 }
