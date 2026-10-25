@@ -1,0 +1,62 @@
+body {
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font);
+}
+
+.admin-note {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.admin-login {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: var(--space-4);
+}
+
+.admin-login > .ui-card {
+  width: 100%;
+  max-width: 26rem;
+}
+
+.admin-login-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.admin-login-title {
+  margin: 0;
+}
+
+.admin-login-wallet {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.admin-turnstile {
+  display: flex;
+  justify-content: center;
+}
+
+.admin-shell {
+  padding: var(--space-6) var(--space-4);
+}
+
+.admin-main {
+  width: 100%;
+  max-width: var(--page-wide);
+  margin: 0 auto;
+}
+
+.admin-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}

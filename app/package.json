@@ -9,9 +9,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:admin": "tsc --noEmit && vite build --config vite.admin.config.ts",
+    "dev:admin": "vite --config vite.admin.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "npm run lint:css && vitest run",
-    "lint:css": "stylelint \"src/**/*.css\"",
+    "lint:css": "stylelint \"{src,admin}/**/*.css\"",
     "e2e": "playwright test",
     "abis": "node scripts/gen-abis.mjs"
   },

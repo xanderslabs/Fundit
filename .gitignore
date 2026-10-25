@@ -11,6 +11,7 @@ contracts/cache/
 contracts/broadcast/*/31337/
 contracts/broadcast/*/5042/dry-run/
 app/dist/
+app/dist-admin/
 .wrangler/
 .superpowers/sdd/
 app/test-results/
