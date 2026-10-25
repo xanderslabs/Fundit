@@ -11,9 +11,11 @@ type Props = {
   empty: ReactNode
   skeletons?: number
   action?: (view: CampaignView) => ReactNode
+  // The address of the featured Fundit, whose card carries the Featured badge.
+  featured?: string
 }
 
-export function CampaignGrid({ views, loading, empty, skeletons = 6, action }: Props) {
+export function CampaignGrid({ views, loading, empty, skeletons = 6, action, featured }: Props) {
   if (loading) {
     return (
       <div className="fundit-grid" aria-busy="true">
@@ -29,11 +31,11 @@ export function CampaignGrid({ views, loading, empty, skeletons = 6, action }: P
       {views.map((v) =>
         action ? (
           <div key={v.address} className="fundit-grid-item">
-            <CampaignCard view={v} />
+            <CampaignCard view={v} featured={v.address === featured} />
             <div className="fundit-grid-action">{action(v)}</div>
           </div>
         ) : (
-          <CampaignCard key={v.address} view={v} />
+          <CampaignCard key={v.address} view={v} featured={v.address === featured} />
         ),
       )}
     </div>

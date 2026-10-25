@@ -252,12 +252,12 @@ describe('Home FAQ', () => {
   })
 })
 
-// Test Fundits read as real fundraisers to a visitor. Home leaves them out of Featured and Newest.
+// Test Fundits read as real fundraisers to a visitor. Home leaves them out of Explore Fundits and never puts one first.
 describe('Home hides test Fundits', () => {
-  it('leaves Fundits by test accounts out of Newest', () => {
+  it('leaves Fundits by test accounts out of Explore Fundits', () => {
     lists.newest = [fundit(1, 'Real garden', '0x1111111111111111111111111111111111111111'), fundit(2, 'E2E testnet garden', TESTER)]
     renderHome()
-    const newest = screen.getByRole('region', { name: 'Newest Fundits' })
+    const newest = screen.getByRole('region', { name: 'Explore Fundits' })
     expect(within(newest).getByText('Real garden')).toBeTruthy()
     expect(within(newest).queryByText('E2E testnet garden')).toBeNull()
   })
@@ -268,14 +268,27 @@ describe('Home hides test Fundits', () => {
     expect(screen.getByText('No Fundits yet. Sign in to start the first one, or look around.')).toBeTruthy()
   })
 
-  it('shows no Featured section for a test Fundit, and shows a real one', () => {
+  it('never puts a test Fundit first, even when it is the featured one', () => {
+    lists.newest = [fundit(1, 'Real garden', '0x1111111111111111111111111111111111111111')]
     lists.featured = fundit(2, 'E2E featured', TESTER)
     renderHome()
-    expect(screen.queryByRole('region', { name: 'Featured Fundit' })).toBeNull()
-    cleanup()
-    lists.featured = fundit(1, 'Real featured', '0x1111111111111111111111111111111111111111')
+    expect(screen.queryByText('E2E featured')).toBeNull()
+    expect(screen.queryByText('Featured')).toBeNull()
+  })
+})
+
+// The featured Fundit has no section of its own: it leads the list, with its badge, and is not listed twice.
+describe('Home puts the featured Fundit first', () => {
+  it('shows the featured Fundit first in Explore Fundits, once, with the Featured badge', () => {
+    const owner = '0x1111111111111111111111111111111111111111'
+    const featured = fundit(1, 'Help build Fundit', owner)
+    lists.newest = [fundit(3, 'Newest garden', owner), featured]
+    lists.featured = featured
     renderHome()
-    expect(within(screen.getByRole('region', { name: 'Featured Fundit' })).getByText('Real featured')).toBeTruthy()
+    expect(screen.queryByRole('region', { name: 'Featured Fundit' })).toBeNull()
+    const titles = within(screen.getByRole('region', { name: 'Explore Fundits' })).getAllByRole('heading', { level: 3 })
+    expect(titles.map((h) => h.textContent)).toEqual(['Help build Fundit', 'Newest garden'])
+    expect(screen.getAllByText('Featured')).toHaveLength(1)
   })
 })
 

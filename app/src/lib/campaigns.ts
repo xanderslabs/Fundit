@@ -59,6 +59,13 @@ export function publicFundits(views: CampaignView[]): CampaignView[] {
   return views.filter((v) => !isTestFundit(v))
 }
 
+// The owner-set featured Fundit goes first, then the rest in their own order. A test Fundit is never put first.
+export function featuredFirst(views: CampaignView[], featured: CampaignView | null | undefined): CampaignView[] {
+  if (!featured || isTestFundit(featured)) return views
+  const key = featured.address.toLowerCase()
+  return [featured, ...views.filter((v) => v.address.toLowerCase() !== key)]
+}
+
 // Any address in a URL is untrusted. Only the factory's own campaigns are read.
 export async function fetchCampaign(client: ReadClient, address: Address): Promise<CampaignView | 'not-a-campaign'> {
   const known = await client.readContract({

@@ -92,17 +92,9 @@
   line-height: var(--text-sm-line);
 }
 
-/* Featured and Newest */
+/* Explore Fundits */
 .section {
   padding: var(--space-4) 0 var(--space-7);
-}
-
-.featured h2 {
-  margin: 0 0 var(--space-4);
-}
-
-.featured-card {
-  max-width: 560px;
 }
 
 .section-head {

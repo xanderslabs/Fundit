@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import type { Address } from 'viem'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -11,15 +11,17 @@ vi.mock('../config', async (importOriginal) => ({
   TEST_CREATORS: ['0x2222222222222222222222222222222222222222'],
 }))
 vi.mock('../hooks/useSender', () => ({ useSender: () => null }))
-const page = vi.hoisted(() => ({ views: [] as unknown[] }))
+const page = vi.hoisted(() => ({ views: [] as unknown[], featured: null as unknown }))
 vi.mock('../hooks/useCampaigns', () => ({
   PAGE_SIZE: 24n,
   campaignsQuery: (offset: bigint) => ({ queryKey: ['campaigns', offset.toString()], queryFn: async () => page.views }),
+  useFeatured: () => ({ data: page.featured }),
 }))
 
 afterEach(() => {
   cleanup()
   page.views = []
+  page.featured = null
 })
 
 // Fundits for the public lists. TESTER is on the test-creator list; the others are real.
@@ -59,6 +61,33 @@ describe('Explore hides test Fundits', () => {
     )
     expect(await screen.findByText('Real garden')).toBeTruthy()
     expect(screen.queryByText('E2E testnet garden')).toBeNull()
+  })
+})
+
+// The featured Fundit leads the default order, even when it is older than the loaded pages, and is listed once.
+// Other sorts keep their own order.
+describe('Explore puts the featured Fundit first', () => {
+  it('in the default order only', async () => {
+    const owner = '0x1111111111111111111111111111111111111111'
+    const featured = fundit(1, 'Help build Fundit', owner)
+    const rich = fundit(3, 'Big garden', owner)
+    rich.summary = { ...rich.summary, raised: 5_000_000n }
+    page.views = [rich, featured]
+    page.featured = featured
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <Explore />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    await screen.findByText('Big garden')
+    const titles = () => screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)
+    expect(titles()).toEqual(['Help build Fundit', 'Big garden'])
+    expect(screen.getAllByText('Featured')).toHaveLength(1)
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'raised' } })
+    expect(titles()).toEqual(['Big garden', 'Help build Fundit'])
+    expect(screen.queryByText('Featured')).toBeNull()
   })
 })
 

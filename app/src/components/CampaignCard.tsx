@@ -13,7 +13,7 @@ type Props = { view: CampaignView; featured?: boolean }
 export function CampaignCard({ view, featured = false }: Props) {
   const { summary, symbol, address } = view
   return (
-    <Link to={`/c/${address}`} className={featured ? 'fundit-card fundit-card-featured' : 'fundit-card'}>
+    <Link to={`/c/${address}`} className="fundit-card">
       <CampaignImage url={summary.meta.imageUrl} title={summary.meta.title} className="fundit-card-image" />
       <div className="fundit-card-body">
         <div className="fundit-card-tags">
@@ -25,7 +25,6 @@ export function CampaignCard({ view, featured = false }: Props) {
         <p className="fundit-card-by">
           by <Name address={summary.creator} link={false} avatar={false} />
         </p>
-        {featured && summary.meta.description && <p className="fundit-card-text">{summary.meta.description}</p>}
         <Progress raised={summary.raised} goal={summary.goal} />
         <p className="fundit-card-amounts">
           <strong>{formatAmount(summary.raised, symbol)}</strong>

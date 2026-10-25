@@ -1,12 +1,11 @@
 import type { ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { SignInButton } from '../components/AccountMenu'
-import { CampaignCard } from '../components/CampaignCard'
 import { CampaignGrid, LoadError } from '../components/CampaignGrid'
 import { ButtonLink } from '../components/ui'
 import { CHAIN_NAMES, EMAIL_SIGNIN } from '../config'
 import { useCampaigns, useFeatured } from '../hooks/useCampaigns'
-import { isTestFundit, publicFundits } from '../lib/campaigns'
+import { featuredFirst, publicFundits } from '../lib/campaigns'
 import { useSender } from '../hooks/useSender'
 import './Home.css'
 
@@ -156,7 +155,7 @@ export function Home() {
   const featured = useFeatured()
   const newest = useCampaigns(0n)
   // Test Fundits stay out of public lists (TEST_CREATORS). Their own pages still open.
-  const featuredView = featured.data && !isTestFundit(featured.data) ? featured.data : null
+  const shown = newest.data && featuredFirst(publicFundits(newest.data), featured.data).slice(0, NEWEST_COUNT)
   const signedIn = useSender() !== null
 
   return (
@@ -195,18 +194,9 @@ export function Home() {
         </ul>
       </section>
 
-      {featuredView && (
-        <section className="section featured" aria-labelledby="featured">
-          <h2 id="featured">Featured Fundit</h2>
-          <div className="featured-card">
-            <CampaignCard view={featuredView} featured />
-          </div>
-        </section>
-      )}
-
       <section className="section" aria-labelledby="newest">
         <div className="section-head">
-          <h2 id="newest">Newest Fundits</h2>
+          <h2 id="newest">Explore Fundits</h2>
           <Link to="/explore" className="section-link">
             See all
           </Link>
@@ -215,7 +205,8 @@ export function Home() {
           <LoadError onRetry={() => newest.refetch()} />
         ) : (
           <CampaignGrid
-            views={newest.data && publicFundits(newest.data).slice(0, NEWEST_COUNT)}
+            views={shown}
+            featured={featured.data?.address}
             loading={newest.isPending}
             empty={
               signedIn ? (

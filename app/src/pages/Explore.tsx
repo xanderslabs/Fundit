@@ -2,9 +2,9 @@ import { useQueries } from '@tanstack/react-query'
 import { useState } from 'react'
 import { CampaignGrid, LoadError } from '../components/CampaignGrid'
 import { Button, ButtonLink, PageHeader } from '../components/ui'
-import { campaignsQuery, PAGE_SIZE } from '../hooks/useCampaigns'
+import { campaignsQuery, PAGE_SIZE, useFeatured } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
-import { type CampaignView, publicFundits, uniqueByAddress } from '../lib/campaigns'
+import { type CampaignView, featuredFirst, publicFundits, uniqueByAddress } from '../lib/campaigns'
 import './Explore.css'
 
 type Sort = 'newest' | 'raised' | 'closest'
@@ -42,6 +42,7 @@ export function Explore() {
   const [sort, setSort] = useState<Sort>('newest')
   const [showClosed, setShowClosed] = useState(false)
   const signedIn = useSender() !== null
+  const featured = useFeatured().data
 
   const results = useQueries({
     queries: Array.from({ length: pages }, (_, i) => campaignsQuery(BigInt(i) * PAGE_SIZE)),
@@ -56,7 +57,8 @@ export function Explore() {
   const hasMore = loadingMore || last?.data?.length === Number(PAGE_SIZE)
 
   const term = search.trim().toLowerCase()
-  const shown = loaded
+  // In the default order the featured Fundit comes first, even when it is older than the pages loaded so far.
+  const shown = (sort === 'newest' ? featuredFirst(loaded, featured) : loaded)
     .filter((v) => showClosed || !v.summary.closed)
     .filter(
       (v) =>
@@ -102,6 +104,7 @@ export function Explore() {
       ) : (
         <CampaignGrid
           views={shown}
+          featured={sort === 'newest' ? featured?.address : undefined}
           loading={firstPending}
           skeletons={9}
           empty={
