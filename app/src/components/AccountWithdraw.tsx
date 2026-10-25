@@ -158,6 +158,7 @@ function SendOutForm({ sender }: { sender: Sender }) {
         return buildAccountSendCalls({ token: TOKENS[symbol].address, amount, dest, recipient, maxFee: fresh?.maxFee, fast, account })
       },
       'Send money out',
+      { amount, symbol, toName: dest === 'Arc' ? 'Address on Arc' : `Address on ${dest}`, to: recipient },
     )
   }
 

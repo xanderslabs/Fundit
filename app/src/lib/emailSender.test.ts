@@ -25,13 +25,13 @@ const { runChallenge, getTransactionCount, estimateGas, estimateFeesPerGas, send
 vi.mock('./circleEmail', async (orig) => ({ ...(await orig<typeof import('./circleEmail')>()), runChallenge }))
 vi.mock('@circle-fin/w3s-pw-web-sdk', () => ({
   W3SSdk: function W3SSdk() {
-    return { setThemeColor: () => {}, setResources: () => {}, getDeviceId: async () => 'device-id-0001' }
+    return { setThemeColor: () => {}, setResources: () => {}, setLocalizations: () => {}, getDeviceId: async () => 'device-id-0001' }
   },
 }))
 vi.mock('./clients', () => ({ arcClient: { getTransactionCount, estimateGas, estimateFeesPerGas, sendRawTransaction } }))
 vi.mock('./sender', async (orig) => ({ ...(await orig<typeof import('./sender')>()), waitForResult }))
 
-import { emailSender, NONCE_BUSY, NOT_AVAILABLE } from './emailSender'
+import { approvalScreen, emailSender, NONCE_BUSY, NOT_AVAILABLE } from './emailSender'
 
 const CALLS: Call[] = [
   { to: '0x00000000000000000000000000000000000000a1', data: '0x01' },
@@ -96,7 +96,7 @@ describe('emailSender', () => {
       maxPriorityFeePerGas: '1000000000',
     })
     expect(tx).not.toHaveProperty('type')
-    expect(runChallenge).toHaveBeenCalledWith('c-1')
+    expect(runChallenge).toHaveBeenCalledWith('c-1', expect.objectContaining({ text: expect.any(Object) }))
   })
 
   // Circle's screen shows empty To and Total for a signed transaction, so the memo is what names the action there.
@@ -136,7 +136,7 @@ describe('emailSender', () => {
     const res = await emailSender(SESSION).send(CALLS, { label: 'Donate' })
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/ucw/sign-transaction', '/api/ucw/session', '/api/ucw/sign-transaction'])
     expect(JSON.parse((fetchMock.mock.calls[1]![1] as RequestInit).body as string)).toEqual({ deviceId: 'device-id-0001' })
-    expect(runChallenge).toHaveBeenCalledWith('c-2')
+    expect(runChallenge).toHaveBeenCalledWith('c-2', expect.objectContaining({ text: expect.any(Object) }))
     expect(res.status).toBe('success')
     expect(readEmailSession()).toEqual(SESSION)
   })
@@ -181,5 +181,32 @@ describe('emailSender', () => {
     expect(NONCE_BUSY).toBe('Another transaction is still going through. Try again in a moment.')
     expect(explainError(err)).toBe(NONCE_BUSY)
     expect(waitForResult).not.toHaveBeenCalled()
+  })
+})
+
+// Circle's window is where an email account approves money leaving it. Without these fields it shows an empty To and
+// Total, so the person would confirm a payment without seeing how much goes where.
+describe('approvalScreen', () => {
+  const to = '0x5699Cf29d74e39f934b3C99F17CC65D65775Fd9A'
+  it('shows the amount, the Fundit and its address, the total and the most the network fee can be', () => {
+    const screen = approvalScreen({ label: 'Give to a Fundit', payment: { amount: 1_250_000n, symbol: 'EURC', toName: 'Help build Fundit', to } }, 2_100_000_000_000_000n)
+    expect(screen.symbol).toBe('EURC')
+    expect(screen.text).toMatchObject({
+      title: 'Give to a Fundit',
+      mainCurrency: { amount: '1.25', symbol: 'EURC' },
+      to: ['Help build Fundit', '', to],
+      total: ['1.25 EURC', ''],
+      networkFee: 'Up to 0.0021 USDC',
+    })
+  })
+
+  it('rounds a network fee below one unit up, so it never shows less than it can cost', () => {
+    expect(approvalScreen({ label: 'Edit' }, 1n).text).toMatchObject({ title: 'Edit', networkFee: 'Up to 0.000001 USDC' })
+  })
+
+  it('cuts a long Fundit name so the address still fits', () => {
+    const name = 'A'.repeat(60)
+    const [shown] = approvalScreen({ label: 'Give', payment: { amount: 1n, symbol: 'USDC', toName: name, to } }, 0n).text.to ?? []
+    expect(shown).toBe(`${'A'.repeat(39)}...`)
   })
 })

@@ -1,4 +1,5 @@
 import { type Address, type Hex, type TransactionReceipt, WaitForTransactionReceiptTimeoutError } from 'viem'
+import type { TokenSymbol } from '../config'
 import { arcClient } from './clients'
 import { revertText } from './errors'
 
@@ -14,7 +15,9 @@ export type TxResult =
 
 // onHash runs as soon as a hash for calls[index] is known, before its receipt, so a caller can save it and a
 // reload during the wait still knows it went out.
-export type SendOptions = { label: string; onHash?: (hash: Hex, index: number) => void }
+// A payment, for the approval screen of an email account (Circle's window): what goes out and who receives it.
+export type PaymentReview = { amount: bigint; symbol: TokenSymbol; toName: string; to: Address }
+export type SendOptions = { label: string; payment?: PaymentReview; onHash?: (hash: Hex, index: number) => void }
 
 // The single write path. Every action builds Calls and hands them to a Sender.
 // send() resolves to a TxResult. It throws only for a failure before anything is sent (for example a

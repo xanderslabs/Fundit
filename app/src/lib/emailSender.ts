@@ -1,11 +1,12 @@
 import type { Hex } from 'viem'
 import { ARC_CHAIN_ID, TX_TIMEOUT_MS } from '../config'
 import { toBatch } from './batch'
-import { CIRCLE_CODE, refreshEmailTokens, runChallenge } from './circleEmail'
+import { CIRCLE_CODE, type ApprovalScreen, refreshEmailTokens, runChallenge } from './circleEmail'
 import { arcClient } from './clients'
 import { EmailError, type EmailSession, ucw } from './emailAccount'
 import { PlainError } from './errors'
-import { arcReceipts, type Sender, waitForResult, withGasMargin } from './sender'
+import { formatExact } from './format'
+import { arcReceipts, type Sender, type SendOptions, waitForResult, withGasMargin } from './sender'
 
 // The Worker's policy refused the request (worker/policy.ts): not one of Fundit's own contracts or calls.
 export const NOT_AVAILABLE = 'This action is not available'
@@ -16,6 +17,34 @@ export const NONCE_BUSY = 'Another transaction is still going through. Try again
 function memo(label: string): string | undefined {
   const text = label.replace(/[^\x20-\x7E]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200)
   return text === '' ? undefined : text
+}
+
+// Arc pays gas in USDC with 18 decimals; Fundit shows 6.
+const GAS_TO_USDC = 10n ** 12n
+
+// What Circle's approval window shows. Without these fields it shows a generic title and an empty To and Total.
+export function approvalScreen(opts: SendOptions | undefined, maxGasCost: bigint): ApprovalScreen {
+  const fee = `Up to ${formatExact((maxGasCost + GAS_TO_USDC - 1n) / GAS_TO_USDC, 'USDC')}`
+  const p = opts?.payment
+  if (!p) {
+    return { text: { title: opts?.label ?? 'Confirm', subtitle: 'Check the details, then confirm.', networkFeeLabel: 'Network fee', networkFee: fee } }
+  }
+  const amount = formatExact(p.amount, p.symbol)
+  return {
+    symbol: p.symbol,
+    text: {
+      title: opts.label,
+      subtitle: 'Check the amount and who receives it, then confirm.',
+      mainCurrency: { amount: amount.replace(/ \w+$/, ''), symbol: p.symbol },
+      toLabel: 'To',
+      to: [p.toName.length > 40 ? `${p.toName.slice(0, 39)}...` : p.toName, '', p.to],
+      networkFeeLabel: 'Network fee',
+      networkFee: fee,
+      totalLabel: 'Total',
+      total: [amount, ''],
+      exchangeTotalValue: 'Plus the network fee',
+    },
+  }
 }
 
 // One sign request to the Worker. An expired user token (155104) is refreshed once through the Worker's cookies
@@ -80,7 +109,7 @@ export function emailSender(s: EmailSession): Sender {
         maxPriorityFeePerGas: String(fees.maxPriorityFeePerGas),
       })
       const challengeId = await requestSignature(s.walletId, transaction, opts && memo(opts.label))
-      const outcome = await runChallenge(challengeId)
+      const outcome = await runChallenge(challengeId, approvalScreen(opts, withGasMargin(gas) * fees.maxFeePerGas))
       if (outcome.kind === 'cancelled') return { status: 'rejected', completed: 0 }
       const signed = (outcome.data as { signedTransaction?: unknown } | undefined)?.signedTransaction
       if (typeof signed !== 'string' || signed === '') throw new EmailError('Circle gave no signed transaction', 502, null)

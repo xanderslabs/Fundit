@@ -4,7 +4,7 @@ import type { Hex } from 'viem'
 import { EXPLORER_URL, TX_TIMEOUT_MS } from '../config'
 import { type AccountKind, confirmLine } from '../lib/account'
 import { CANCELLED, CHECK_FAILED, explainError, needsAddMoney } from '../lib/errors'
-import { arcReceipts, type Call, type Sender, type TxResult, waitForResult } from '../lib/sender'
+import { arcReceipts, type Call, type PaymentReview, type Sender, type TxResult, waitForResult } from '../lib/sender'
 import { ADD_MONEY_PATH } from '../lib/urls'
 import { Button, StatusBox } from './ui'
 import './Form.css'
@@ -66,13 +66,13 @@ export function useTx(onSuccess: (hash: Hex) => void) {
   // build runs inside the guard, so a quote it fetches or a check it makes cannot overlap a second click.
   // Several calls go to the sender in one send. Every sender makes them one transaction through
   // Multicall3From, so they succeed or fail together.
-  async function run(sender: Sender, build: () => Call | Call[] | Promise<Call | Call[]>, label: string) {
+  async function run(sender: Sender, build: () => Call | Call[] | Promise<Call | Call[]>, label: string, payment?: PaymentReview) {
     if (inFlight.current) return
     inFlight.current = true
     setPhase({ kind: 'sending', by: sender.kind })
     try {
       const built = await build()
-      handle(await sender.send(Array.isArray(built) ? built : [built], { label }))
+      handle(await sender.send(Array.isArray(built) ? built : [built], { label, payment }))
     } catch (err) {
       setPhase({ kind: 'error', message: explainError(err), addMoney: needsAddMoney(err) })
     } finally {

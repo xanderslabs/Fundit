@@ -15,6 +15,7 @@ const sdk = vi.hoisted(() => {
     onLogin: null as LoginCallback | null,
     setThemeColor: vi.fn(),
     setResources: vi.fn(),
+    setLocalizations: vi.fn(),
     getDeviceId: vi.fn(async () => 'device-id-0001'),
     updateConfigs: vi.fn((_configs: unknown, onLogin: LoginCallback) => {
       s.onLogin = onLogin

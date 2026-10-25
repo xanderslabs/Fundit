@@ -187,7 +187,8 @@ export function DonatePanel({ view }: { view: CampaignView }) {
       const calls = buildDonateCalls({ campaign, token, amount, tip, message: anonymous ? markAnonymous(message) : message, allowance: fresh.allowance })
       const donateIndex = calls.length - 1
       const res = await sender.send(calls, {
-        label: 'Donate',
+        label: 'Give to a Fundit',
+        payment: { amount: amount + tip, symbol, toName: summary.meta.title, to: campaign },
         // Saved as soon as the donation has a hash, so a reload before the receipt still blocks a second one.
         // The approval alone moves nothing to the campaign, so its hash is not saved.
         onHash: (hash, index) => {

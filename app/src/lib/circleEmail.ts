@@ -1,7 +1,7 @@
 import type { W3SSdk } from '@circle-fin/w3s-pw-web-sdk'
-import type { Resources, Error as SdkError, ThemeColor } from '@circle-fin/w3s-pw-web-sdk/dist/src/types'
+import type { Resources, Error as SdkError, ThemeColor, TransactionRequest } from '@circle-fin/w3s-pw-web-sdk/dist/src/types'
 import { getAddress, isAddress } from 'viem'
-import { CIRCLE_UCW_APP_ID } from '../config'
+import { CIRCLE_UCW_APP_ID, type TokenSymbol } from '../config'
 import { openCircleWindow } from './circleWindow'
 import { PlainError } from './errors'
 import {
@@ -101,16 +101,18 @@ const THEME: ThemeColor = {
   titleGradients: [GREEN, GREEN_INK],
 }
 
+// Circle shows an image only from an https URL (anything else gets its own blue icon), so these always come from
+// the live site, even in local development.
+const SITE = 'https://fundit.fun'
+const TOKEN_ICON: Record<TokenSymbol, string> = { USDC: `${SITE}/images/usdc.png`, EURC: `${SITE}/images/eurc.svg` }
 // The envelope on Circle's code screen (its own is a purple to blue gradient) and Fundit's typeface.
-const EMAIL_ICON =
-  'data:image/svg+xml,' +
-  encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="${GREEN}"/><rect x="17" y="21" width="30" height="22" rx="3" fill="none" stroke="#fff" stroke-width="3"/><path d="m18 23 14 11 14-11" fill="none" stroke="#fff" stroke-width="3" stroke-linejoin="round"/></svg>`,
-  )
 const RESOURCES: Resources = {
-  emailIcon: EMAIL_ICON,
+  emailIcon: `${SITE}/images/circle-email.svg`,
   fontFamily: { name: 'Outfit', url: 'https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap' },
 }
+
+// The text and token icon for Circle's approval window (emailSender's approvalScreen).
+export type ApprovalScreen = { text: TransactionRequest; symbol?: TokenSymbol }
 
 const appSettings = () => ({ appId: CIRCLE_UCW_APP_ID })
 // The SDK's one frame. Its own id; the SDK adds and removes it.
@@ -313,8 +315,11 @@ export async function ensureEmailTokens(): Promise<EmailTokens> {
 // Another tab may have refreshed the session, leaving this tab an old user token that the Worker never sees (its
 // cookies are fresh). Circle's window then fails with 155104: the tokens are refreshed once and the same challenge
 // runs again. A second failure is thrown as it is.
-export async function runChallenge(challengeId: string): Promise<ChallengeOutcome> {
+export async function runChallenge(challengeId: string, screen?: ApprovalScreen): Promise<ChallengeOutcome> {
   const [{ sdk }, tokens] = await Promise.all([circle(), ensureEmailTokens()])
+  // Set on every run, so one approval's text never shows on the next.
+  sdk.setLocalizations({ transactionRequest: screen?.text ?? {} })
+  sdk.setResources({ ...RESOURCES, ...(screen?.symbol && { transactionTokenIcon: TOKEN_ICON[screen.symbol] }) })
   try {
     return await executeChallenge(sdk, tokens, challengeId)
   } catch (err) {

@@ -133,7 +133,7 @@ export function Create() {
         functionName: 'createCampaign',
         args: [result.token, result.goal, result.backup, result.meta],
       })
-      handle(await sender.send([{ to: FACTORY_ADDRESS, data }], { label: 'Create fundraiser' }))
+      handle(await sender.send([{ to: FACTORY_ADDRESS, data }], { label: 'Start a Fundit' }))
     } catch (err) {
       setPhase({ kind: 'error', message: explainError(err), addMoney: needsAddMoney(err) })
     } finally {
