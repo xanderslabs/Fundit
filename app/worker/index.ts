@@ -10,6 +10,7 @@ import { decodeFunctionResult, encodeFunctionData, isAddress, parseAbi, type Add
 import { clearTokenCookies, readTokens, TOKEN, tokenCookies } from './cookies'
 import { NETWORKS_WORKER, type WorkerNetwork, type WorkerNetworkConfig } from './networks'
 import { canonicalTransaction, checkSignRequest, type PolicyContext } from './policy'
+import { TURNSTILE_TOKEN, verifyTurnstile } from './turnstile'
 
 // Cloudflare's rate limiting binding (wrangler.jsonc ratelimits).
 type RateLimit = { limit(options: { key: string }): Promise<{ success: boolean }> }
@@ -31,7 +32,6 @@ type Config = { net: WorkerNetworkConfig; factory: Address }
 type Body = Record<string, unknown>
 
 const CIRCLE = 'https://api.circle.com/v1/w3s'
-const TURNSTILE = 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
 const MAX_BODY = 32 * 1024
 const CIRCLE_TIMEOUT_MS = 15_000
 const RPC_TIMEOUT_MS = 4_000
@@ -39,7 +39,6 @@ const RPC_TIMEOUT_MS = 4_000
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const DEVICE_ID = /^[A-Za-z0-9._-]{8,256}$/
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,255}$/
-const TURNSTILE_TOKEN = /^[A-Za-z0-9._:-]{1,2048}$/
 // What Circle's window shows above the transaction. Printable text only.
 const MEMO = /^[\x20-\x7E]{1,200}$/
 
@@ -95,19 +94,6 @@ async function circle(env: Env, method: 'GET' | 'POST', path: string, userToken:
   }
   const data = obj.data
   return typeof data === 'object' && data !== null ? (data as Body) : {}
-}
-
-async function verifyTurnstile(env: Env, token: string, ip: string): Promise<boolean> {
-  const form = new URLSearchParams({ secret: env.TURNSTILE_SECRET, response: token })
-  if (ip) form.set('remoteip', ip)
-  try {
-    const res = await fetch(TURNSTILE, { method: 'POST', body: form, signal: AbortSignal.timeout(CIRCLE_TIMEOUT_MS) })
-    const out = (await res.json()) as { success?: unknown; hostname?: unknown }
-    // The widget must have been solved on this site.
-    return out.success === true && out.hostname === new URL(env.SITE_ORIGIN).hostname
-  } catch {
-    return false
-  }
 }
 
 // factory.isCampaign(address) through the network's RPC. Throws on any failure, so the policy refuses.
@@ -176,7 +162,7 @@ async function route(name: string, request: Request, env: Env, cfg: Config): Pro
       // Its own IP bucket: many people can share one IP behind a carrier's NAT, and sign-in must not eat the
       // budget for signing gifts (ip:sign:), or the other way round.
       await rateLimit(env, [`ip:code:${ip || 'unknown'}`])
-      if (!(await verifyTurnstile(env, turnstile, ip))) return json(403, { error: 'Turnstile check failed' })
+      if (!(await verifyTurnstile(env.TURNSTILE_SECRET, turnstile, ip, new URL(env.SITE_ORIGIN).hostname))) return json(403, { error: 'Turnstile check failed' })
       // Per email only after Turnstile, so junk requests cannot use up someone else's budget.
       await rateLimit(env, [await emailKey(email)])
       const data = await circle(env, 'POST', '/users/email/token', null, { idempotencyKey, deviceId, email })
