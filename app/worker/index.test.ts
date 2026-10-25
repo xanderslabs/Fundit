@@ -321,6 +321,14 @@ describe('worker', () => {
     expect(calls).toEqual([])
   })
 
+  // A test key on mainnet would make email wallets on Circle's testnet while the site shows mainnet Fundits.
+  it('refuses every API call when the Circle key is for the other network', async () => {
+    const mainnet = { NETWORK: 'mainnet', FACTORY_ADDRESS: '0xf1b2AEF82c37fC41D254D8e06BD7780ce34617d9' }
+    expect((await worker.fetch(post('wallets', {}, cookie), env(mainnet))).status).toBe(503)
+    expect((await worker.fetch(post('wallets', {}, cookie), env({ CIRCLE_API_KEY: 'LIVE_API_KEY:abc:def' }))).status).toBe(503)
+    expect(calls).toEqual([])
+  })
+
   it('non-API paths go to ASSETS', async () => {
     for (const path of ['/', '/c/0xabc', '/api/other']) {
       const res = await worker.fetch(new Request(`${ORIGIN}${path}`), env())

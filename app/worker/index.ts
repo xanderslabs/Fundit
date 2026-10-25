@@ -68,6 +68,8 @@ function str(body: Body, key: string, pattern: RegExp): string | null {
 function config(env: Env): Config | null {
   const net = env.NETWORK === 'testnet' || env.NETWORK === 'mainnet' ? NETWORKS_WORKER[env.NETWORK as WorkerNetwork] : null
   if (!net || !isAddress(env.FACTORY_ADDRESS ?? '', { strict: false }) || !env.SITE_ORIGIN || !env.CIRCLE_API_KEY || !env.TURNSTILE_SECRET) return null
+  // Circle's keys name their environment: LIVE_API_KEY for mainnet, TEST_API_KEY for testnet.
+  if (!env.CIRCLE_API_KEY.startsWith(env.NETWORK === 'mainnet' ? 'LIVE_API_KEY:' : 'TEST_API_KEY:')) return null
   return { net, factory: env.FACTORY_ADDRESS as Address }
 }
 
