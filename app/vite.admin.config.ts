@@ -15,7 +15,7 @@ export default defineConfig(({ command, mode }) => {
     loadConfig(env)
     checkBuildEnv(env, 'Content-Security-Policy: ' + ADMIN_CSP)
     // The login page's Turnstile widget needs the site key; without it the owner cannot sign in.
-    if (env.PROD && !env.VITE_TURNSTILE_SITE_KEY) throw new Error('VITE_TURNSTILE_SITE_KEY is required in a production admin build')
+    if (env.PROD && !loadEnv(mode, '.', 'VITE_').VITE_TURNSTILE_SITE_KEY) throw new Error('VITE_TURNSTILE_SITE_KEY is required in a production admin build')
   }
 
   return {
