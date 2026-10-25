@@ -122,7 +122,8 @@ export function Terms() {
       <p>
         Fundit relies on services we do not run: the Arc blockchain, Circle (USDC, EURC, CCTP and
         user-controlled wallets for email sign-in), Resend (which sends the email with your sign-in code), Cloudflare Turnstile (which checks your
-        browser before a code is sent), WalletConnect for connecting a phone wallet, and public RPC providers for
+        browser before a code or a problem report is sent), Telegram (which delivers problem reports you send to the
+        Fundit team), WalletConnect for connecting a phone wallet, and public RPC providers for
         reading blockchain data. Their own terms apply to your use of them, and we are not responsible for their
         availability or errors.
       </p>

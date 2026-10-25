@@ -98,13 +98,20 @@ export function Privacy() {
         before a code is sent, and sees your IP address and browser details. Each one works under its own privacy
         policy.
       </p>
+      <p>
+        Problem reports. If you send a problem report, your browser sends what you type, and your email address if
+        you give one, to Fundit's server. Cloudflare Turnstile checks your browser first, and sees your IP address and
+        browser details. The server does not store the report. It sends it to a private Telegram chat that only the
+        Fundit team can read, so we can follow up. Email hello@fundit.fun to have a report deleted.
+      </p>
       <p>Fundit does not use analytics or advertising trackers.</p>
 
       <h2>6. Your rights</h2>
       <p>
         Depending on where you live, you may have rights to access, correct or delete personal data, to restrict its
-        use, and to move it. Fundit stores no personal data on its own servers, so most requests are best sent to the
-        third parties above. Data on a blockchain cannot be corrected or deleted by anyone.
+        use, and to move it. Fundit stores no personal data on its own servers. Problem reports are kept in a private
+        Telegram chat. Send requests about them to hello@fundit.fun. Most other requests are best sent to the third
+        parties above. Data on a blockchain cannot be corrected or deleted by anyone.
       </p>
 
       <h2>7. Security</h2>
