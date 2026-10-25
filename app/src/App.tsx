@@ -10,6 +10,7 @@ import { Manage } from './pages/Manage'
 import { NotFound } from './pages/NotFound'
 import { Privacy } from './pages/Privacy'
 import { Profile } from './pages/Profile'
+import { Report } from './pages/Report'
 import { Terms } from './pages/Terms'
 
 // Development only. A production build replaces import.meta.env.DEV with false, so this import and the route are
@@ -28,6 +29,7 @@ export function App() {
         <Route path="me" element={<Profile />} />
         <Route path="terms" element={<Terms />} />
         <Route path="privacy" element={<Privacy />} />
+        <Route path="report" element={<Report />} />
         {import.meta.env.DEV && StyleGuide && (
           <Route
             path="styleguide"

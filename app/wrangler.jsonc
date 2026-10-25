@@ -15,10 +15,10 @@
 	// The variables NETWORK (testnet or mainnet), FACTORY_ADDRESS and SITE_ORIGIN are set in Cloudflare, not here, so
 	// the network switch is an environment change. They must match the site build (VITE_ARC_NETWORK,
 	// VITE_FACTORY_ADDRESS). The Worker refuses every /api/ucw call while one is missing or wrong. The secrets
-	// CIRCLE_API_KEY and TURNSTILE_SECRET are set with `wrangler secret put`. keep_vars stops a deploy from removing
+	// CIRCLE_API_KEY, TURNSTILE_SECRET and GITHUB_TOKEN (opens the private issue for POST /api/report) are set with `wrangler secret put`. keep_vars stops a deploy from removing
 	// the variables set in Cloudflare.
 	"keep_vars": true,
-	// Per IP for email-token and sign-transaction, and per email address for email-token.
+	// Per IP for email-token, sign-transaction and report, per email address for email-token, and overall for report.
 	"ratelimits": [
 		{
 			"name": "UCW_LIMIT",

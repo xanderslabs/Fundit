@@ -24,6 +24,7 @@ export function Layout() {
         <nav className="footer-links" aria-label="Legal">
           <Link to="/terms">Terms</Link>
           <Link to="/privacy">Privacy</Link>
+          <Link to="/report">Report a problem</Link>
         </nav>
         <ul className="socials" aria-label="Fundit on social media">
           {SOCIAL_LINKS.map((s) => (

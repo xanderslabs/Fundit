@@ -10,6 +10,7 @@ import { decodeFunctionResult, encodeFunctionData, isAddress, parseAbi, type Add
 import { clearTokenCookies, readTokens, TOKEN, tokenCookies } from './cookies'
 import { NETWORKS_WORKER, type WorkerNetwork, type WorkerNetworkConfig } from './networks'
 import { canonicalTransaction, checkSignRequest, type PolicyContext } from './policy'
+import { handleReport } from './report'
 import { TURNSTILE_TOKEN, verifyTurnstile } from './turnstile'
 
 // Cloudflare's rate limiting binding (wrangler.jsonc ratelimits).
@@ -22,6 +23,8 @@ export interface Env {
   // Secrets.
   CIRCLE_API_KEY: string
   TURNSTILE_SECRET: string
+  // Opens the issue for POST /api/report. Without it the report route answers 503.
+  GITHUB_TOKEN?: string
   // Vars.
   NETWORK: string
   FACTORY_ADDRESS: string
@@ -260,6 +263,7 @@ async function api(request: Request, env: Env, name: string): Promise<Response> 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const { pathname } = new URL(request.url)
+    if (pathname === '/api/report') return handleReport(request, env)
     if (pathname.startsWith('/api/ucw/')) return api(request, env, pathname.slice('/api/ucw/'.length))
     return env.ASSETS.fetch(request)
   },

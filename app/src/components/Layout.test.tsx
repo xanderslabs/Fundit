@@ -58,6 +58,12 @@ describe('Layout', () => {
     }
   })
 
+  it('the footer links to Report a problem', () => {
+    renderLayout()
+    const link = within(screen.getByRole('contentinfo')).getByRole('link', { name: 'Report a problem' })
+    expect(link.getAttribute('href')).toBe('/report')
+  })
+
   // The icons are one-colour glyphs drawn inline in the text colour, so they follow the theme tokens and load no
   // image file or icon library.
   it('draws each social icon as an inline monochrome glyph', () => {

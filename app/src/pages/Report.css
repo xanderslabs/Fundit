@@ -1,0 +1,10 @@
+/* Report a problem: a narrow single-column form */
+.report {
+  max-width: var(--page-narrow);
+  margin: 0 auto;
+}
+
+.report-turnstile {
+  display: flex;
+  justify-content: center;
+}
