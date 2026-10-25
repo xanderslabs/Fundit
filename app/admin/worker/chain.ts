@@ -4,11 +4,11 @@ import type { Address } from 'viem'
 import { KNOWN_FACTORIES } from '../../src/deployConfig'
 import { NETWORKS_WORKER, type WorkerNetwork } from '../../worker/networks'
 
-export type AdminChain = { network: WorkerNetwork; chainId: number; rpcUrl: string; factory: Address }
+export type AdminChain = { network: WorkerNetwork; chainId: number; rpcUrl: string; explorerUrl: string; factory: Address }
 
 // Null for anything but testnet or mainnet, so a missing or misspelt NETWORK refuses every request.
 export function adminChain(network: string | undefined): AdminChain | null {
   if (network !== 'testnet' && network !== 'mainnet') return null
   const net = NETWORKS_WORKER[network]
-  return { network, chainId: net.chainId, rpcUrl: net.rpcUrl, factory: KNOWN_FACTORIES[network].address }
+  return { network, chainId: net.chainId, rpcUrl: net.rpcUrl, explorerUrl: net.explorerUrl, factory: KNOWN_FACTORIES[network].address }
 }

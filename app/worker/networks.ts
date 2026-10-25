@@ -12,6 +12,7 @@ export type WorkerNetworkConfig = {
   // Circle's sign/transaction takes only EVM and EVM-TESTNET wallets (ARC and ARC-TESTNET fail with 156027).
   walletType: 'EVM-TESTNET' | 'EVM'
   rpcUrl: string
+  explorerUrl: string
   usdc: Address
   eurc: Address
   tokenMessengerV2: Address
@@ -23,6 +24,7 @@ export const NETWORKS_WORKER: Record<WorkerNetwork, WorkerNetworkConfig> = {
     chainId: 5042002,
     walletType: 'EVM-TESTNET',
     rpcUrl: 'https://rpc.testnet.arc.io',
+    explorerUrl: 'https://explorer.testnet.arc.io',
     usdc: '0x3600000000000000000000000000000000000000',
     eurc: '0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a',
     tokenMessengerV2: '0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA',
@@ -32,6 +34,7 @@ export const NETWORKS_WORKER: Record<WorkerNetwork, WorkerNetworkConfig> = {
     chainId: 5042,
     walletType: 'EVM',
     rpcUrl: 'https://rpc.mainnet.arc.io',
+    explorerUrl: 'https://explorer.arc.io',
     usdc: '0x3600000000000000000000000000000000000000',
     eurc: '0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1',
     tokenMessengerV2: '0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d',

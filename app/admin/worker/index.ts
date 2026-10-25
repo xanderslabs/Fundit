@@ -10,6 +10,7 @@ import { getAddress, type Address, type Hex } from 'viem'
 import { TURNSTILE_TOKEN, verifyTurnstile } from '../../worker/turnstile'
 import { loginFiles, MANIFEST_PATH, type ManifestChunk } from './assets'
 import { adminChain, type AdminChain } from './chain'
+import { runCron } from './cron'
 import type { Db } from './db'
 import { secure } from './headers'
 import { consumeNonce, issueNonce, pruneNonces } from './nonces'
@@ -31,6 +32,9 @@ export interface Env {
   // Secrets.
   ADMIN_SESSION_SECRET: string
   TURNSTILE_SECRET: string
+  // Optional: without them the cron still runs the checks but sends nothing.
+  TELEGRAM_BOT_TOKEN?: string
+  TELEGRAM_CHAT_ID?: string
 }
 
 type Config = { chain: AdminChain; origin: string; secret: string; turnstileSecret: string; db: Db }
@@ -228,5 +232,9 @@ export default {
     } catch {
       return secure(new Response('Error', { status: 500, headers: { 'content-type': 'text/plain' } }))
     }
+  },
+  // Every 5 minutes (wrangler.jsonc triggers). Awaited, so a thrown error shows as the run's outcome.
+  async scheduled(_controller: unknown, env: Env): Promise<void> {
+    await runCron(env, Date.now())
   },
 }

@@ -13,6 +13,7 @@ describe('NETWORKS_WORKER', () => {
       const app = NETWORKS[name]
       expect(w.chainId).toBe(app.chain.id)
       expect(w.rpcUrl).toBe(app.rpcUrl)
+      expect(w.explorerUrl).toBe(app.explorerUrl)
       expect(w.usdc).toBe(app.usdc)
       expect(w.eurc).toBe(app.eurc)
       expect(w.tokenMessengerV2).toBe(app.tokenMessengerV2)
