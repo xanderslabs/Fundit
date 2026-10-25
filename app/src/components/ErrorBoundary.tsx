@@ -44,7 +44,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
             <Button variant="secondary" onClick={() => window.location.reload()}>
               Reload
             </Button>
-            <a href="/report">Report a problem</a>
+            <a href={`/report?from=${encodeURIComponent(window.location.pathname)}`}>Report a problem</a>
           </div>
         </StatusBox>
       </div>

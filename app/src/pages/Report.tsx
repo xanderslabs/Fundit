@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react'
-import { useLocation } from 'react-router'
+import { useLocation, useSearchParams } from 'react-router'
 import { Banner, Button, Field, PageHeader } from '../components/ui'
 import { TURNSTILE_SITE_KEY } from '../config'
 import { loadTurnstile, type Turnstile } from '../lib/turnstile'
@@ -15,13 +15,24 @@ const SENT = "Thanks. We read every report. If you left an email, we'll reply th
 const NOT_A_BOT = "We couldn't confirm you're not a bot. Try again."
 const FAILED = "We couldn't send your report. Email hello@fundit.fun instead."
 
+// The page the person was on: the footer link's router state, else the error screen's from query. Only a path
+// on this site, at most 200 characters. Never "/report" itself.
+function cameFrom(state: unknown, query: string | null): string {
+  const fromState = typeof state === 'object' && state !== null ? (state as { from?: unknown }).from : undefined
+  for (const v of [fromState, query]) {
+    if (typeof v === 'string' && v.startsWith('/') && v.length <= 200 && !v.startsWith('//') && v !== '/report') return v
+  }
+  return ''
+}
+
 type Stage = 'idle' | 'sending' | 'sent'
 
 // The public "Report a problem" form. The Worker (worker/report.ts) turns it into a private issue.
 export function Report() {
-  const { pathname } = useLocation()
+  const location = useLocation()
+  const [search] = useSearchParams()
   const [category, setCategory] = useState<string>(CATEGORIES[0])
-  const [page, setPage] = useState(pathname)
+  const [page, setPage] = useState(() => cameFrom(location.state, search.get('from')))
   const [what, setWhat] = useState('')
   const [tx, setTx] = useState('')
   const [email, setEmail] = useState('')

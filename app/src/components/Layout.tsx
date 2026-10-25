@@ -1,4 +1,4 @@
-import { Link, Outlet } from 'react-router'
+import { Link, Outlet, useLocation } from 'react-router'
 import { NETWORK_TAG, SOCIAL_LINKS } from '../config'
 import { AccountControl } from './AccountMenu'
 import { NetworkTag, networkTagName } from './NetworkTag'
@@ -7,6 +7,7 @@ import { SocialIcon } from './SocialIcon'
 import './Layout.css'
 
 export function Layout() {
+  const { pathname } = useLocation()
   return (
     <div className="layout">
       <ScrollToTop />
@@ -24,7 +25,7 @@ export function Layout() {
         <nav className="footer-links" aria-label="Legal">
           <Link to="/terms">Terms</Link>
           <Link to="/privacy">Privacy</Link>
-          <Link to="/report">Report a problem</Link>
+          <Link to="/report" state={{ from: pathname }}>Report a problem</Link>
         </nav>
         <ul className="socials" aria-label="Fundit on social media">
           {SOCIAL_LINKS.map((s) => (

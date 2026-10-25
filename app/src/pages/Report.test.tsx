@@ -1,6 +1,6 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router'
+import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const state = vi.hoisted(() => ({ siteKey: 'site-key' }))
@@ -22,7 +22,10 @@ vi.mock('../lib/turnstile', () => ({
   }),
 }))
 
+import { Layout } from '../components/Layout'
 import { Report } from './Report'
+
+vi.mock('../lib/walletSession', () => ({ disconnectWallet: () => {} }))
 
 const fetchMock = vi.fn()
 beforeEach(() => {
@@ -50,9 +53,37 @@ describe('Report page', () => {
     expect(screen.getByText("Don't include a sign-in code, private key or recovery phrase. Fundit will never ask for them.")).toBeTruthy()
   })
 
-  it('fills Page with the current path', () => {
-    renderAt('/c/0xabc')
-    expect((screen.getByLabelText(/^Page/) as HTMLInputElement).value).toBe('/c/0xabc')
+  const pageField = () => (screen.getByLabelText(/^Page/) as HTMLInputElement).value
+
+  it('fills Page with the page the person came from', async () => {
+    render(
+      <MemoryRouter initialEntries={['/c/0xabc']}>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="c/:address" element={<p>Fundit</p>} />
+            <Route path="report" element={<Report />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+    await userEvent.click(screen.getByRole('link', { name: 'Report a problem' }))
+    expect(pageField()).toBe('/c/0xabc')
+  })
+
+  it('fills Page from the from query after the error screen', () => {
+    renderAt('/report?from=%2Fc%2F0xabc')
+    expect(pageField()).toBe('/c/0xabc')
+  })
+
+  it('leaves Page empty when opened directly or when from is not a path', () => {
+    renderAt('/report')
+    expect(pageField()).toBe('')
+    cleanup()
+    renderAt('/report?from=https%3A%2F%2Fevil.example')
+    expect(pageField()).toBe('')
+    cleanup()
+    renderAt(`/report?from=%2F${'a'.repeat(200)}`)
+    expect(pageField()).toBe('')
   })
 
   it('requires What happened', async () => {
@@ -63,7 +94,7 @@ describe('Report page', () => {
   })
 
   async function fillAndSend() {
-    renderAt()
+    renderAt('/report?from=%2Fc%2F0xabc')
     await userEvent.type(screen.getByLabelText('What happened'), 'It broke')
     await userEvent.click(screen.getByRole('button', { name: 'Send report' }))
   }

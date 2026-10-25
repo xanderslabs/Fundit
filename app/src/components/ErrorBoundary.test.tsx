@@ -54,6 +54,16 @@ describe('ErrorBoundary', () => {
     expect(console.error).toHaveBeenCalledWith(error)
   })
 
+  it('links to the report form with the page that crashed', () => {
+    vi.stubGlobal('location', { ...window.location, pathname: '/c/0xabc', reload })
+    render(
+      <ErrorBoundary>
+        <Throws error={new Error('x')} />
+      </ErrorBoundary>,
+    )
+    expect(screen.getByRole('link', { name: 'Report a problem' }).getAttribute('href')).toBe('/report?from=%2Fc%2F0xabc')
+  })
+
   it('renders its children when nothing fails', () => {
     render(
       <ErrorBoundary>
