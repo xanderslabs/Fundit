@@ -1,8 +1,9 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react'
-import { TURNSTILE_SCRIPT_URL, TURNSTILE_SITE_KEY } from '../config'
+import { TURNSTILE_SITE_KEY } from '../config'
 import { CIRCLE_CODE, EmailLoginStopped, loadCircleSdk, openEmailAccount, sendEmailCode } from '../lib/circleEmail'
 import { EmailError, type EmailSession } from '../lib/emailAccount'
 import { explainError } from '../lib/errors'
+import { loadTurnstile, type Turnstile } from '../lib/turnstile'
 import { Button, Field } from './ui'
 import './Form.css'
 import './SignInOptions.css'
@@ -19,41 +20,6 @@ const CHECK_PENDING = 'Wait a moment for the browser check to finish, then try a
 const LOCKED = [155146, 155141]
 // The Worker's own email check (worker/index.ts), so a typo is caught before Turnstile is spent.
 const EMAIL_PATTERN = /^[^\s@]{1,64}@[^\s@]{1,255}$/
-
-type Turnstile = {
-  render(
-    el: HTMLElement,
-    options: { sitekey: string; callback: (token: string) => void; 'error-callback': () => void; 'expired-callback': () => void },
-  ): string | null | undefined
-  reset(widgetId?: string): void
-  remove(widgetId?: string): void
-}
-
-declare global {
-  interface Window {
-    turnstile?: Turnstile
-  }
-}
-
-let turnstileScript: Promise<Turnstile> | null = null
-
-// Cloudflare's Turnstile script loads only when this form opens. A failed load is forgotten, so the next open tries again.
-function loadTurnstile(): Promise<Turnstile> {
-  if (window.turnstile) return Promise.resolve(window.turnstile)
-  turnstileScript ??= new Promise<Turnstile>((resolve, reject) => {
-    const el = document.createElement('script')
-    el.src = TURNSTILE_SCRIPT_URL
-    el.async = true
-    el.onload = () => (window.turnstile ? resolve(window.turnstile) : reject(new Error('Turnstile did not load')))
-    el.onerror = () => {
-      el.remove()
-      turnstileScript = null
-      reject(new Error('Turnstile did not load'))
-    }
-    document.head.append(el)
-  })
-  return turnstileScript
-}
 
 // Plain text for a failed email sign-in step.
 export function emailErrorText(err: unknown): string {

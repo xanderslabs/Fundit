@@ -183,7 +183,7 @@ function BridgeToAccountForm({ recipient }: { recipient: Address }) {
         </Button>
       ) : modal.available ? (
         modal.open ? (
-          <ConnectWallet onConnected={modal.close} />
+          <ConnectWallet config={wagmiConfig} onConnected={modal.close} />
         ) : (
           <Button block onClick={modal.connect}>
             Connect the wallet that holds the USDC

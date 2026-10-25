@@ -1,10 +1,9 @@
-import { connect, type Connector, disconnect, getAccount, getConnectors, switchChain, watchConnectors } from '@wagmi/core'
+import { type Config, connect, type Connector, disconnect, getAccount, getConnectors, switchChain, watchConnectors } from '@wagmi/core'
 import { useEffect, useRef, useState } from 'react'
 import type { Address } from 'viem'
 import { ARC_CHAIN_ID, REOWN_PROJECT_ID } from '../config'
 import { CANCELLED, explainError, isUserRejection } from '../lib/errors'
 import { qrMatrix, qrPath } from '../lib/qr'
-import { wagmiConfig } from '../wagmi'
 import { Button } from './ui'
 import './SignInOptions.css'
 
@@ -47,9 +46,9 @@ function PhoneQr({ uri }: { uri: string }) {
 
 // Connects the chosen wallet, switches it to Arc (the wallet adds the network if it needs to), then hands back
 // the address and the connector id. A refused switch disconnects again, so nothing half-connected stays behind.
-export function ConnectWallet({ onConnected }: { onConnected: (address: Address, connectorId: string) => void }) {
-  const [connectors, setConnectors] = useState(() => getConnectors(wagmiConfig))
-  useEffect(() => watchConnectors(wagmiConfig, { onChange: setConnectors }), [])
+export function ConnectWallet({ config, onConnected }: { config: Config; onConnected: (address: Address, connectorId: string) => void }) {
+  const [connectors, setConnectors] = useState(() => getConnectors(config))
+  useEffect(() => watchConnectors(config, { onChange: setConnectors }), [config])
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [uri, setUri] = useState<string | null>(null)
@@ -69,16 +68,16 @@ export function ConnectWallet({ onConnected }: { onConnected: (address: Address,
     }
     if (connector.id === PHONE) connector.emitter.on('message', onMessage)
     try {
-      const current = getAccount(wagmiConfig)
+      const current = getAccount(config)
       const address =
         current.connector?.uid === connector.uid && current.address
           ? current.address
-          : (await connect(wagmiConfig, { connector })).accounts[0]
+          : (await connect(config, { connector })).accounts[0]
       if (!address) throw new Error('The wallet returned no account.')
       try {
-        await switchChain(wagmiConfig, { chainId: ARC_CHAIN_ID })
+        await switchChain(config, { chainId: ARC_CHAIN_ID })
       } catch (err) {
-        await disconnect(wagmiConfig, { connector }).catch(() => {})
+        await disconnect(config, { connector }).catch(() => {})
         setError(isUserRejection(err) ? SWITCH_REFUSED : explainError(err))
         return
       }

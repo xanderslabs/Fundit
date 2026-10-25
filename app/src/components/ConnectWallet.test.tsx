@@ -1,10 +1,12 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { Config } from '@wagmi/core'
 import type { Address } from 'viem'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ARC_CHAIN_ID } from '../config'
 import { ConnectWallet } from './ConnectWallet'
 
+const CONFIG = {} as Config
 const PHONE_WALLET = '0x1111111111111111111111111111111111111111' as Address
 
 // A WalletConnect connector in small: its emitter is how wagmi hands over the pairing link (display_uri).
@@ -28,10 +30,9 @@ const core = vi.hoisted(() => ({
   switchChain: vi.fn(async () => {}),
   disconnect: vi.fn(async () => {}),
 }))
-vi.mock('../wagmi', () => ({ wagmiConfig: {} }))
 vi.mock('../config', async (importOriginal) => ({ ...(await importOriginal<typeof import('../config')>()), REOWN_PROJECT_ID: 'test-project' }))
 vi.mock('@wagmi/core', () => ({
-  getConnectors: () => [wc.connector],
+  getConnectors: (c: { connectors?: unknown[] }) => c.connectors ?? [wc.connector],
   watchConnectors: () => () => {},
   getAccount: () => ({}),
   connect: core.connect,
@@ -55,7 +56,7 @@ describe('ConnectWallet phone wallet', () => {
         }),
     )
     const onConnected = vi.fn()
-    render(<ConnectWallet onConnected={onConnected} />)
+    render(<ConnectWallet config={CONFIG} onConnected={onConnected} />)
     await userEvent.setup().click(screen.getByRole('button', { name: 'Phone wallet (QR code)' }))
     expect(await screen.findByRole('img', { name: 'QR code to connect a phone wallet' })).toBeTruthy()
     expect(screen.getByText('Scan this with your phone wallet, then approve the connection there.')).toBeTruthy()
@@ -66,5 +67,17 @@ describe('ConnectWallet phone wallet', () => {
     expect(screen.queryByRole('img', { name: 'QR code to connect a phone wallet' })).toBeNull()
     // The listener goes once the connection settles.
     expect(wc.listeners.size).toBe(0)
+  })
+})
+
+describe('ConnectWallet config', () => {
+  // The admin panel has its own wagmi config. The list must come from the config it is given, not from Fundit's.
+  it('uses the config it is given', () => {
+    const other = { connectors: [{ id: 'other', uid: 'o-1', name: 'Other Wallet', type: 'injected', emitter: wc.connector.emitter }] } as unknown as Config
+    ;(window as unknown as { ethereum: object }).ethereum = {}
+    render(<ConnectWallet config={other} onConnected={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: 'Phone wallet (QR code)' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Other Wallet' })).toBeTruthy()
+    delete (window as unknown as { ethereum?: object }).ethereum
   })
 })

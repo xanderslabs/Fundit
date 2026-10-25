@@ -1,3 +1,4 @@
+import type { Address } from 'viem'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { EMAIL_SIGNIN } from '../config'
 import { type AccountKind, clearOtherSessions } from '../lib/account'
@@ -7,8 +8,11 @@ import { EmailLogin } from './EmailLogin'
 import { Button } from './ui'
 import './SignInOptions.css'
 
-// The wallet list loads wagmi, so it loads only when the person picks Connect a wallet.
-const ConnectWallet = lazy(() => import('./ConnectWallet').then((m) => ({ default: m.ConnectWallet })))
+// The wallet list loads wagmi, so it loads only when the person picks Connect a wallet. The config loads with it.
+const ConnectWallet = lazy(async () => {
+  const [{ ConnectWallet }, { wagmiConfig }] = await Promise.all([import('./ConnectWallet'), import('../wagmi')])
+  return { default: (props: { onConnected: (address: Address, connectorId: string) => void }) => <ConnectWallet config={wagmiConfig} {...props} /> }
+})
 
 type View = 'choose' | 'email' | 'wallet'
 

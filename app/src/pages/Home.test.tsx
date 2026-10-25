@@ -27,9 +27,12 @@ vi.mock('../hooks/useCampaigns', () => ({
 }))
 const state: { sender: Sender | null } = { sender: null }
 vi.mock('../hooks/useSender', () => ({ useSender: () => state.sender }))
-// Nothing here connects a wallet: the wallet setup loads only inside Add money, so importing it fails the test.
+// Nothing here connects a wallet: the wallet setup loads only with the wallet list, so importing it fails the test
+// unless the test opens the wallet list first.
+const wallet = vi.hoisted(() => ({ listOpen: false }))
 vi.mock('../wagmi', () => {
-  throw new Error('Home loaded the wallet setup')
+  if (!wallet.listOpen) throw new Error('Home loaded the wallet setup')
+  return { wagmiConfig: {} }
 })
 // The wallet list stands in for a wallet that connects at once. ConnectWallet.test.tsx covers the real list.
 vi.mock('../components/ConnectWallet', () => ({
@@ -44,6 +47,7 @@ const ME: Sender = { kind: 'wallet', address: '0x1111111111111111111111111111111
 
 afterEach(() => {
   cleanup()
+  wallet.listOpen = false
   lists.featured = null
   lists.newest = []
   flags.crosschain = false
@@ -126,6 +130,7 @@ describe('Home hero', () => {
     renderHome()
     const user = userEvent.setup()
     await user.click(within(hero()).getByRole('button', { name: 'Create a Fundit' }))
+    wallet.listOpen = true
     await user.click(within(screen.getByRole('dialog', { name: 'Sign in' })).getByRole('button', { name: 'Connect a wallet' }))
     await user.click(await screen.findByRole('button', { name: 'Test wallet' }))
     expect(await screen.findByText('Create page')).toBeTruthy()
