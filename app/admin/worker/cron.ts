@@ -10,7 +10,7 @@ import { runChecks } from './health'
 import type { Env } from './index'
 import { pruneNonces } from './nonces'
 import { CONFIRMATIONS, fetchOwnerEvents, MAX_EVENT_WINDOWS_PER_RUN, networkLabel, ownerEventText } from './ownerEvents'
-import { sendTelegram } from './telegram'
+import { sendTelegram } from '../../worker/telegram'
 
 // Blocks per eth_getLogs call.
 const EVENT_WINDOW_BLOCKS = 10_000n

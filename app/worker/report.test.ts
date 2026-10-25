@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import worker, { type Env } from './index'
-import { handleReport, issueFor, REPORT_CATEGORIES, validateReport } from './report'
+import { handleReport, messageFor, REPORT_CATEGORIES, validateReport } from './report'
 
 const ORIGIN = 'https://fundit.fun'
 const limit = vi.fn(async (_o: { key: string }) => ({ success: true }))
@@ -9,7 +9,7 @@ const assets = vi.fn(async (_req: Request) => new Response('static'))
 
 // Only what the report route reads. No Circle values, no network, no factory.
 function env(over: Partial<Env> = {}): Env {
-  return { ASSETS: { fetch: assets }, UCW_LIMIT: { limit }, TURNSTILE_SECRET: 'ts-secret', GITHUB_TOKEN: 'gh-token', SITE_ORIGIN: ORIGIN, ...over } as Env
+  return { ASSETS: { fetch: assets }, UCW_LIMIT: { limit }, TURNSTILE_SECRET: 'ts-secret', TELEGRAM_BOT_TOKEN: '123:tg-token', TELEGRAM_CHAT_ID: '-100', SITE_ORIGIN: ORIGIN, ...over } as Env
 }
 
 const GOOD = { category: 'Giving', page: '/c/0x1', what: 'The Give button does nothing.', turnstile: 'tok-1' }
@@ -22,22 +22,22 @@ function post(body: unknown, headers: Record<string, string> = {}): Request {
   })
 }
 
-type Hook = { turnstile?: { success: boolean; hostname: string }; github?: { status: number; body: unknown } }
+type Hook = { turnstile?: { success: boolean; hostname: string }; telegram?: { status: number; body: unknown } }
 let calls: { url: string; init: RequestInit }[]
 
-function stub({ turnstile = { success: true, hostname: 'fundit.fun' }, github = { status: 201, body: { html_url: 'https://github.com/x' } } }: Hook = {}) {
+function stub({ turnstile = { success: true, hostname: 'fundit.fun' }, telegram = { status: 200, body: { ok: true } } }: Hook = {}) {
   calls = []
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init: RequestInit) => {
       calls.push({ url: String(url), init })
       if (String(url).includes('challenges.cloudflare.com')) return Response.json(turnstile)
-      if (String(url).startsWith('https://api.github.com/')) return new Response(JSON.stringify(github.body), { status: github.status })
+      if (String(url).startsWith('https://api.telegram.org/')) return new Response(JSON.stringify(telegram.body), { status: telegram.status })
       throw new Error(`unexpected fetch ${url}`)
     }),
   )
 }
-const github = () => calls.filter((c) => c.url.startsWith('https://api.github.com/'))
+const telegram = () => calls.filter((c) => c.url.startsWith('https://api.telegram.org/'))
 
 beforeEach(() => {
   limit.mockClear()
@@ -54,14 +54,14 @@ describe('POST /api/report', () => {
     const failed = await handleReport(post(GOOD), env())
     expect(failed.status).toBe(403)
     expect(await failed.json()).toEqual({ error: 'turnstile' })
-    expect(github()).toHaveLength(0)
+    expect(telegram()).toHaveLength(0)
   })
 
   it('rejects a Turnstile token solved on another hostname', async () => {
     stub({ turnstile: { success: true, hostname: 'evil.example' } })
     const res = await handleReport(post(GOOD), env())
     expect(res.status).toBe(403)
-    expect(github()).toHaveLength(0)
+    expect(telegram()).toHaveLength(0)
   })
 
   it('rejects a field over its limit and an unknown category', () => {
@@ -79,40 +79,29 @@ describe('POST /api/report', () => {
     expect(REPORT_CATEGORIES).toHaveLength(6)
   })
 
-  it('puts typed text in fenced blocks so it cannot mention or link', () => {
-    const issue = issueFor({ category: 'Giving', page: '/c/x', what: 'hi @octocat\n```\nclose https://evil.example', email: 'a@b.co' })
-    expect(issue.body).toContain('@octocat')
-    const lines = issue.body.split('\n')
-    // Every line holding @octocat sits between a fence of 4 or more backticks.
-    const fences = lines.map((l, i) => ({ l, i })).filter(({ l }) => /^`{4,}$/.test(l))
-    const at = lines.findIndex((l) => l.includes('@octocat'))
-    const before = fences.filter((f) => f.i < at).length
-    expect(before % 2).toBe(1)
-    const fence = [...fences].reverse().find((f) => f.i < at)!.l
-    expect(fence.length).toBeGreaterThan(3)
-    expect(issue.labels).toEqual(['giving'])
+  // Telegram reads formatting only when a parse mode is set, so typed text cannot style or hide part of the message.
+  it('sends plain text with no parse mode', async () => {
+    await handleReport(post({ ...GOOD, what: '*bold* <b>x</b> [link](https://evil.example)' }), env())
+    const sent = JSON.parse(String(telegram()[0]!.init.body)) as Record<string, unknown>
+    expect(sent).not.toHaveProperty('parse_mode')
+    expect(sent.text).toContain('*bold* <b>x</b> [link](https://evil.example)')
+    expect(messageFor({ category: 'Giving', page: '/c/x', what: 'hi' })).toBe('Problem report: Giving\n\nPage: /c/x\n\nWhat happened:\nhi')
   })
 
   it('never adds data the person did not type', async () => {
     const res = await handleReport(post({ ...GOOD, tx: '0xabc', email: 'me@example.com', ip: '1.2.3.4' }, { 'user-agent': 'SecretAgent/9' }), env())
     expect(res.status).toBe(200)
-    const sent = JSON.parse(String(github()[0]!.init.body)) as { title: string; body: string; labels: string[] }
-    expect(sent.body).not.toContain('203.0.113.7')
-    expect(sent.body).not.toContain('SecretAgent')
-    expect(sent.body).not.toContain('1.2.3.4')
-    for (const typed of ['Giving', '/c/0x1', 'The Give button does nothing.', '0xabc', 'me@example.com']) expect(sent.body).toContain(typed)
-    expect(sent.title).toBe('[Giving] The Give button does nothing.')
-    expect(Object.keys(sent).sort()).toEqual(['body', 'labels', 'title'])
+    const sent = JSON.parse(String(telegram()[0]!.init.body)) as { chat_id: string; text: string }
+    expect(sent.text).not.toContain('203.0.113.7')
+    expect(sent.text).not.toContain('SecretAgent')
+    expect(sent.text).not.toContain('1.2.3.4')
+    for (const typed of ['Giving', '/c/0x1', 'The Give button does nothing.', '0xabc', 'me@example.com']) expect(sent.text).toContain(typed)
+    expect(sent.chat_id).toBe('-100')
   })
 
-  it('sends the GitHub request with the documented headers', async () => {
+  it('sends to the configured bot and chat', async () => {
     await handleReport(post(GOOD), env())
-    const call = github()[0]!
-    expect(call.url).toBe('https://api.github.com/repos/xanderslabs/fundit-reports/issues')
-    const h = new Headers(call.init.headers)
-    expect(h.get('authorization')).toBe('Bearer gh-token')
-    expect(h.get('user-agent')).toBe('fundit')
-    expect(h.get('x-github-api-version')).toBe('2022-11-28')
+    expect(telegram().map((c) => c.url)).toEqual(['https://api.telegram.org/bot123:tg-token/sendMessage'])
   })
 
   it('refuses a wrong Origin', async () => {
@@ -131,8 +120,8 @@ describe('POST /api/report', () => {
     expect(await res.json()).toEqual({ error: 'rate_limited' })
   })
 
-  it('never returns a GitHub or Cloudflare error body', async () => {
-    stub({ github: { status: 422, body: { message: 'SECRET-GITHUB-DETAIL' } } })
+  it('never returns a Telegram or Cloudflare error body', async () => {
+    stub({ telegram: { status: 400, body: { ok: false, description: 'SECRET-TELEGRAM-DETAIL' } } })
     const res = await handleReport(post(GOOD), env())
     expect(res.status).toBe(502)
     expect(await res.text()).toBe(JSON.stringify({ error: 'not_sent' }))
@@ -148,10 +137,12 @@ describe('POST /api/report', () => {
     expect(await res.json()).toEqual({ ok: true })
   })
 
-  it('answers 503 without GITHUB_TOKEN', async () => {
-    const res = await handleReport(post(GOOD), env({ GITHUB_TOKEN: undefined }))
-    expect(res.status).toBe(503)
-    expect(await res.json()).toEqual({ error: 'unavailable' })
+  it('answers 503 without the Telegram bot token or chat id', async () => {
+    for (const missing of [{ TELEGRAM_BOT_TOKEN: undefined }, { TELEGRAM_CHAT_ID: undefined }]) {
+      const res = await handleReport(post(GOOD), env(missing))
+      expect(res.status).toBe(503)
+      expect(await res.json()).toEqual({ error: 'unavailable' })
+    }
     expect(calls).toHaveLength(0)
   })
 

@@ -1,4 +1,4 @@
-// Sends one Telegram message. A plain module with no admin imports, so the cross-chain relayer can reuse it.
+// Sends one Telegram message. Used by the admin alerts and by the problem-report route.
 // The token lives only in the URL. Nothing here logs, and no error text is passed on, because a fetch error can
 // carry the URL.
 const TIMEOUT_MS = 5_000

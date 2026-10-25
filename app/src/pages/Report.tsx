@@ -27,7 +27,7 @@ function cameFrom(state: unknown, query: string | null): string {
 
 type Stage = 'idle' | 'sending' | 'sent'
 
-// The public "Report a problem" form. The Worker (worker/report.ts) turns it into a private issue.
+// The public "Report a problem" form. The Worker (worker/report.ts) sends it to the team's private Telegram chat.
 export function Report() {
   const location = useLocation()
   const [search] = useSearchParams()

@@ -23,8 +23,9 @@ export interface Env {
   // Secrets.
   CIRCLE_API_KEY: string
   TURNSTILE_SECRET: string
-  // Opens the issue for POST /api/report. Without it the report route answers 503.
-  GITHUB_TOKEN?: string
+  // The bot and chat that receive POST /api/report. Without both the report route answers 503.
+  TELEGRAM_BOT_TOKEN?: string
+  TELEGRAM_CHAT_ID?: string
   // Vars.
   NETWORK: string
   FACTORY_ADDRESS: string

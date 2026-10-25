@@ -1,26 +1,17 @@
-// POST /api/report: the "Report a problem" form opens a private GitHub issue. It needs no Circle values.
+// POST /api/report: the "Report a problem" form sends a message to the team's private Telegram chat. It needs no
+// Circle values.
 //
-// The issue holds only what the person typed. The server keeps no copy, and adds no IP address or user agent.
+// The message holds only what the person typed. The server keeps no copy, and adds no IP address or user agent.
 // Never log the report text, the email, a token or any response body.
 import { type Env } from './index'
+import { sendTelegram } from './telegram'
 import { TURNSTILE_TOKEN, verifyTurnstile } from './turnstile'
 
-export const REPORTS_REPO = 'xanderslabs/fundit-reports'
-
 export const REPORT_CATEGORIES = ['Signing in', 'Adding money', 'Giving', 'Creating or managing a Fundit', 'Withdrawing', 'Something else'] as const
-const LABELS: Record<(typeof REPORT_CATEGORIES)[number], string> = {
-  'Signing in': 'signing-in',
-  'Adding money': 'adding-money',
-  Giving: 'giving',
-  'Creating or managing a Fundit': 'fundit',
-  Withdrawing: 'withdrawing',
-  'Something else': 'other',
-}
 
 export type ReportInput = { category: (typeof REPORT_CATEGORIES)[number]; page: string; what: string; tx?: string; email?: string }
 
 const MAX_BODY = 8 * 1024
-const GITHUB_TIMEOUT_MS = 10_000
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,255}$/
 
 function text(v: unknown, min: number, max: number): string | null {
@@ -48,20 +39,12 @@ export function validateReport(body: Record<string, unknown>): { ok: true; input
   return { ok: true, input, turnstile }
 }
 
-// A fenced block whose backtick run is longer than any run in the text, so the text cannot close it. Inside a
-// code block GitHub does not link a mention, a reference or a URL.
-function fenced(value: string): string {
-  const longest = Math.max(0, ...(value.match(/`+/g) ?? []).map((r) => r.length))
-  const fence = '`'.repeat(Math.max(4, longest + 1))
-  return `${fence}\n${value}\n${fence}`
-}
-
-export function issueFor(input: ReportInput): { title: string; body: string; labels: string[] } {
-  const title = `[${input.category}] ${input.what.slice(0, 60).replace(/\s+/g, ' ')}`
-  const parts = [`Category\n${fenced(input.category)}`, `Page\n${fenced(input.page)}`, `What happened\n${fenced(input.what)}`]
-  if (input.tx) parts.push(`Transaction\n${fenced(input.tx)}`)
-  if (input.email) parts.push(`Email\n${fenced(input.email)}`)
-  return { title, body: parts.join('\n\n'), labels: [LABELS[input.category]] }
+// Plain text with no parse mode, so nothing the person typed is read as formatting.
+export function messageFor(input: ReportInput): string {
+  const parts = [`Problem report: ${input.category}`, `Page: ${input.page}`, `What happened:\n${input.what}`]
+  if (input.tx) parts.push(`Transaction: ${input.tx}`)
+  if (input.email) parts.push(`Email: ${input.email}`)
+  return parts.join('\n\n')
 }
 
 function reply(status: number, error?: string): Response {
@@ -78,7 +61,7 @@ async function limited(env: Env, key: string): Promise<boolean> {
 export async function handleReport(request: Request, env: Env): Promise<Response> {
   if (request.method !== 'POST') return reply(405, 'bad_input')
   if (request.headers.get('origin') !== env.SITE_ORIGIN) return reply(403, 'origin')
-  if (!env.SITE_ORIGIN || !env.TURNSTILE_SECRET || !env.GITHUB_TOKEN) return reply(503, 'unavailable')
+  if (!env.SITE_ORIGIN || !env.TURNSTILE_SECRET || !env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) return reply(503, 'unavailable')
 
   let body: unknown
   try {
@@ -100,21 +83,6 @@ export async function handleReport(request: Request, env: Env): Promise<Response
   // The overall limit comes after Turnstile, so junk requests cannot use up the budget for real ones.
   if (await limited(env, 'report:all')) return reply(429, 'rate_limited')
 
-  try {
-    const res = await fetch(`https://api.github.com/repos/${REPORTS_REPO}/issues`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${env.GITHUB_TOKEN}`,
-        accept: 'application/vnd.github+json',
-        'content-type': 'application/json',
-        'user-agent': 'fundit',
-        'x-github-api-version': '2022-11-28',
-      },
-      body: JSON.stringify(issueFor(checked.input)),
-      signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS),
-    })
-    return res.status === 201 ? reply(200) : reply(502, 'not_sent')
-  } catch {
-    return reply(502, 'not_sent')
-  }
+  const sent = await sendTelegram(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID, messageFor(checked.input))
+  return sent ? reply(200) : reply(502, 'not_sent')
 }
