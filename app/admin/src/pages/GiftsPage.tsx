@@ -39,7 +39,7 @@ function useClock(enabled: boolean): number {
 }
 
 function ScanCard({ deployBlock }: { deployBlock: bigint }) {
-  const { status, progress, canSave, rescan } = useScan()
+  const { state, status, progress, canSave, rescan } = useScan()
   const counting = status.resumeAt !== undefined
   const now = useClock(counting)
   const seconds = counting ? Math.max(0, Math.ceil((status.resumeAt! - now) / 1000)) : 0
@@ -55,6 +55,8 @@ function ScanCard({ deployBlock }: { deployBlock: bigint }) {
   else if (status.kind === 'error')
     line = `Couldn't read the history (${status.message}).${counting ? ` Trying again in ${seconds} s.` : ''}`
   else if (status.kind === 'caughtUp') line = 'Up to date. Checks for new blocks every minute.'
+  // No state yet: the scan has not started, as it needs the Fundit list first.
+  else if (!state) line = 'Waiting for the Fundit list before the scan starts.'
   else line = 'Reading the history, one block range at a time.'
 
   return (

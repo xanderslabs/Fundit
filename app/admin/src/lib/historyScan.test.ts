@@ -208,11 +208,42 @@ describe('scanStep', () => {
     ])
   })
 
-  it('throws instead of keeping a window the node may have cut short', async () => {
+  // A node answers at most MAX_LOGS (2000) logs a call. A busy window is split until every part fits, so anyone
+  // sending thousands of tiny gifts cannot stop the scan for good.
+  it('reads a window holding more logs than one answer can carry by splitting it', async () => {
+    const many = Array.from({ length: 4500 }, (_, i) => donated(A, DEPLOY + BigInt(i % 3000), Math.floor(i / 3000)))
+    const { calls, client } = fakeNode(many)
+    const r = await scanStep(client, initialScanState('testnet'), [{ address: A, createdAtBlock: DEPLOY }], DEPLOY + 100_000n)
+    expect(calls.length).toBeGreaterThan(1)
+    expect(r.calls).toBe(calls.length)
+    expect(r.state.scannedTo).toBe(DEPLOY + 9998n)
+    expect(r.state.events).toHaveLength(4500)
+    expect(new Set(r.state.events.map((e) => `${e.blockNumber}:${e.logIndex}`)).size).toBe(4500)
+  })
+
+  it('splits a window the node refuses as too large', async () => {
+    const { calls, client } = fakeNode([donated(A, DEPLOY + 7n), donated(A, DEPLOY + 9000n)])
+    const node = client as unknown as { getLogs(a: Call): Promise<unknown[]> }
+    const inner = node.getLogs.bind(node)
+    node.getLogs = async (a: Call) => {
+      if (a.toBlock - a.fromBlock >= 5000n) {
+        calls.push(a)
+        throw new Error('RPC Request failed. Details: requested range too large')
+      }
+      return inner(a)
+    }
+    const r = await scanStep(client, initialScanState('testnet'), [{ address: A, createdAtBlock: DEPLOY }], DEPLOY + 100_000n)
+    expect(r.state.events.map((e) => e.blockNumber)).toEqual([DEPLOY + 7n, DEPLOY + 9000n])
+    expect(r.state.scannedTo).toBe(DEPLOY + 9998n)
+  })
+
+  it('surfaces a single block that alone fills an answer as an error', async () => {
     const many = Array.from({ length: 2000 }, (_, i) => donated(A, DEPLOY + 1n, i))
-    const { client } = fakeNode(many)
+    const { calls, client } = fakeNode(many)
     const s = initialScanState('testnet')
     await expect(scanStep(client, s, [{ address: A, createdAtBlock: DEPLOY }], DEPLOY + 100n)).rejects.toThrow(/2000 or more/)
+    // Halving 99 blocks down to the one full block takes a handful of calls, never an endless loop.
+    expect(calls.length).toBeLessThan(20)
   })
 })
 

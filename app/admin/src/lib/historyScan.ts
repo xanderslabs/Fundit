@@ -1,8 +1,7 @@
 import type { Address, Hex, Log, PublicClient } from 'viem'
 import { campaignAbi } from '../../../src/abi/campaign'
 import { factoryAbi } from '../../../src/abi/factory'
-import { MAX_LOGS } from '../../../src/config'
-import type { LogClient } from '../../../src/lib/activity'
+import { getLogsSplit, type LogClient } from '../../../src/lib/activity'
 import { type AdminNetwork, ADMIN_NETWORKS } from './networks'
 
 // The history scan reads gifts (from every Fundit) and settings changes (from the factory) in one pass, one
@@ -100,7 +99,7 @@ function merge(old: ScanEvent[], added: ScanEvent[]): ScanEvent[] {
   )
 }
 
-// One window, one getLogs call per ADDRESS_CHUNK addresses. Only the asked addresses are kept, and from each only
+// One window, at least one getLogs call per ADDRESS_CHUNK addresses. Only the asked addresses are kept, and from each only
 // its own kind of event: anyone can deploy a contract that emits Donated, so the address filter is checked here again.
 async function read(client: LogClient, factory: Address, fundits: Address[], withFactory: boolean, from: bigint, to: bigint) {
   const address = withFactory ? [factory, ...fundits] : fundits
@@ -108,11 +107,13 @@ async function read(client: LogClient, factory: Address, fundits: Address[], wit
   let calls = 0
   for (let i = 0; i < address.length; i += ADDRESS_CHUNK) {
     const chunk = address.slice(i, i + ADDRESS_CHUNK)
-    const part = (await client.getLogs({ address: chunk, events: EVENTS, fromBlock: from, toBlock: to })) as Decoded[]
-    calls++
-    // The node may cut a long answer short without saying so. An answer that may be cut is never kept as whole.
-    if (part.length >= MAX_LOGS) throw new Error(`Blocks ${from} to ${to} have ${MAX_LOGS} or more logs`)
-    logs.push(...part)
+    const fetchRange = async (fromBlock: bigint, toBlock: bigint) => {
+      calls++
+      return (await client.getLogs({ address: chunk, events: EVENTS, fromBlock, toBlock })) as Log[]
+    }
+    // A full answer (MAX_LOGS, maybe cut short) or a refused range is halved until each part fits. A single block
+    // that alone fills an answer throws, and the loop shows it as an error.
+    logs.push(...((await getLogsSplit(fetchRange, from, to)) as Decoded[]))
   }
   const asked = new Set(fundits.map(lower))
   const out: ScanEvent[] = []
@@ -147,7 +148,8 @@ function isDone(state: ScanState, fundits: ScanFundit[], head: bigint): boolean 
   return state.scannedTo >= head - CONFIRMATIONS && !state.backfill && due(state, fundits).length === 0
 }
 
-// One step of the scan: one window, read in one getLogs call per ADDRESS_CHUNK addresses (calls says how many).
+// One step of the scan: one window, read in one getLogs call per ADDRESS_CHUNK addresses, more where a busy range
+// is split (calls says how many).
 // A backfill of Fundits the scan has missed comes first; otherwise
 // the next window from scannedTo + 1 for the factory, every covered Fundit and any Fundit created in that window.
 export async function scanStep(
