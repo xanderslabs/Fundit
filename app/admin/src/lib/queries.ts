@@ -8,14 +8,19 @@ import { fetchSnapshot } from './snapshot'
 const REFRESH = { refetchInterval: 60_000, refetchIntervalInBackground: false, retry: 1 } as const
 export const STALE_AFTER_MS = 120_000
 
-// Same key as the history scan and the Gifts page, so they share one read.
-export function useSnapshot(session: AdminSession, network: AdminNetwork) {
-  return useQuery({
+// The one setup for the snapshot. Every page and the history scan use it, as each observer of a key runs its own
+// refetch timer: a second setup would read every Fundit again on its own schedule.
+export function snapshotQueryOptions(network: AdminNetwork, enabled: boolean) {
+  return {
     queryKey: ['admin', network, 'snapshot'],
     queryFn: () => fetchSnapshot(readClient(network), network),
-    enabled: matchesWorker(session, network),
+    enabled,
     ...REFRESH,
-  })
+  } as const
+}
+
+export function useSnapshot(session: AdminSession, network: AdminNetwork) {
+  return useQuery(snapshotQueryOptions(network, matchesWorker(session, network)))
 }
 
 export function useHealth(network: AdminNetwork) {

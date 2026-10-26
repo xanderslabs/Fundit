@@ -1,11 +1,10 @@
-import { useQuery } from '@tanstack/react-query'
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from 'react'
 import { matchesWorker, type AdminSession } from '../lib/api'
-import { readClient, scanClient } from '../lib/clients'
+import { scanClient } from '../lib/clients'
 import { initialScanState, runScan, type ScanFundit, type ScanState, type ScanStatus } from '../lib/historyScan'
 import { type AdminNetwork, ADMIN_NETWORKS } from '../lib/networks'
 import { clear, load, save } from '../lib/scanStore'
-import { fetchSnapshot } from '../lib/snapshot'
+import { useSnapshot } from '../lib/queries'
 
 export type ScanContextValue = {
   state: ScanState | null
@@ -29,13 +28,8 @@ export function useScan(): ScanContextValue {
 export function ScanProvider({ session, network, children }: { session: AdminSession; network: AdminNetwork; children: ReactNode }) {
   const { factory } = ADMIN_NETWORKS[network]
   const matches = matchesWorker(session, network)
-  // Same key as the pages, so they share one read.
-  const snapshot = useQuery({
-    queryKey: ['admin', network, 'snapshot'],
-    queryFn: () => fetchSnapshot(readClient(network), network),
-    enabled: matches,
-    refetchInterval: 60_000,
-  })
+  // The same snapshot read as the pages.
+  const snapshot = useSnapshot(session, network)
   const fundits = useRef<ScanFundit[]>([])
   fundits.current = (snapshot.data ?? []).map((r) => ({ address: r.address, createdAtBlock: r.createdAtBlock }))
   const ready = matches && snapshot.data !== undefined

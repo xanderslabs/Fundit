@@ -1,14 +1,11 @@
-import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { Button, Stat } from '../../../src/components/ui'
 import type { TokenSymbol } from '../../../src/config'
 import { formatAmount } from '../../../src/lib/format'
-import { matchesWorker } from '../lib/api'
-import { readClient } from '../lib/clients'
 import { giftStats } from '../lib/giftLogs'
 import { CONFIRMATIONS } from '../lib/historyScan'
 import { ADMIN_NETWORKS } from '../lib/networks'
-import { fetchSnapshot } from '../lib/snapshot'
+import { useSnapshot } from '../lib/queries'
 import type { ByToken } from '../lib/stats'
 import { useScan } from '../scan/ScanProvider'
 import { Card } from '../ui/Card'
@@ -94,12 +91,8 @@ export function GiftsPage() {
   const { session, network, showTest } = usePanel()
   const { deployBlock } = ADMIN_NETWORKS[network]
   const scan = useScan()
-  // Same key as the scan and the Overview, so they share one read.
-  const snapshot = useQuery({
-    queryKey: ['admin', network, 'snapshot'],
-    queryFn: () => fetchSnapshot(readClient(network), network),
-    enabled: matchesWorker(session, network),
-  })
+  // The same snapshot read as the scan and the other pages.
+  const snapshot = useSnapshot(session, network)
 
   const state = snapshot.isError && !snapshot.data ? 'error' : snapshot.data && scan.state ? 'ready' : 'loading'
   const s = snapshot.data && scan.state ? giftStats(scan.state.events, snapshot.data, showTest, network) : null

@@ -19,7 +19,7 @@ import {
   type OwnerAction,
 } from './lib/ownerActions'
 import { type AdminNetwork, ADMIN_NETWORKS } from './lib/networks'
-import { fetchSnapshot } from './lib/snapshot'
+import { useSnapshot } from './lib/queries'
 import { ConfirmAction } from './ConfirmAction'
 import { adminWagmiConfig } from './wagmi'
 import { Card } from './ui/Card'
@@ -67,11 +67,7 @@ export function OwnerControls({ session, network }: { session: AdminSession; net
     queryFn: () => readFactoryState(readClient(network), network),
     enabled: matches,
   })
-  const snapshot = useQuery({
-    queryKey: ['admin', network, 'snapshot'],
-    queryFn: () => fetchSnapshot(readClient(network), network),
-    enabled: matches,
-  })
+  const snapshot = useSnapshot(session, network)
 
   const [account, setAccount] = useState<Account>(() => getAccount(adminWagmiConfig))
   useEffect(() => watchAccount(adminWagmiConfig, { onChange: setAccount }), [])
