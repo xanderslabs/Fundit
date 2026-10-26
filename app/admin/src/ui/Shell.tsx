@@ -5,6 +5,7 @@ import type { AdminSession } from '../lib/api'
 import { pickNetwork, readStoredNetwork, storeNetwork, useSession, withNetwork } from '../lib/network'
 import type { AdminNetwork } from '../lib/networks'
 import type { PanelPath } from '../lib/panelPaths'
+import { ScanProvider } from '../scan/ScanProvider'
 import { ActivityIcon, FunditsIcon, GiftsIcon, HealthIcon, MenuIcon, OverviewIcon, SettingsIcon } from './icons'
 import { Logo } from './Logo'
 import { NetworkSwitch } from './NetworkSwitch'
@@ -110,7 +111,10 @@ function Frame({ session, network }: { session: AdminSession; network: AdminNetw
                 {error}
               </p>
             )}
-            <Outlet context={{ session, network, showTest } satisfies PanelContext} />
+            {/* One history scan per network, kept while the owner moves between pages. */}
+            <ScanProvider key={network} session={session} network={network}>
+              <Outlet context={{ session, network, showTest } satisfies PanelContext} />
+            </ScanProvider>
           </main>
         </div>
       </div>

@@ -577,6 +577,45 @@ body {
   }
 }
 
+/* History scan progress, in the style of the Fundit progress bar. */
+.admin-scan {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.admin-scan-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--border);
+}
+
+.admin-scan-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--action);
+  transition: width var(--duration) var(--ease);
+}
+
+.admin-scan-text {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: var(--figures);
+  line-height: var(--text-sm-line);
+}
+
+.admin-scan-error {
+  color: var(--danger-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-scan-fill {
+    transition: none;
+  }
+}
+
 /* The page content until Tasks 5 to 8 replace it. */
 .admin-tiles {
   display: grid;
