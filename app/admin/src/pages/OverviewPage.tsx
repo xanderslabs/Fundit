@@ -9,7 +9,7 @@ import { type AdminNetwork, ADMIN_NETWORKS } from '../lib/networks'
 import { STALE_AFTER_MS, useHealth, useSnapshot } from '../lib/queries'
 import type { FunditSnapshot } from '../lib/snapshot'
 import { type ByToken, claimable, liveCount, newThisWeek, raisedByToken, visible } from '../lib/stats'
-import { blockTimeEstimate, perDay } from '../lib/trends'
+import { blockClock, perDay } from '../lib/trends'
 import { Amount } from '../ui/Amount'
 import { ago, Card } from '../ui/Card'
 import { ExternalLinkIcon } from '../ui/icons'
@@ -25,16 +25,6 @@ const count = new Intl.NumberFormat('en-US')
 // Links keep the network, as the sidebar's do.
 function search(network: AdminNetwork): string {
   return network === 'testnet' ? '?network=testnet' : ''
-}
-
-// Block times estimated from the oldest and newest Fundit, whose creation times are on chain. null with fewer than
-// two Fundits in different blocks.
-function blockClock(rows: FunditSnapshot[]): ((block: bigint) => bigint) | null {
-  if (rows.length < 2) return null
-  const first = rows.reduce((m, r) => (r.createdAtBlock < m.createdAtBlock ? r : m))
-  const last = rows.reduce((m, r) => (r.createdAtBlock > m.createdAtBlock ? r : m))
-  if (first.createdAtBlock === last.createdAtBlock) return null
-  return blockTimeEstimate({ block: first.createdAtBlock, time: first.createdAt }, { block: last.createdAtBlock, time: last.createdAt })
 }
 
 // Gifts the figures count: to a shown Fundit, and from a test donor only with test data on.

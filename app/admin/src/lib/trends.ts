@@ -1,3 +1,5 @@
+import type { FunditSnapshot } from './snapshot'
+
 const DAY = 86_400n
 
 // How many of times (unix seconds) fall in each UTC day, oldest day first, ending with today. Times before the
@@ -19,4 +21,14 @@ type Anchor = { block: bigint; time: bigint }
 // different blocks. Used where an event carries only its block number, so every time from it is an estimate.
 export function blockTimeEstimate(a: Anchor, b: Anchor): (block: bigint) => bigint {
   return (block) => a.time + ((block - a.block) * (b.time - a.time)) / (b.block - a.block)
+}
+
+// Block times estimated from the oldest and newest Fundit, whose creation times are on chain. null with fewer than
+// two Fundits in different blocks.
+export function blockClock(rows: FunditSnapshot[]): ((block: bigint) => bigint) | null {
+  if (rows.length < 2) return null
+  const first = rows.reduce((m, r) => (r.createdAtBlock < m.createdAtBlock ? r : m))
+  const last = rows.reduce((m, r) => (r.createdAtBlock > m.createdAtBlock ? r : m))
+  if (first.createdAtBlock === last.createdAtBlock) return null
+  return blockTimeEstimate({ block: first.createdAtBlock, time: first.createdAt }, { block: last.createdAtBlock, time: last.createdAt })
 }

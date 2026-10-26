@@ -1045,6 +1045,30 @@ a.admin-pill:focus-visible {
   white-space: nowrap;
 }
 
+/* Activity and Health */
+.admin-change-kind {
+  display: block;
+  font-weight: var(--weight-medium);
+}
+
+.admin-table tbody th {
+  border-bottom-color: var(--line);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  text-align: left;
+}
+
+.admin-filter {
+  flex: 0 1 16rem;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.admin-health-facts {
+  margin-top: var(--space-4);
+}
+
 /* Fundit drawer */
 .admin-drawer-title {
   overflow-wrap: anywhere;
@@ -1208,6 +1232,12 @@ a.admin-pill:focus-visible {
   .admin-table tr {
     padding: var(--space-3) 0;
     border-bottom: 1px solid var(--line);
+  }
+
+  .admin-table tbody th {
+    display: block;
+    padding: var(--space-1) 0;
+    border-bottom: 0;
   }
 
   .admin-table td {
