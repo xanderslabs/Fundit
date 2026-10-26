@@ -26,8 +26,16 @@ export async function getSession(): Promise<AdminSession | null> {
   return (await res.json()) as AdminSession
 }
 
+// A panel call answered 401: the session has ended (after 8 h, or on sign-out in another tab). Reloading the page
+// the owner is on makes the Worker serve the login page there, which returns to it after sign-in.
+function signedOut(): never {
+  location.assign(`${location.pathname}${location.search}`)
+  throw new Error('Signed out')
+}
+
 export async function getHealth(network: AdminNetwork): Promise<HealthReport> {
   const res = await fetch(`/api/admin/health?network=${network}`)
+  if (res.status === 401) signedOut()
   if (!res.ok) throw new Error(`Health check failed (${res.status})`)
   return (await res.json()) as HealthReport
 }
