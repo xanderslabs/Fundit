@@ -4,13 +4,6 @@ import { type AdminNetwork, ADMIN_NETWORKS } from './networks'
 // owner is null when that network's owner() read failed, so the panel cannot tell either way.
 export type AdminSession = { address: Address; networks: Record<AdminNetwork, { chainId: number; factory: Address; owner: boolean | null }> }
 
-// The Worker's cron state for one network (GET /api/admin/health). Times are epoch milliseconds; the block numbers
-// are decimal strings, null until the cron has stored one.
-// The first network the session owns, mainnet first, or null when none is confirmed.
-export function ownedNetwork(session: AdminSession): AdminNetwork | null {
-  return (['mainnet', 'testnet'] as const).find((n) => session.networks[n].owner === true) ?? null
-}
-
 // Whether the Worker names the same chain and factory as this build for the network. A mismatch means the two
 // were built from different code, so nothing is read or sent.
 export function matchesWorker(session: AdminSession, network: AdminNetwork): boolean {
@@ -19,6 +12,8 @@ export function matchesWorker(session: AdminSession, network: AdminNetwork): boo
   return s.chainId === n.chainId && isAddressEqual(s.factory, n.factory)
 }
 
+// The Worker's cron state for one network (GET /api/admin/health). Times are epoch milliseconds; the block numbers
+// are decimal strings, null until the cron has stored one.
 export type HealthCheck = { key: string; ok: boolean; failCount: number; since: number; lastSent: number }
 export type HealthReport = { checks: HealthCheck[]; alertsStarted: boolean; lastEventBlock: string | null; rpcHead: string | null }
 

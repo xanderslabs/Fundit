@@ -25,14 +25,19 @@ describe('ADMIN_NETWORKS', () => {
       eager: true,
     })
     const banned = new Set(['ARC_CHAIN', 'ARC_CHAIN_ID', 'ARC_RPC_URL', 'FACTORY_ADDRESS', 'FACTORY_DEPLOY_BLOCK', 'TEST_CREATORS', 'TOKENS', 'NETWORK', 'EXPLORER_URL'])
+    // The public site's client and token symbol are built for its one network.
+    const bannedClients = new Set(['arcClient'])
+    const bannedCampaigns = new Set(['tokenSymbol'])
     expect(Object.keys(sources).length).toBeGreaterThan(10)
     const found: string[] = []
     for (const [file, src] of Object.entries(sources)) {
       for (const m of (src as string).matchAll(/import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*['"]([^'"]*)['"]/g)) {
-        if (!/(^|\/)src\/config$/.test(m[2]!)) continue
+        const from = m[2]!
+        const bannedHere = /(^|\/)src\/config$/.test(from) ? banned : /(^|\/)src\/lib\/clients$/.test(from) ? bannedClients : /(^|\/)src\/lib\/campaigns$/.test(from) ? bannedCampaigns : null
+        if (!bannedHere) continue
         for (const raw of m[1]!.split(',')) {
           const name = raw.trim().replace(/^type\s+/, '').split(/\s+as\s+/)[0]!
-          if (banned.has(name)) found.push(`${file}: ${name}`)
+          if (bannedHere.has(name)) found.push(`${file}: ${name}`)
         }
       }
     }
