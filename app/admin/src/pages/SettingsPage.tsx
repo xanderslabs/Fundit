@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { getAccount, simulateContract, switchChain, waitForTransactionReceipt, watchAccount, writeContract } from '@wagmi/core'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
-import { type Address as Hex, isAddressEqual, zeroAddress } from 'viem'
+import { type Address as EvmAddress, isAddressEqual, zeroAddress } from 'viem'
 import { factoryAbi } from '../../../src/abi/factory'
 import { ConnectWallet } from '../../../src/components/ConnectWallet'
 import { Actions, Badge, Banner, Button, Dialog, Field } from '../../../src/components/ui'
@@ -26,7 +26,7 @@ import { adminWagmiConfig } from '../wagmi'
 const MAINNET_GAS = 'Mainnet: this uses real USDC for gas'
 const TYPED_PROMPT = 'Type the last 4 characters of the new address to confirm.'
 
-type Account = { address?: Hex; chainId?: number }
+type Account = { address?: EvmAddress; chainId?: number }
 type Group = 'featured' | 'fees' | 'pause' | 'treasury'
 
 function groupOf(action: OwnerAction | undefined): Group | null {
@@ -79,8 +79,9 @@ function eurcDomains(events: ScanEvent[] | undefined, network: AdminNetwork): st
   return names.length ? names.join(', ') : null
 }
 
-// The page's change in progress, with the reducer as the one source of truth: every async step reads the state
-// the reducer returned before it acts, so nothing is signed that the reducer did not allow.
+// The page's change in progress, with the reducer as the one source of truth. send applies an event; step does too,
+// but returns null when the reducer made no transition, so an async continuation only goes on when its own event
+// moved the flow. current is the live state, for checking that a continuation still owns it.
 function useFlow() {
   const [state, setState] = useState<FlowState>(IDLE)
   const current = useRef(state)
@@ -90,7 +91,12 @@ function useFlow() {
     setState(next)
     return next
   }
-  return { state, send }
+  function step(event: FlowEvent): FlowState | null {
+    const prev = current.current
+    const next = send(event)
+    return next === prev ? null : next
+  }
+  return { state, current, send, step }
 }
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -177,7 +183,7 @@ function Controls({ session, network, state }: { session: AdminSession; network:
   const queryClient = useQueryClient()
   const snapshot = useSnapshot(session, network)
   const scan = useScan()
-  const { state: tx, send } = useFlow()
+  const { state: tx, current, send, step } = useFlow()
 
   const [account, setAccount] = useState<Account>(() => getAccount(adminWagmiConfig))
   useEffect(() => watchAccount(adminWagmiConfig, { onChange: setAccount }), [])
@@ -192,6 +198,10 @@ function Controls({ session, network, state }: { session: AdminSession; network:
   // A refusal before the flow starts (a form check or the wrong wallet), shown under its control.
   const [note, setNote] = useState<{ group: Group; text: string } | null>(null)
   const [switchError, setSwitchError] = useState<string | null>(null)
+  // One review or signature at a time. The ref closes the gap before React re-renders (a double click); checking
+  // disables every Review button while a form check waits on the RPC, before the flow has left edit.
+  const lock = useRef(false)
+  const [checking, setChecking] = useState(false)
 
   // A change still in flight when the page goes away (network switch, sign out) stops at its next step.
   const alive = useRef(true)
@@ -208,9 +218,9 @@ function Controls({ session, network, state }: { session: AdminSession; network:
   const withdrawValue = withdraw ?? String(state.withdrawFeeBps)
   const can = canAct(account.address, account.chainId, session.address, state, network)
   const busy = inFlight(tx.step)
-  const disabled = busy || (!can.ok && can.fix === 'connect')
+  const disabled = busy || checking || (!can.ok && can.fix === 'connect')
 
-  const isCampaign = (a: Hex) => readClient(network).readContract({ address: factoryAddress, abi: factoryAbi, functionName: 'isCampaign', args: [a] })
+  const isCampaign = (a: EvmAddress) => readClient(network).readContract({ address: factoryAddress, abi: factoryAbi, functionName: 'isCampaign', args: [a] })
 
   function switchFailed(e: unknown): string {
     return isUserRejection(e) ? `Your wallet did not switch to ${label}. Approve the switch to make this change.` : explainError(e)
@@ -225,84 +235,115 @@ function Controls({ session, network, state }: { session: AdminSession; network:
     }
   }
 
-  // Review: the wallet must be the owner; then the chain switch if needed, then the simulation. Featured goes on to
-  // the signature; every other change stops at the confirm dialog.
-  async function review(group: Group, action: OwnerAction | { refused: string }) {
-    setNote(null)
-    setTyped('')
-    if ('refused' in action) return setNote({ group, text: action.refused })
-    const live = getAccount(adminWagmiConfig)
-    const ok = canAct(live.address, live.chainId, session.address, state, network)
-    if (!ok.ok && ok.fix === 'connect') return setNote({ group, text: ok.reason })
-    let s = send({ type: 'review', action, network, walletChainId: live.chainId })
-    if (s.step === 'switchChain') {
+  // Runs one review or signature with the lock held. A click while another is under way does nothing.
+  async function exclusive(task: () => Promise<void>) {
+    if (lock.current) return
+    lock.current = true
+    setChecking(true)
+    try {
+      await task()
+    } finally {
+      lock.current = false
+      setChecking(false)
+    }
+  }
+
+  // Review: the form check, the owner wallet, then the chain switch if needed, then the simulation. Featured goes on
+  // to the signature; every other change stops at the confirm dialog. Each step goes on only when its own event
+  // moved the flow.
+  function review(group: Group, check: () => Promise<OwnerAction | { refused: string }>) {
+    return exclusive(async () => {
+      setNote(null)
+      setTyped('')
+      const action = await check()
+      if (!alive.current) return
+      if ('refused' in action) return setNote({ group, text: action.refused })
+      const live = getAccount(adminWagmiConfig)
+      const ok = canAct(live.address, live.chainId, session.address, state, network)
+      if (!ok.ok && ok.fix === 'connect') return setNote({ group, text: ok.reason })
+      let s = step({ type: 'review', action, network, walletChainId: live.chainId })
+      if (!s) return
+      if (s.step === 'switchChain') {
+        try {
+          await switchChain(adminWagmiConfig, { chainId })
+        } catch (e) {
+          step({ type: 'failed', error: switchFailed(e) })
+          return
+        }
+        if (!alive.current) return
+        s = step({ type: 'switched' })
+        if (!s) return
+      }
+      if (s.step !== 'simulating') return
       try {
-        await switchChain(adminWagmiConfig, { chainId })
+        const { request } = await simulateContract(adminWagmiConfig, { ...buildCall(action, network), account: live.address } as never)
+        if (!alive.current) return
+        s = step({ type: 'simulated', action, request })
       } catch (e) {
-        send({ type: 'failed', error: switchFailed(e) })
+        step({ type: 'simulateFailed', action, error: revertText(e) ?? explainError(e) })
         return
       }
-      if (!alive.current) return
-      s = send({ type: 'switched' })
-    }
-    if (s.step !== 'simulating') return
-    try {
-      const { request } = await simulateContract(adminWagmiConfig, { ...buildCall(action, network), account: live.address } as never)
-      if (!alive.current) return
-      s = send({ type: 'simulated', request })
-    } catch (e) {
-      send({ type: 'simulateFailed', error: revertText(e) ?? explainError(e) })
-      return
-    }
-    if (s.step === 'waitingWallet') await write(s)
+      if (s?.step === 'waitingWallet') await write(s)
+    })
   }
 
-  async function confirmAndSign() {
-    const s = send({ type: 'sign', typed })
-    if (s.step === 'waitingWallet') await write(s)
+  function confirmAndSign() {
+    return exclusive(async () => {
+      const s = step({ type: 'sign', typed })
+      if (s?.step === 'waitingWallet') await write(s)
+    })
   }
 
-  // Signs exactly the request the simulation returned, then waits for the receipt.
+  // Signs exactly the request the simulation returned for the action under review, then waits for the receipt. s
+  // must still be the live state: the confirm dialog showed s.action, and the reducer stored s.request with it.
   async function write(s: FlowState) {
-    if (s.step !== 'waitingWallet' || !alive.current) return
+    if (s.step !== 'waitingWallet' || s !== current.current || !s.action || s.request === undefined || !alive.current) return
     // The wallet may have moved since the simulation.
     const live = getAccount(adminWagmiConfig)
     const ok = canAct(live.address, live.chainId, session.address, state, network)
-    if (!ok.ok) return void send({ type: 'failed', error: ok.reason })
+    if (!ok.ok) return void step({ type: 'failed', error: ok.reason })
     let hash: `0x${string}`
     try {
       hash = await writeContract(adminWagmiConfig, s.request as never)
     } catch (e) {
-      send({ type: 'failed', error: isUserRejection(e) ? CANCELLED : (revertText(e) ?? explainError(e)) })
+      step({ type: 'failed', error: isUserRejection(e) ? CANCELLED : (revertText(e) ?? explainError(e)) })
       return
     }
-    send({ type: 'sent', hash })
+    step({ type: 'sent', hash })
     try {
       const receipt = await waitForTransactionReceipt(adminWagmiConfig, { hash, chainId })
-      if (receipt.status !== 'success') return void send({ type: 'failed', error: 'The transaction was mined but failed. Nothing changed.' })
-      send({ type: 'confirmed' })
+      if (receipt.status === 'success') step({ type: 'confirmed' })
+      else step({ type: 'failed', error: 'The transaction was mined but failed. Nothing changed.' })
     } catch {
       // It was sent and may still land: trying again could make the change twice.
-      send({ type: 'failed', error: "Couldn't confirm it yet. Check the transaction on the explorer before you try again." })
-      return
+      step({ type: 'failed', error: "Couldn't confirm it yet. Check the transaction on the explorer before you try again." })
     }
+    // Read again whatever happened: a change that was sent may have landed.
     await queryClient.invalidateQueries({ queryKey: factoryKey(network) })
     scan.nudge()
   }
 
-  async function reviewFees() {
-    const r = checkFees(donationValue, withdrawValue)
-    await review('fees', r.ok ? { kind: 'setFees', donationBps: r.donationBps, withdrawBps: r.withdrawBps } : { refused: r.reason })
+  function reviewFees() {
+    return review('fees', async () => {
+      const r = checkFees(donationValue, withdrawValue)
+      if (!r.ok) return { refused: r.reason }
+      if (r.donationBps === state.donationFeeBps && r.withdrawBps === state.withdrawFeeBps) return { refused: 'Those are the current fees. Change one to review.' }
+      return { kind: 'setFees', donationBps: r.donationBps, withdrawBps: r.withdrawBps }
+    })
   }
 
-  async function reviewTreasury() {
-    const r = await checkTreasury(treasury, treasuryAgain, factoryAddress, isCampaign).catch(() => null)
-    await review('treasury', !r ? { refused: 'We could not check that address. Try again.' } : r.ok ? { kind: 'setTreasury', treasury: r.address } : { refused: r.reason })
+  function reviewTreasury() {
+    return review('treasury', async () => {
+      const r = await checkTreasury(treasury, treasuryAgain, factoryAddress, isCampaign).catch(() => null)
+      return !r ? { refused: 'We could not check that address. Try again.' } : r.ok ? { kind: 'setTreasury', treasury: r.address } : { refused: r.reason }
+    })
   }
 
-  async function reviewFeatured() {
-    const r = await checkFeatured(featured, isCampaign).catch(() => null)
-    await review('featured', !r ? { refused: 'We could not check that address. Try again.' } : r.ok ? { kind: 'setFeatured', campaign: r.campaign } : { refused: r.reason })
+  function reviewFeatured() {
+    return review('featured', async () => {
+      const r = await checkFeatured(featured, isCampaign).catch(() => null)
+      return !r ? { refused: 'We could not check that address. Try again.' } : r.ok ? { kind: 'setFeatured', campaign: r.campaign } : { refused: r.reason }
+    })
   }
 
   // What shows under one control: its refusal, the flow's error, and the transaction status.
@@ -358,7 +399,7 @@ function Controls({ session, network, state }: { session: AdminSession; network:
                     <span className="admin-pick-title">{r.title || 'Untitled'}</span>
                     <code className="admin-pick-address">{shortAddress(r.address)}</code>
                     {r.isTest && <Badge>Test</Badge>}
-                    {currentFeatured !== '' && isAddressEqual(r.address, currentFeatured as Hex) && <Badge tone="success">Current</Badge>}
+                    {currentFeatured !== '' && isAddressEqual(r.address, currentFeatured as EvmAddress) && <Badge tone="success">Current</Badge>}
                   </label>
                 ))}
               </div>
@@ -403,7 +444,7 @@ function Controls({ session, network, state }: { session: AdminSession; network:
                 variant="danger"
                 disabled={disabled}
                 loading={reviewing('pause')}
-                onClick={() => void review('pause', { kind: state.paused ? 'unpauseCreation' : 'pauseCreation' })}
+                onClick={() => void review('pause', async () => ({ kind: state.paused ? 'unpauseCreation' : 'pauseCreation' }))}
               >
                 {state.paused ? 'Review unpause' : 'Review pause'}
               </Button>

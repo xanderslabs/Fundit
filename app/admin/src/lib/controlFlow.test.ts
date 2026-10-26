@@ -22,7 +22,7 @@ const review = (action: OwnerAction, walletChainId: number | undefined = TESTNET
 // A path to waitingWallet that skips the simulation would let a reverting or wrong-chain call reach the owner's wallet.
 describe('flow', () => {
   it('never reaches waitingWallet without a successful simulation', () => {
-    const failed = run([review(fees), { type: 'simulateFailed', error: 'Only the Fundit owner can do this.' }])
+    const failed = run([review(fees), { type: 'simulateFailed', action: fees, error: 'Only the Fundit owner can do this.' }])
     expect(failed.step).toBe('simulateFailed')
     expect(failed.error).toBe('Only the Fundit owner can do this.')
     expect(flow(failed, { type: 'sign' }).step).toBe('simulateFailed')
@@ -33,7 +33,7 @@ describe('flow', () => {
       const signed = flow(s, { type: 'sign' })
       if (step === 'confirm') expect(signed.step).toBe('waitingWallet')
       else expect(signed).toBe(s)
-      if (step !== 'simulating') expect(flow(s, { type: 'simulated', request: {} })).toBe(s)
+      if (step !== 'simulating') expect(flow(s, { type: 'simulated', action: fees, request: {} })).toBe(s)
     }
     // A sign event with no action under review does nothing either.
     expect(flow({ step: 'confirm' }, { type: 'sign' }).step).toBe('confirm')
@@ -46,11 +46,11 @@ describe('flow', () => {
     expect(confirmKind({ kind: 'unpauseCreation' })).toBe('dialog')
     expect(confirmKind(treasury)).toBe('typed')
 
-    expect(run([review(featured), { type: 'simulated', request: {} }]).step).toBe('waitingWallet')
-    expect(run([review(fees), { type: 'simulated', request: {} }]).step).toBe('confirm')
+    expect(run([review(featured), { type: 'simulated', action: featured, request: {} }]).step).toBe('waitingWallet')
+    expect(run([review(fees), { type: 'simulated', action: fees, request: {} }]).step).toBe('confirm')
 
     // The treasury signs only once the last 4 characters are typed.
-    const atConfirm = run([review(treasury), { type: 'simulated', request: {} }])
+    const atConfirm = run([review(treasury), { type: 'simulated', action: treasury, request: {} }])
     expect(atConfirm.step).toBe('confirm')
     expect(flow(atConfirm, { type: 'sign' }).step).toBe('confirm')
     expect(flow(atConfirm, { type: 'sign', typed: '1234' }).step).toBe('confirm')
@@ -68,7 +68,7 @@ describe('flow', () => {
     const s = flow(IDLE, { type: 'review', action: fees, network: 'mainnet', walletChainId: TESTNET })
     expect(s.step).toBe('switchChain')
     // Nothing simulates until the switch is done.
-    expect(flow(s, { type: 'simulated', request: {} })).toBe(s)
+    expect(flow(s, { type: 'simulated', action: fees, request: {} })).toBe(s)
     expect(flow(s, { type: 'switched' }).step).toBe('simulating')
     // A refused switch goes back to the form with the reason.
     expect(flow(s, { type: 'failed', error: 'refused' })).toMatchObject({ step: 'edit', error: 'refused' })
@@ -78,10 +78,20 @@ describe('flow', () => {
   })
 
   it('keeps the hash when waiting for the receipt fails', () => {
-    const sent = run([review(fees), { type: 'simulated', request: {} }, { type: 'sign' }, { type: 'sent', hash: HASH }])
+    const sent = run([review(fees), { type: 'simulated', action: fees, request: {} }, { type: 'sign' }, { type: 'sent', hash: HASH }])
     expect(sent).toMatchObject({ step: 'sent', hash: HASH })
     expect(flow(sent, { type: 'failed', error: 'timed out' })).toMatchObject({ step: 'failed', hash: HASH, error: 'timed out' })
     expect(flow(sent, { type: 'confirmed' })).toMatchObject({ step: 'confirmed', hash: HASH })
+  })
+
+  // Two reviews in flight: the result of one must never be stored against the other's action, or the dialog would
+  // describe one change while the wallet signs another.
+  it('drops a simulation result for an action other than the one under review', () => {
+    const s = flow(IDLE, review(fees))
+    expect(flow(s, { type: 'simulated', action: featured, request: { call: 'setFeatured' } })).toBe(s)
+    expect(flow(s, { type: 'simulated', action: { ...fees }, request: {} })).toBe(s)
+    expect(flow(s, { type: 'simulateFailed', action: featured, error: 'x' })).toBe(s)
+    expect(flow(s, { type: 'simulated', action: fees, request: { call: 'setFees' } })).toMatchObject({ step: 'confirm', action: fees, request: { call: 'setFees' } })
   })
 
   it('ignores a new review while a change is in flight', () => {
@@ -89,7 +99,7 @@ describe('flow', () => {
       const s: FlowState = { step, action: fees }
       expect(flow(s, review(featured))).toBe(s)
     }
-    const cancelled = flow(run([review(fees), { type: 'simulated', request: {} }]), { type: 'cancel' })
+    const cancelled = flow(run([review(fees), { type: 'simulated', action: fees, request: {} }]), { type: 'cancel' })
     expect(cancelled.step).toBe('edit')
   })
 })

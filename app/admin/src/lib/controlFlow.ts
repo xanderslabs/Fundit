@@ -29,8 +29,9 @@ export type FlowState = { step: FlowStep; action?: OwnerAction; request?: unknow
 export type FlowEvent =
   | { type: 'review'; action: OwnerAction; network: AdminNetwork; walletChainId: number | undefined }
   | { type: 'switched' }
-  | { type: 'simulated'; request: unknown }
-  | { type: 'simulateFailed'; error: string }
+  // action is the one that was simulated: a result for any other action (a stale review) is dropped.
+  | { type: 'simulated'; action: OwnerAction; request: unknown }
+  | { type: 'simulateFailed'; action: OwnerAction; error: string }
   | { type: 'sign'; typed?: string }
   | { type: 'sent'; hash: Hex }
   | { type: 'confirmed' }
@@ -46,7 +47,8 @@ export function inFlight(step: FlowStep): boolean {
 
 // One owner change, from Review to the receipt. The only way to waitingWallet is a successful simulation: through
 // confirm (and, for the treasury, the typed check), or straight from simulating when the change needs no confirm.
-// An event that does not fit the current step returns the state unchanged.
+// An event that does not fit the current step returns the state unchanged (the same object), so a caller can tell
+// that nothing happened. The request is only ever stored with the action it was simulated for.
 export function flow(state: FlowState, event: FlowEvent): FlowState {
   const { step, action } = state
   switch (event.type) {
@@ -59,10 +61,10 @@ export function flow(state: FlowState, event: FlowEvent): FlowState {
     case 'switched':
       return step === 'switchChain' ? { step: 'simulating', action } : state
     case 'simulated':
-      if (step !== 'simulating' || !action) return state
+      if (step !== 'simulating' || !action || event.action !== action) return state
       return { step: confirmKind(action) === 'none' ? 'waitingWallet' : 'confirm', action, request: event.request }
     case 'simulateFailed':
-      return step === 'simulating' ? { step: 'simulateFailed', action, error: event.error } : state
+      return step === 'simulating' && event.action === action ? { step: 'simulateFailed', action, error: event.error } : state
     case 'sign':
       if (step !== 'confirm' || !action) return state
       if (action.kind === 'setTreasury' && !typedConfirmOk(event.typed ?? '', action.treasury)) return state

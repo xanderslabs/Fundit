@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { type Address, encodeErrorResult, zeroAddress } from 'viem'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -32,9 +32,22 @@ vi.mock('../../../src/components/ConnectWallet', () => ({ ConnectWallet: () => <
 // isCampaign: only the two snapshot Fundits below are Fundits.
 const FUNDIT_A = '0x5555555555555555555555555555555555555555' as Address
 const FUNDIT_B = '0x6666666666666666666666666666666666666666' as Address
+// gate holds the isCampaign read open, so a test can click again while a review waits on the RPC.
+const rpc = vi.hoisted(() => ({ gate: null as Promise<void> | null }))
 vi.mock('../lib/clients', () => ({
-  readClient: () => ({ readContract: vi.fn(async ({ args }: { args: [Address] }) => [FUNDIT_A, FUNDIT_B].includes(args[0])) }),
+  readClient: () => ({
+    readContract: vi.fn(async ({ args }: { args: [Address] }) => {
+      if (rpc.gate) await rpc.gate
+      return [FUNDIT_A, FUNDIT_B].includes(args[0])
+    }),
+  }),
 }))
+
+function deferred() {
+  let release!: () => void
+  const promise = new Promise<void>((r) => (release = r))
+  return { promise, release }
+}
 const state = vi.hoisted(() => ({ read: vi.fn() }))
 vi.mock('../lib/factoryState', () => ({ readFactoryState: state.read }))
 vi.mock('../lib/snapshot', () => ({ fetchSnapshot: vi.fn(async () => []) }))
@@ -91,6 +104,7 @@ afterEach(() => {
   cleanup()
   vi.clearAllMocks()
   vi.mocked(fetchSnapshot).mockResolvedValue([])
+  rpc.gate = null
 })
 
 describe('SettingsPage', () => {
@@ -172,6 +186,80 @@ describe('SettingsPage', () => {
     expect(await screen.findByText('Failed')).toBeTruthy()
     const link = screen.getByRole('link', { name: /view transaction/i }) as HTMLAnchorElement
     expect(link.href).toBe(`${ADMIN_NETWORKS.testnet.explorerUrl}/tx/${HASH}`)
+    // It may still land, so the settings and the scan are read again anyway.
+    await waitFor(() => expect(state.read.mock.calls.length).toBeGreaterThan(1))
+    expect(scan.nudge).toHaveBeenCalled()
+  })
+
+  // One review at a time: a second click (on the same control or another) while a review waits on the RPC or the
+  // simulation must not start a second flow, or the wallet could be asked twice, or asked to sign a call the
+  // dialog does not describe.
+  describe('concurrent reviews', () => {
+    beforeEach(() => {
+      wagmi.simulateContract.mockImplementation(async (_c: unknown, call: { functionName: string }) => ({ request: { functionName: call.functionName } }))
+      vi.mocked(fetchSnapshot).mockResolvedValue([{ address: FUNDIT_A, isTest: false }] as never)
+    })
+
+    it('a double click on Review featured change signs once', async () => {
+      show()
+      fireEvent.click(await screen.findByRole('radio', { name: /0x5555/ }))
+      const gate = deferred()
+      rpc.gate = gate.promise
+      const button = screen.getByRole('button', { name: 'Review featured change' })
+      fireEvent.click(button)
+      fireEvent.click(button)
+      await act(async () => gate.release())
+      expect(await screen.findByText('Confirmed')).toBeTruthy()
+      expect(wagmi.simulateContract).toHaveBeenCalledTimes(1)
+      expect(wagmi.writeContract).toHaveBeenCalledTimes(1)
+    })
+
+    it('Review fee change during the featured check starts nothing', async () => {
+      show()
+      const donation = await screen.findByLabelText('Donation fee (bps)')
+      fireEvent.change(donation, { target: { value: '100' } })
+      fireEvent.click(await screen.findByRole('radio', { name: /0x5555/ }))
+      const gate = deferred()
+      rpc.gate = gate.promise
+      fireEvent.click(screen.getByRole('button', { name: 'Review featured change' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Review fee change' }))
+      await act(async () => gate.release())
+      expect(await screen.findByText('Confirmed')).toBeTruthy()
+      expect(screen.queryByRole('dialog')).toBeNull()
+      expect(wagmi.simulateContract).toHaveBeenCalledTimes(1)
+      expect(wagmi.writeContract).toHaveBeenCalledTimes(1)
+      expect(wagmi.writeContract.mock.calls[0]![1]).toEqual({ functionName: 'setFeatured' })
+    })
+
+    it('the dialog signs the call it describes when a second review is clicked during the simulation', async () => {
+      const sim = deferred()
+      wagmi.simulateContract.mockImplementation(async (_c: unknown, call: { functionName: string }) => {
+        await sim.promise
+        return { request: { functionName: call.functionName } }
+      })
+      show()
+      const donation = await screen.findByLabelText('Donation fee (bps)')
+      fireEvent.change(donation, { target: { value: '100' } })
+      fireEvent.click(await screen.findByRole('radio', { name: /0x5555/ }))
+      fireEvent.click(screen.getByRole('button', { name: 'Review fee change' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Review featured change' }))
+      await act(async () => sim.release())
+      const dialog = await screen.findByRole('dialog')
+      expect(within(dialog).getByRole('heading').textContent).toContain('Change fees')
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm and sign' }))
+      expect(await screen.findByText('Confirmed')).toBeTruthy()
+      expect(wagmi.writeContract).toHaveBeenCalledTimes(1)
+      expect(wagmi.writeContract.mock.calls[0]![1]).toEqual({ functionName: 'setFees' })
+    })
+  })
+
+  it('a fee change that keeps the current values is refused before any simulation', async () => {
+    show()
+    const user = userEvent.setup()
+    await screen.findByLabelText('Donation fee (bps)')
+    await user.click(screen.getByRole('button', { name: 'Review fee change' }))
+    expect(await screen.findByText('Those are the current fees. Change one to review.')).toBeTruthy()
+    expect(wagmi.simulateContract).not.toHaveBeenCalled()
   })
 
   it('fees above 500 bps are refused before any simulation', async () => {
