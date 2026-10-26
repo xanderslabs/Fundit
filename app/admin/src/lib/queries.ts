@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { type AdminSession, getHealth, matchesWorker } from './api'
 import { readClient } from './clients'
+import { readFactoryState } from './factoryState'
 import type { AdminNetwork } from './networks'
 import { fetchSnapshot } from './snapshot'
 
@@ -21,6 +22,25 @@ export function snapshotQueryOptions(network: AdminNetwork, enabled: boolean) {
 
 export function useSnapshot(session: AdminSession, network: AdminNetwork) {
   return useQuery(snapshotQueryOptions(network, matchesWorker(session, network)))
+}
+
+export function factoryKey(network: AdminNetwork) {
+  return ['admin', network, 'factory'] as const
+}
+
+// The factory's settings (fees, treasury, featured, paused, owner), read by the Settings page and invalidated after
+// a confirmed change. Set up here only, for the same reason as the snapshot.
+export function factoryQueryOptions(network: AdminNetwork, enabled: boolean) {
+  return {
+    queryKey: factoryKey(network),
+    queryFn: () => readFactoryState(readClient(network), network),
+    enabled,
+    ...REFRESH,
+  } as const
+}
+
+export function useFactory(session: AdminSession, network: AdminNetwork) {
+  return useQuery(factoryQueryOptions(network, matchesWorker(session, network)))
 }
 
 export function useHealth(network: AdminNetwork) {

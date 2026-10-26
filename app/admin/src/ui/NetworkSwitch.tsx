@@ -24,12 +24,13 @@ export function NetworkSwitch() {
         </>
       }
       items={ORDER.map((n) => {
-        const owned = session.networks[n].owner === true
+        const { owner } = session.networks[n]
         return {
           label: ADMIN_NETWORKS[n].label,
           current: n === network,
-          disabled: !owned,
-          hint: owned ? undefined : 'Not the owner on this network',
+          disabled: owner !== true,
+          // null: that network's owner() read failed at sign-in, so the panel cannot say either way.
+          hint: owner === true ? undefined : owner === null ? "Couldn't check the owner on this network" : 'Not the owner on this network',
           onSelect: () => setNetwork(n),
         }
       })}

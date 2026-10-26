@@ -57,8 +57,9 @@ describe('buildCall', () => {
 
 describe('canAct', () => {
   it('write buttons stay disabled for a non-owner account', () => {
-    expect(canAct(OTHER, TESTNET, OWNER, state, 'testnet')).toEqual({ ok: false, reason: 'Connect the owner wallet ending 916d to make changes.' })
-    expect(canAct(undefined, TESTNET, OWNER, state, 'testnet')).toEqual({ ok: false, reason: 'Connect the owner wallet ending 916d to make changes.' })
+    const connect = { ok: false, fix: 'connect', reason: 'Connect the owner wallet ending 916d to make changes.' }
+    expect(canAct(OTHER, TESTNET, OWNER, state, 'testnet')).toEqual(connect)
+    expect(canAct(undefined, TESTNET, OWNER, state, 'testnet')).toEqual(connect)
   })
 
   it('refuses when the wallet account differs from the signed-in address', () => {
@@ -73,9 +74,11 @@ describe('canAct', () => {
     expect(canAct(OWNER.toLowerCase() as Address, TESTNET, OWNER.toLowerCase() as Address, state, 'testnet')).toEqual({ ok: true })
   })
 
-  it('refuses a wrong chain', () => {
-    expect(canAct(OWNER, 1, OWNER, state, 'testnet')).toEqual({ ok: false, reason: 'Switch your wallet to Arc.' })
-    expect(canAct(OWNER, undefined, OWNER, state, 'testnet')).toEqual({ ok: false, reason: 'Switch your wallet to Arc.' })
+  // The owner must know which Arc network to switch to: the two share a name and a wallet.
+  it('refuses a wrong chain and names the selected network', () => {
+    expect(canAct(OWNER, 1, OWNER, state, 'testnet')).toEqual({ ok: false, fix: 'switch', reason: 'Switch your wallet to Arc Testnet.' })
+    expect(canAct(OWNER, undefined, OWNER, state, 'testnet')).toEqual({ ok: false, fix: 'switch', reason: 'Switch your wallet to Arc Testnet.' })
+    expect(canAct(OWNER, TESTNET, OWNER, state, 'mainnet')).toEqual({ ok: false, fix: 'switch', reason: 'Switch your wallet to Arc Mainnet.' })
   })
 
   // A wallet on the other Arc chain would send to an address that is not this network's factory.
@@ -131,7 +134,7 @@ describe('describe', () => {
     expect(d.note).toBe('Applies to new Fundits only.')
   })
 
-  it('pause note reads "Stops new Fundits only. Existing Fundits keep working."', () => {
-    expect(describeAction({ kind: 'pauseCreation' }, state).note).toBe('Stops new Fundits only. Existing Fundits keep working.')
+  it('pause note says what pausing does', () => {
+    expect(describeAction({ kind: 'pauseCreation' }, state).note).toBe('No one can create a new Fundit until you unpause. Gifts and withdrawals keep working.')
   })
 })

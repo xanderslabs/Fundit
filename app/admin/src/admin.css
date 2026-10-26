@@ -616,7 +616,7 @@ body {
   }
 }
 
-/* The Gifts page and owner controls until Tasks 7 and 8 replace them. */
+/* The Gifts page and the Settings controls. */
 .admin-tiles {
   display: grid;
   gap: var(--space-4);
@@ -1112,6 +1112,147 @@ a.admin-pill:focus-visible {
 .admin-drawer-links .admin-icon {
   width: 16px;
   height: 16px;
+}
+
+/* Settings: the controls, the danger zone set apart in red, and the transaction status. */
+.admin-settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.admin-settings-body > .admin-control:first-of-type {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.admin-control-action {
+  align-self: flex-start;
+}
+
+.admin-control-error {
+  margin: 0;
+  color: var(--danger-ink);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  line-height: var(--text-sm-line);
+  overflow-wrap: anywhere;
+}
+
+.admin-fee-fields {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+
+.admin-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 18rem;
+  margin-top: var(--space-2);
+  overflow-y: auto;
+}
+
+.admin-pick {
+  flex-wrap: wrap;
+}
+
+.admin-pick-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-pick-address {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.admin-settings-featured {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.admin-settings-now {
+  justify-content: flex-start;
+}
+
+.admin-danger > .admin-card {
+  border-color: var(--danger);
+}
+
+.admin-danger .admin-card-title {
+  color: var(--danger-ink);
+}
+
+.admin-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.admin-confirm p {
+  margin: 0;
+}
+
+.admin-tx {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+
+.admin-tx-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.admin-tx-word {
+  font-weight: var(--weight-medium);
+}
+
+.admin-tx-confirmed {
+  border-color: var(--action);
+}
+
+.admin-tx-confirmed .admin-tx-word {
+  color: var(--action-ink);
+}
+
+.admin-tx-failed {
+  border-color: var(--danger);
+}
+
+.admin-tx-failed .admin-tx-word,
+.admin-tx-error {
+  color: var(--danger-ink);
+}
+
+.admin-tx-error {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-tx-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: auto;
+  color: var(--text);
+}
+
+.admin-tx-link .admin-icon {
+  width: 14px;
+  height: 14px;
 }
 
 /* Medium screens: the sidebar keeps only its icons. */

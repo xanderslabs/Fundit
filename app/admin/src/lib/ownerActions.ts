@@ -21,17 +21,19 @@ function same(a: Address, b: Address): boolean {
 
 // Whether the connected wallet may send an owner call: it must be the account the server signed in, still the
 // factory's owner on chain, and on that network's Arc chain. The contract enforces ownership too; this keeps a wrong click from reaching it.
+// fix says what the owner can do about it: connect the owner wallet, or switch it to the network's chain.
 export function canAct(
   account: Address | undefined,
   chainId: number | undefined,
   sessionAddress: Address,
   s: FactoryState,
   network: AdminNetwork,
-): { ok: true } | Refused {
+): { ok: true } | (Refused & { fix: 'connect' | 'switch' }) {
   if (!account || !same(account, sessionAddress) || !same(account, s.owner)) {
-    return { ok: false, reason: `Connect the owner wallet ending ${sessionAddress.slice(-4).toLowerCase()} to make changes.` }
+    return { ok: false, fix: 'connect', reason: `Connect the owner wallet ending ${sessionAddress.slice(-4).toLowerCase()} to make changes.` }
   }
-  if (chainId !== ADMIN_NETWORKS[network].chainId) return { ok: false, reason: 'Switch your wallet to Arc.' }
+  const { chainId: want, label } = ADMIN_NETWORKS[network]
+  if (chainId !== want) return { ok: false, fix: 'switch', reason: `Switch your wallet to ${label}.` }
   return { ok: true }
 }
 
@@ -135,7 +137,7 @@ export function describe(action: OwnerAction, s: FactoryState): { functionName: 
         functionName: 'pauseCreation',
         current: s.paused ? 'Paused' : 'Open',
         next: 'Paused',
-        note: 'Stops new Fundits only. Existing Fundits keep working.',
+        note: 'No one can create a new Fundit until you unpause. Gifts and withdrawals keep working.',
       }
     case 'unpauseCreation':
       return { functionName: 'unpauseCreation', current: s.paused ? 'Paused' : 'Open', next: 'Open' }

@@ -12,6 +12,8 @@ export type ScanContextValue = {
   progress: { readTo: bigint; head: bigint }
   canSave: boolean
   rescan(): void
+  // Reads new blocks now instead of at the next poll, when the scan is caught up (after a confirmed change).
+  nudge(): void
 }
 
 const ScanContext = createContext<ScanContextValue | null>(null)
@@ -41,6 +43,9 @@ export function ScanProvider({ session, network, children }: { session: AdminSes
   // Bumped by rescan to start the loop again from an empty state.
   const [run, setRun] = useState(0)
   const loop = useRef<AbortController | null>(null)
+  // Ends the scan's current wait early. Set only while the scan waits between polls once caught up, so a nudge never
+  // cuts short a rate-limit wait.
+  const wake = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     if (!ready) return
@@ -48,6 +53,8 @@ export function ScanProvider({ session, network, children }: { session: AdminSes
     loop.current = controller
     const start = load(network, factory) ?? initialScanState(network)
     let saved: ScanState = start
+    // The last status, so the wait after it knows whether the scan is caught up.
+    let kind: ScanStatus['kind'] = 'scanning'
     setState(start)
     setStatus({ kind: 'scanning' })
     void runScan({
@@ -63,7 +70,23 @@ export function ScanProvider({ session, network, children }: { session: AdminSes
         // Kept in memory when the browser refuses to save.
         setCanSave(save(next))
       },
-      onStatus: setStatus,
+      onStatus(next) {
+        kind = next.kind
+        setStatus(next)
+      },
+      sleep: (ms, signal) =>
+        new Promise<void>((resolve) => {
+          if (signal.aborted) return resolve()
+          const done = () => {
+            clearTimeout(t)
+            signal.removeEventListener('abort', done)
+            if (wake.current === done) wake.current = null
+            resolve()
+          }
+          const t = setTimeout(done, ms)
+          signal.addEventListener('abort', done)
+          if (kind === 'caughtUp') wake.current = done
+        }),
     })
     return () => controller.abort()
   }, [ready, network, factory, run])
@@ -77,6 +100,10 @@ export function ScanProvider({ session, network, children }: { session: AdminSes
     setRun((n) => n + 1)
   }
 
+  function nudge() {
+    wake.current?.()
+  }
+
   // Without the Fundit list the scan cannot start; say so instead of looking busy.
   const shown: ScanStatus = !ready && snapshot.isError ? { kind: 'error', message: "couldn't read the Fundit list" } : status
 
@@ -86,6 +113,7 @@ export function ScanProvider({ session, network, children }: { session: AdminSes
     progress: { readTo: state?.scannedTo ?? 0n, head },
     canSave,
     rescan,
+    nudge,
   }
   return <ScanContext.Provider value={value}>{children}</ScanContext.Provider>
 }
