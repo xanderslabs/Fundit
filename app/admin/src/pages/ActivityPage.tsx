@@ -10,6 +10,7 @@ import { useScan } from '../scan/ScanProvider'
 import { Address } from '../ui/Address'
 import { ago, Card } from '../ui/Card'
 import { ExternalLinkIcon } from '../ui/icons'
+import { ScanNote } from '../ui/ScanNote'
 import { usePanel } from '../ui/Shell'
 
 type Kind = ScanEvent['kind']
@@ -53,6 +54,7 @@ export function ActivityPage() {
       updatedAt={snapshot.dataUpdatedAt || undefined}
       staleAfterMs={STALE_AFTER_MS}
       onRetry={() => void snapshot.refetch()}
+      error={snapshot.error}
       source={clock ? 'From the factory events in the history scan. Times are estimated from block numbers.' : 'From the factory events in the history scan.'}
     >
       <div className="admin-table-tools">
@@ -68,9 +70,15 @@ export function ActivityPage() {
           {rows.length === all.length ? `${all.length} changes` : `${rows.length} of ${all.length} changes`}
         </p>
       </div>
-      {partial && <p className="admin-partial">Partial: read up to block {scan.progress.readTo.toString()}</p>}
+      <ScanNote />
       {rows.length === 0 ? (
-        <EmptyState>{all.length === 0 ? 'No settings have changed yet.' : 'No change of that kind.'}</EmptyState>
+        <EmptyState>
+          {all.length > 0
+            ? 'No change of that kind.'
+            : partial
+              ? 'No settings changes found yet. The history is still being read.'
+              : 'No settings have changed yet.'}
+        </EmptyState>
       ) : (
         <div className="admin-table-wrap">
           <table className="admin-table">

@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import { Button, Stat } from '../../../src/components/ui'
 import type { TokenSymbol } from '../../../src/config'
 import { formatAmount } from '../../../src/lib/format'
@@ -9,6 +8,7 @@ import { useSnapshot } from '../lib/queries'
 import type { ByToken } from '../lib/stats'
 import { useScan } from '../scan/ScanProvider'
 import { Card } from '../ui/Card'
+import { useResumeSeconds, waitLine } from '../ui/ScanNote'
 import { usePanel } from '../ui/Shell'
 
 const TOKENS_SHOWN: TokenSymbol[] = ['USDC', 'EURC']
@@ -23,23 +23,9 @@ function PerToken({ label, value }: { label: string; value: ByToken }) {
   )
 }
 
-// Ticks every second while a countdown is shown.
-function useClock(enabled: boolean): number {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    if (!enabled) return
-    setNow(Date.now())
-    const t = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(t)
-  }, [enabled])
-  return now
-}
-
 function ScanCard({ deployBlock }: { deployBlock: bigint }) {
   const { state, status, progress, canSave, rescan } = useScan()
-  const counting = status.resumeAt !== undefined
-  const now = useClock(counting)
-  const seconds = counting ? Math.max(0, Math.ceil((status.resumeAt! - now) / 1000)) : 0
+  const seconds = useResumeSeconds(status)
 
   const { readTo, head } = progress
   const started = head > 0n && readTo >= deployBlock
@@ -48,9 +34,8 @@ function ScanCard({ deployBlock }: { deployBlock: bigint }) {
   const percent = !started || span <= 0n ? 0 : Math.min(100, Number(((readTo - deployBlock + 1n) * 100n) / span))
 
   let line: string
-  if (status.kind === 'waiting') line = `The RPC asked us to slow down. Resuming in ${seconds} s.`
-  else if (status.kind === 'error')
-    line = `Couldn't read the history (${status.message}).${counting ? ` Trying again in ${seconds} s.` : ''}`
+  const wait = waitLine(status, seconds)
+  if (wait) line = wait
   else if (status.kind === 'caughtUp') line = 'Up to date. Checks for new blocks every minute.'
   // No state yet: the scan has not started, as it needs the Fundit list first.
   else if (!state) line = 'Waiting for the Fundit list before the scan starts.'
@@ -104,6 +89,7 @@ export function GiftsPage() {
         title="Gifts since launch"
         state={state}
         onRetry={() => void snapshot.refetch()}
+        error={snapshot.error}
         source={`Donated and FeesClaimed events from block ${deployBlock}. USDC and EURC are never added together.`}
       >
         {s && (

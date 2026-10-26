@@ -13,6 +13,7 @@ import { blockClock, perDay } from '../lib/trends'
 import { Amount } from '../ui/Amount'
 import { ago, Card } from '../ui/Card'
 import { ExternalLinkIcon } from '../ui/icons'
+import { ScanNote } from '../ui/ScanNote'
 import { usePanel } from '../ui/Shell'
 import { Sparkline } from '../ui/Sparkline'
 import { useScan } from '../scan/ScanProvider'
@@ -142,8 +143,6 @@ export function OverviewPage() {
   const nowSec = BigInt(Math.floor(nowMs / 1000))
   const snapState = rows ? 'ready' : snapshot.isError ? 'error' : 'loading'
   const scanState = rows && scan.state ? 'ready' : snapshot.isError && !rows ? 'error' : 'loading'
-  const partial = scan.status.kind !== 'caughtUp'
-  const partialLabel = partial && <p className="admin-partial">Partial: read up to block {scan.progress.readTo.toString()}</p>
 
   const clock = all ? blockClock(all) : null
   const gifts = all && rows && scan.state ? shownGifts(scan.state.events, rows, showTest, network) : []
@@ -163,6 +162,7 @@ export function OverviewPage() {
     staleAfterMs: STALE_AFTER_MS,
     onRefresh: () => void snapshot.refetch(),
     onRetry: () => void snapshot.refetch(),
+    error: snapshot.error,
   }
 
   return (
@@ -180,7 +180,7 @@ export function OverviewPage() {
               {giftTimes.length >= 2 && (
                 <Sparkline points={perDay(giftTimes, GIFT_TREND_DAYS, nowSec)} label={`Gifts per day over the last ${GIFT_TREND_DAYS} days, from estimated block times`} />
               )}
-              {partialLabel}
+              <ScanNote />
             </>
           )}
         </Card>
@@ -188,7 +188,7 @@ export function OverviewPage() {
           {stats && (
             <>
               <Figure value={stats.uniqueDonors} />
-              {partialLabel}
+              <ScanNote />
             </>
           )}
         </Card>
@@ -211,7 +211,7 @@ export function OverviewPage() {
       <Card title="Latest activity" state={scanState} {...common} source={clock ? 'Times for gifts and settings changes are estimated from block numbers.' : undefined}>
         {rows && scan.state && (
           <div className="admin-feed-wrap">
-            {partialLabel}
+            <ScanNote />
             {feed.length === 0 ? (
               <p className="admin-note">Nothing has happened yet.</p>
             ) : (

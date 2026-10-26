@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useState } from 'react'
 import { Badge, Button, Card as BaseCard } from '../../../src/components/ui'
+import { isRateLimit } from '../lib/historyScan'
 import { RefreshIcon } from './icons'
 
 // "Updated 5 s ago", in whole seconds, minutes, hours or days.
@@ -25,7 +26,8 @@ function useNow(enabled: boolean): number {
 }
 
 // One card on a panel page. It loads and fails on its own: a skeleton while loading, "Couldn't load this." with
-// Try again on error. A card that already has data keeps showing it while it refreshes (pass state "ready").
+// Try again on error, or that the RPC asked us to slow down when error is a rate limit. A card that already has
+// data keeps showing it while it refreshes (pass state "ready").
 // The footer says how old the data is and where it came from, and marks it stale past staleAfterMs.
 export function Card({
   title,
@@ -35,6 +37,7 @@ export function Card({
   onRefresh,
   state,
   onRetry,
+  error,
   children,
 }: {
   title: string
@@ -44,6 +47,8 @@ export function Card({
   onRefresh?(): void
   state: 'loading' | 'error' | 'ready'
   onRetry?(): void
+  // The failed read's error, so a rate limit is shown as one.
+  error?: unknown
   children?: ReactNode
 }) {
   const now = useNow(updatedAt !== undefined)
@@ -70,7 +75,7 @@ export function Card({
         {state === 'loading' && <span className="sr-only">Loading</span>}
         {state === 'error' && (
           <div className="admin-card-error" role="alert">
-            <p>Couldn't load this.</p>
+            <p>{isRateLimit(error) ? 'The RPC asked us to slow down. Try again in a moment.' : "Couldn't load this."}</p>
             {onRetry && (
               <Button variant="secondary" onClick={onRetry}>
                 Try again

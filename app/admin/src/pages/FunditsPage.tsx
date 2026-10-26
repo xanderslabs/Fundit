@@ -12,6 +12,7 @@ import { Address } from '../ui/Address'
 import { Amount } from '../ui/Amount'
 import { Card } from '../ui/Card'
 import { ChevronDownIcon, ExternalLinkIcon } from '../ui/icons'
+import { ScanNote } from '../ui/ScanNote'
 import { usePanel } from '../ui/Shell'
 
 type Column = 'title' | 'creator' | 'token' | 'raised' | 'goal' | 'gifts' | 'created' | 'status'
@@ -195,6 +196,7 @@ export function FunditsPage() {
         staleAfterMs={STALE_AFTER_MS}
         onRefresh={() => void snapshot.refetch()}
         onRetry={() => void snapshot.refetch()}
+        error={snapshot.error}
         source="Read from the factory's Fundit list and each Fundit's summary. Gifts come from the history scan."
       >
         <div className="admin-table-tools">
@@ -229,6 +231,8 @@ export function FunditsPage() {
             {rows.length === all.length ? `${all.length} Fundits` : `${rows.length} of ${all.length} Fundits`}
           </p>
         </div>
+        {/* Gift counts come from the history scan, so they are partial until it has caught up. */}
+        {all.length > 0 && <ScanNote />}
         {rows.length === 0 ? (
           <EmptyState>{all.length === 0 ? 'No Fundits yet.' : 'No Fundit matches that search.'}</EmptyState>
         ) : (
