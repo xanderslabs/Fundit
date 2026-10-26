@@ -3,7 +3,7 @@ import { EmptyState } from '../../../src/components/ui'
 import { matchesWorker } from '../lib/api'
 import type { ScanEvent } from '../lib/historyScan'
 import { ADMIN_NETWORKS } from '../lib/networks'
-import { STALE_AFTER_MS, useSnapshot } from '../lib/queries'
+import { STALE_AFTER_MS, useHeadTime, useSnapshot } from '../lib/queries'
 import { type SettingChange, settingChanges } from '../lib/settingsHistory'
 import { blockClock } from '../lib/trends'
 import { useScan } from '../scan/ScanProvider'
@@ -31,6 +31,7 @@ const ADDRESS = /^0x[0-9a-fA-F]{40}$/
 export function ActivityPage() {
   const { session, network } = usePanel()
   const snapshot = useSnapshot(session, network)
+  const headTime = useHeadTime(session, network)
   const scan = useScan()
   const [filter, setFilter] = useState<'all' | Kind>('all')
   const { explorerUrl } = ADMIN_NETWORKS[network]
@@ -40,7 +41,7 @@ export function ActivityPage() {
   const state = snapshot.isError && !snapshot.data ? 'error' : scan.state ? 'ready' : 'loading'
   const partial = scan.status.kind !== 'caughtUp'
   const nowMs = Date.now()
-  const clock = snapshot.data ? blockClock(snapshot.data) : null
+  const clock = snapshot.data ? blockClock(snapshot.data, headTime.data) : null
   const all = scan.state ? settingChanges(scan.state.events) : []
   const rows = filter === 'all' ? all : all.filter((c) => c.kind === filter)
 

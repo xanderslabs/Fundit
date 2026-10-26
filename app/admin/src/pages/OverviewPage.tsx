@@ -6,7 +6,7 @@ import { latestFeed, type FeedItem } from '../lib/feed'
 import { giftStats } from '../lib/giftLogs'
 import type { ScanEvent } from '../lib/historyScan'
 import { type AdminNetwork, ADMIN_NETWORKS } from '../lib/networks'
-import { STALE_AFTER_MS, useHealth, useSnapshot } from '../lib/queries'
+import { STALE_AFTER_MS, useHeadTime, useHealth, useSnapshot } from '../lib/queries'
 import type { FunditSnapshot } from '../lib/snapshot'
 import { type ByToken, claimable, liveCount, newThisWeek, raisedByToken, visible } from '../lib/stats'
 import { blockClock, perDay } from '../lib/trends'
@@ -132,6 +132,7 @@ function feedTime(item: FeedItem, rows: FunditSnapshot[], clock: ((b: bigint) =>
 export function OverviewPage() {
   const { session, network, showTest } = usePanel()
   const snapshot = useSnapshot(session, network)
+  const headTime = useHeadTime(session, network)
   const scan = useScan()
   const { explorerUrl } = ADMIN_NETWORKS[network]
 
@@ -144,7 +145,7 @@ export function OverviewPage() {
   const snapState = rows ? 'ready' : snapshot.isError ? 'error' : 'loading'
   const scanState = rows && scan.state ? 'ready' : snapshot.isError && !rows ? 'error' : 'loading'
 
-  const clock = all ? blockClock(all) : null
+  const clock = all ? blockClock(all, headTime.data) : null
   const gifts = all && rows && scan.state ? shownGifts(scan.state.events, rows, showTest, network) : []
   const stats = all && scan.state ? giftStats(scan.state.events, all, showTest, network) : null
   const giftTimes = clock ? gifts.map((e) => clock(e.blockNumber)) : []

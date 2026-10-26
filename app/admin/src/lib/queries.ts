@@ -4,6 +4,7 @@ import { readClient } from './clients'
 import { readFactoryState } from './factoryState'
 import type { AdminNetwork } from './networks'
 import { fetchSnapshot } from './snapshot'
+import type { Anchor } from './trends'
 
 // Panel reads refresh every minute while the tab is visible, and a card marks its data stale at twice that.
 const REFRESH = { refetchInterval: 60_000, refetchIntervalInBackground: false, retry: 1 } as const
@@ -45,4 +46,18 @@ export function useFactory(session: AdminSession, network: AdminNetwork) {
 
 export function useHealth(network: AdminNetwork) {
   return useQuery({ queryKey: ['admin', network, 'health'], queryFn: () => getHealth(network), ...REFRESH })
+}
+
+// The latest block's number and time, read once per refresh, so estimated block times are anchored on a recent
+// block (see blockClock). A failed read leaves data undefined and the estimate falls back to the Fundits alone.
+export function useHeadTime(session: AdminSession, network: AdminNetwork) {
+  return useQuery({
+    queryKey: ['admin', network, 'headTime'],
+    queryFn: async (): Promise<Anchor> => {
+      const block = await readClient(network).getBlock()
+      return { block: block.number, time: block.timestamp }
+    },
+    enabled: matchesWorker(session, network),
+    ...REFRESH,
+  })
 }
