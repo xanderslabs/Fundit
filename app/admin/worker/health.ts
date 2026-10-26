@@ -1,6 +1,7 @@
-// The three health checks. Each has a 5 second timeout and turns every failure into a failed Check, never a throw.
-// At most 3 subrequests per run.
+// The health checks: site, ucw and one RPC check per chain. Each has a 5 second timeout and turns every failure into a failed Check, never a throw.
+// One subrequest each for site and ucw, plus one per chain.
 import type { AdminChain } from './chain'
+import type { WorkerNetwork } from '../../worker/networks'
 
 export type Check = { key: string; ok: boolean; detail: string }
 
@@ -51,12 +52,22 @@ async function blockNumber(chain: AdminChain, fetcher: typeof fetch): Promise<bi
   }
 }
 
-export async function runChecks(chain: AdminChain, lastHead: bigint | null, fetcher: typeof fetch = (i, n) => fetch(i, n)): Promise<{ checks: Check[]; head: bigint | null }> {
-  const [siteCheck, ucwCheck, head] = await Promise.all([site(fetcher), ucw(fetcher), blockNumber(chain, fetcher)])
-  const key = `rpc:arc-${chain.network}`
-  let rpc: Check
-  if (head === null) rpc = failed(key, 'no answer')
-  else if (lastHead !== null && head <= lastHead) rpc = failed(key, `head stuck at ${head}`)
-  else rpc = { key, ok: true, detail: 'ok' }
-  return { checks: [siteCheck, ucwCheck, rpc], head }
+export async function runChecks(
+  chains: AdminChain[],
+  lastHeads: Record<WorkerNetwork, bigint | null>,
+  fetcher: typeof fetch = (i, n) => fetch(i, n),
+): Promise<{ checks: Check[]; heads: Record<WorkerNetwork, bigint | null> }> {
+  const [siteCheck, ucwCheck, ...found] = await Promise.all([site(fetcher), ucw(fetcher), ...chains.map((c) => blockNumber(c, fetcher))])
+  const heads: Record<WorkerNetwork, bigint | null> = { mainnet: null, testnet: null }
+  const checks: Check[] = [siteCheck, ucwCheck]
+  chains.forEach((chain, i) => {
+    const head = found[i] ?? null
+    const lastHead = lastHeads[chain.network]
+    const key = `rpc:arc-${chain.network}`
+    heads[chain.network] = head
+    if (head === null) checks.push(failed(key, 'no answer'))
+    else if (lastHead !== null && head <= lastHead) checks.push(failed(key, `head stuck at ${head}`))
+    else checks.push({ key, ok: true, detail: 'ok' })
+  })
+  return { checks, heads }
 }

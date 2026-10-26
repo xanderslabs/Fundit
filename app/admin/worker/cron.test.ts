@@ -8,15 +8,10 @@ import { runCron } from './cron'
 import { sqliteDb } from './testing/sqliteDb'
 import type { Env } from './index'
 
-// These tests cover the per-network body on testnet alone. Task 2 replaces them with tests for both networks.
-vi.mock('./chain', async (importOriginal) => {
-  const real = await importOriginal<typeof import('./chain')>()
-  return { ...real, ADMIN_CHAINS: { testnet: real.ADMIN_CHAINS.testnet } }
-})
-
 const SCHEMA = ['0001_nonces.sql', '0002_alerts.sql'].map((f) => readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf8')).join('\n')
 const NOW = Date.UTC(2026, 9, 25, 12, 0, 0)
 const chain = ADMIN_CHAINS.testnet
+const main = ADMIN_CHAINS.mainnet
 const CURSOR = 'owner_events_next:testnet'
 const HASH: Hex = `0x${'cd'.repeat(32)}`
 
@@ -39,12 +34,27 @@ type World = {
   telegramOk: boolean
   sent: string[]
   getLogsCalls: [bigint, bigint][]
+  // Mainnet's head moves forward by one on every read so its RPC check stays healthy across runs.
+  mainHead: number
+  mainRpcFails: boolean
+  mainLogsCalls: [bigint, bigint][]
+  calls: number
 }
 
 function world(over: Partial<World> = {}): World & { fetcher: typeof fetch } {
-  const w: World = { head: 1000, logs: () => [], getLogsFails: false, telegramOk: true, sent: [], getLogsCalls: [], ...over }
+  const w: World = { head: 1000, logs: () => [], getLogsFails: false, telegramOk: true, sent: [], getLogsCalls: [], mainHead: 5000, mainRpcFails: false, mainLogsCalls: [], calls: 0, ...over }
   const fetcher = (async (input: string, init?: RequestInit) => {
     const url = String(input)
+    w.calls++
+    if (url === main.rpcUrl) {
+      if (w.mainRpcFails) return new Response('x', { status: 500 })
+      const body = JSON.parse(init!.body as string)
+      if (body.method === 'eth_blockNumber') return Response.json({ jsonrpc: '2.0', id: 1, result: numberToHex(w.mainHead++) })
+      if (body.method === 'eth_getLogs') {
+        w.mainLogsCalls.push([BigInt(body.params[0].fromBlock), BigInt(body.params[0].toBlock)])
+        return Response.json({ jsonrpc: '2.0', id: 1, result: [] })
+      }
+    }
     if (url === 'https://fundit.fun/') return new Response('', { status: 200 })
     if (url === 'https://fundit.fun/api/ucw/wallets') return new Response('{}', { status: 401 })
     if (url === chain.rpcUrl) {
@@ -74,6 +84,9 @@ function env(over: Partial<Env> = {}): Env & { ADMIN_DB: ReturnType<typeof sqlit
 
 const meta = async (e: Env, key: string) => (await e.ADMIN_DB.prepare('SELECT value FROM meta WHERE key = ?').bind(key).first<{ value: string }>())?.value ?? null
 
+// Messages for one network, so each test reads its own network's alerts.
+const tn = (w: { sent: string[] }) => w.sent.filter((s) => s.startsWith('[Arc Testnet]'))
+
 afterEach(() => vi.restoreAllMocks())
 
 describe('runCron', () => {
@@ -81,7 +94,7 @@ describe('runCron', () => {
     const e = env()
     const w = world({ logs: () => [fundsLog(5)] })
     await runCron(e, NOW, w.fetcher)
-    expect(w.sent).toEqual(['[Arc Testnet] Owner alerts started at block 998 on Arc Testnet.'])
+    expect(tn(w)).toEqual(['[Arc Testnet] Owner alerts started at block 998 on Arc Testnet.'])
     expect(w.getLogsCalls).toEqual([])
     expect(await meta(e, CURSOR)).toBe('998')
     // The next run scans from the cursor, and the new event is sent.
@@ -89,7 +102,7 @@ describe('runCron', () => {
     w.logs = () => [fundsLog(1001)]
     await runCron(e, NOW + 300_000, w.fetcher)
     expect(w.getLogsCalls).toEqual([[998n, 1003n]])
-    expect(w.sent[1]).toBe(`[Arc Testnet] Fees changed to 100 bps on gifts and 50 bps on withdrawals. https://explorer.testnet.arc.io/tx/${HASH}`)
+    expect(tn(w)[1]).toBe(`[Arc Testnet] Fees changed to 100 bps on gifts and 50 bps on withdrawals. https://explorer.testnet.arc.io/tx/${HASH}`)
     expect(await meta(e, CURSOR)).toBe('1004')
   })
 
@@ -125,11 +138,11 @@ describe('runCron', () => {
     w.telegramOk = false
     await runCron(e, NOW + 300_000, w.fetcher)
     expect(await meta(e, CURSOR)).toBe('998')
-    expect(w.sent).toHaveLength(1)
+    expect(tn(w)).toHaveLength(1)
     w.telegramOk = true
     await runCron(e, NOW + 600_000, w.fetcher)
-    expect(w.sent).toHaveLength(2)
-    expect(w.sent[1]).toContain('Fees changed to 100 bps')
+    expect(tn(w)).toHaveLength(2)
+    expect(tn(w)[1]).toContain('Fees changed to 100 bps')
     expect(await meta(e, CURSOR)).toBe('1009')
   })
 
@@ -166,9 +179,10 @@ describe('runCron', () => {
     const base = w.fetcher
     const broken = ((input: string, init?: RequestInit) => (String(input) === 'https://fundit.fun/' ? Promise.resolve(new Response('', { status: 500 })) : base(input, init))) as typeof fetch
     await runCron(e, NOW + 300_000, broken)
-    expect(w.sent).toHaveLength(1)
+    // Only the two "Owner alerts started" messages so far.
+    expect(w.sent).toHaveLength(2)
     await runCron(e, NOW + 600_000, broken)
-    expect(w.sent[1]).toBe('[Arc Testnet] site is failing: status 500')
+    expect(w.sent[2]).toBe('[Fundit] site is failing: status 500')
   })
 
   it('alerts after the owner event scan fails two runs in a row', async () => {
@@ -178,10 +192,10 @@ describe('runCron', () => {
     w.head = 1100
     w.getLogsFails = true
     await runCron(e, NOW + 300_000, w.fetcher)
-    expect(w.sent).toHaveLength(1)
+    expect(tn(w)).toHaveLength(1)
     w.head = 1101
     await runCron(e, NOW + 600_000, w.fetcher)
-    expect(w.sent[1]).toBe('[Arc Testnet] events:arc-testnet is failing: owner event scan failed')
+    expect(tn(w)[1]).toBe('[Arc Testnet] events:arc-testnet is failing: owner event scan failed')
     expect(await meta(e, CURSOR)).toBe('998')
   })
 
@@ -197,7 +211,7 @@ describe('runCron', () => {
     w.getLogsFails = false
     w.head = 1102
     await runCron(e, NOW + 900_000, w.fetcher)
-    expect(w.sent[w.sent.length - 1]).toBe('[Arc Testnet] events:arc-testnet is back to normal.')
+    expect(tn(w).at(-1)).toBe('[Arc Testnet] events:arc-testnet is back to normal.')
   })
 
   it('does not report the owner event scan as failing without Telegram secrets', async () => {
@@ -207,5 +221,63 @@ describe('runCron', () => {
     await runCron(e, NOW, w.fetcher)
     const rows = await e.ADMIN_DB.prepare('SELECT key FROM alert_state').all<{ key: string }>()
     expect(rows.results.map((r) => r.key)).not.toContain('events:arc-testnet')
+  })
+
+  it('scans owner events on both networks with separate cursors', async () => {
+    const e = env()
+    const w = world()
+    await runCron(e, NOW, w.fetcher)
+    expect(await meta(e, 'owner_events_next:testnet')).toBe('998')
+    expect(await meta(e, 'owner_events_next:mainnet')).toBe('4998')
+    expect(w.sent).toHaveLength(2)
+    expect(w.sent.filter((s) => s.startsWith('[Arc Testnet] Owner alerts started'))).toHaveLength(1)
+    expect(w.sent.filter((s) => s.startsWith('[Arc Mainnet] Owner alerts started'))).toHaveLength(1)
+  })
+
+  it('a failing mainnet RPC does not stop the testnet scan', async () => {
+    const e = env()
+    const w = world()
+    await runCron(e, NOW, w.fetcher)
+    w.mainRpcFails = true
+    w.head = 1005
+    await runCron(e, NOW + 300_000, w.fetcher)
+    w.head = 1010
+    await runCron(e, NOW + 600_000, w.fetcher)
+    expect(await meta(e, CURSOR)).toBe('1009')
+    const row = await e.ADMIN_DB.prepare('SELECT failing FROM alert_state WHERE key = ?').bind('rpc:arc-mainnet').first<{ failing: number }>()
+    expect(row?.failing).toBe(1)
+    expect(w.sent).toContain('[Arc Mainnet] rpc:arc-mainnet is failing: no answer')
+  })
+
+  it('prefixes site and ucw alerts with [Fundit]', async () => {
+    const e = env()
+    const w = world()
+    const base = w.fetcher
+    const broken = ((input: string, init?: RequestInit) => {
+      const url = String(input)
+      if (url === 'https://fundit.fun/') return Promise.resolve(new Response('', { status: 500 }))
+      if (url === 'https://fundit.fun/api/ucw/wallets') return Promise.resolve(new Response('{}', { status: 503 }))
+      return base(input, init)
+    }) as typeof fetch
+    await runCron(e, NOW, broken)
+    await runCron(e, NOW + 300_000, broken)
+    expect(w.sent).toContain('[Fundit] site is failing: status 500')
+    expect(w.sent).toContain('[Fundit] ucw is failing: fundit Worker config')
+    // Each is alerted once per run, not once per network.
+    expect(w.sent.filter((s) => s.includes('site is failing'))).toHaveLength(1)
+  })
+
+  // Cloudflare's free plan allows 50 subrequests per invocation.
+  it('stays under 45 subrequests in a run with both networks at the window cap', async () => {
+    const e = env()
+    const w = world()
+    await runCron(e, NOW, w.fetcher)
+    w.head = 998 + 2 + 10_000 * 8 - 1
+    w.mainHead = 4998 + 2 + 10_000 * 8 - 1
+    w.calls = 0
+    await runCron(e, NOW + 300_000, w.fetcher)
+    expect(w.getLogsCalls).toHaveLength(5)
+    expect(w.mainLogsCalls).toHaveLength(5)
+    expect(w.calls).toBeLessThan(45)
   })
 })

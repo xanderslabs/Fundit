@@ -10,6 +10,7 @@ import { runChecks } from './health'
 import type { Env } from './index'
 import { pruneNonces } from './nonces'
 import { CONFIRMATIONS, fetchOwnerEvents, MAX_EVENT_WINDOWS_PER_RUN, networkLabel, ownerEventText } from './ownerEvents'
+import type { WorkerNetwork } from '../../worker/networks'
 import { sendTelegram } from '../../worker/telegram'
 
 // Blocks per eth_getLogs call.
@@ -77,34 +78,51 @@ async function ownerEvents(db: Db, chain: AdminChain, head: bigint, send: Send, 
   return true
 }
 
+// Alert text starts with the check key. Chain checks name their network, site and ucw belong to Fundit itself.
+function labelFor(message: string): string {
+  if (message.startsWith('rpc:arc-mainnet') || message.startsWith('events:arc-mainnet')) return 'Arc Mainnet'
+  if (message.startsWith('rpc:arc-testnet') || message.startsWith('events:arc-testnet')) return 'Arc Testnet'
+  return 'Fundit'
+}
+
 export async function runCron(env: Env, nowMs: number, fetcher: typeof fetch = (i, n) => fetch(i, n)): Promise<void> {
   const db = env.ADMIN_DB
   await pruneNonces(db, nowMs)
-  for (const chain of Object.values(ADMIN_CHAINS)) await runChain(env, db, chain, nowMs, fetcher)
-}
+  const chains = Object.values(ADMIN_CHAINS)
 
-async function runChain(env: Env, db: Db, chain: AdminChain, nowMs: number, fetcher: typeof fetch): Promise<void> {
-  const headKey = `rpc_head:${chain.network}`
-  const lastHeadText = await getMeta(db, headKey)
-  const { checks, head } = await runChecks(chain, lastHeadText === null ? null : BigInt(lastHeadText), fetcher)
-  if (head !== null && (lastHeadText === null || head > BigInt(lastHeadText))) await setMeta(db, headKey, head.toString())
+  const lastTexts = {} as Record<WorkerNetwork, string | null>
+  const lastHeads = {} as Record<WorkerNetwork, bigint | null>
+  for (const c of chains) {
+    lastTexts[c.network] = await getMeta(db, `rpc_head:${c.network}`)
+    lastHeads[c.network] = lastTexts[c.network] === null ? null : BigInt(lastTexts[c.network] as string)
+  }
+  const { checks, heads } = await runChecks(chains, lastHeads, fetcher)
+  for (const c of chains) {
+    const head = heads[c.network]
+    const last = lastHeads[c.network]
+    if (head !== null && (last === null || head > last)) await setMeta(db, `rpc_head:${c.network}`, head.toString())
+  }
 
   const configured = Boolean(env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID)
   if (!configured) console.log('telegram not configured')
   const send: Send = (text) => sendTelegram(env.TELEGRAM_BOT_TOKEN as string, env.TELEGRAM_CHAT_ID as string, text, fetcher)
 
-  // The scan runs before decideAlerts so a failing scan is alerted in the same run. It is skipped without Telegram.
-  if (configured && head !== null) {
-    const ok = await ownerEvents(db, chain, head, send, fetcher)
-    checks.push({ key: `events:arc-${chain.network}`, ok, detail: 'owner event scan failed' })
+  // Each scan runs before decideAlerts so a failing scan is alerted in the same run. A scan is skipped without
+  // Telegram or without a head, and one network's failure never stops the other's scan.
+  if (configured) {
+    for (const c of chains) {
+      const head = heads[c.network]
+      if (head === null) continue
+      const ok = await ownerEvents(db, c, head, send, fetcher)
+      checks.push({ key: `events:arc-${c.network}`, ok, detail: 'owner event scan failed' })
+    }
   }
 
   const { send: messages, next } = decideAlerts(await readAlertRows(db), checks, nowMs)
   let allSent = true
   if (configured) {
-    for (const m of messages) if (!(await send(`[${networkLabel(chain)}] ${m}`))) allSent = false
+    for (const m of messages) if (!(await send(`[${labelFor(m)}] ${m}`))) allSent = false
   }
   // If a send failed the rows stay as they were, so the same alert is decided again next run.
   if (allSent) await writeAlertRows(db, next)
-
 }
