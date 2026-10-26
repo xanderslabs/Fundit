@@ -17,9 +17,9 @@
 	// Only admin.fundit.fun: no workers.dev address and no preview URLs.
 	"workers_dev": false,
 	"preview_urls": false,
-	// The variable NETWORK (testnet or mainnet) is set in Cloudflare, not here, so the network switch is an
-	// environment change. The secrets ADMIN_SESSION_SECRET (base64, at least 32 bytes) and TURNSTILE_SECRET are
-	// set with `wrangler secret put`. The Worker refuses every /api/admin call while one is missing or wrong.
+	// One deployment covers Arc mainnet and testnet, so there is no network variable. The secrets
+	// ADMIN_SESSION_SECRET (base64, at least 32 bytes) and TURNSTILE_SECRET are set with `wrangler secret put`.
+	// The Worker refuses every /api/admin call while one is missing or wrong.
 	// keep_vars stops a deploy from removing the variables set in Cloudflare.
 	"keep_vars": true,
 	"vars": { "ADMIN_ORIGIN": "https://admin.fundit.fun" },

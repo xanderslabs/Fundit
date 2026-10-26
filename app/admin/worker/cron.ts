@@ -4,7 +4,7 @@
 //
 // Never log the token, the chat id or a message. The one log line is the fixed text `telegram not configured`.
 import { decideAlerts, type AlertRow } from './alerts'
-import { adminChain, type AdminChain } from './chain'
+import { ADMIN_CHAINS, type AdminChain } from './chain'
 import type { Db } from './db'
 import { runChecks } from './health'
 import type { Env } from './index'
@@ -78,12 +78,12 @@ async function ownerEvents(db: Db, chain: AdminChain, head: bigint, send: Send, 
 }
 
 export async function runCron(env: Env, nowMs: number, fetcher: typeof fetch = (i, n) => fetch(i, n)): Promise<void> {
-  const chain = adminChain(env.NETWORK)
-  // A bad NETWORK fails the run loudly, so the cron's outcome shows it.
-  if (!chain) throw new Error('NETWORK is not testnet or mainnet')
   const db = env.ADMIN_DB
   await pruneNonces(db, nowMs)
+  for (const chain of Object.values(ADMIN_CHAINS)) await runChain(env, db, chain, nowMs, fetcher)
+}
 
+async function runChain(env: Env, db: Db, chain: AdminChain, nowMs: number, fetcher: typeof fetch): Promise<void> {
   const headKey = `rpc_head:${chain.network}`
   const lastHeadText = await getMeta(db, headKey)
   const { checks, head } = await runChecks(chain, lastHeadText === null ? null : BigInt(lastHeadText), fetcher)

@@ -3,14 +3,20 @@ import { readFileSync } from 'node:fs'
 import { encodeAbiParameters, encodeEventTopics, numberToHex, type Hex } from 'viem'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { factoryAbi } from '../../src/abi/factory'
-import { adminChain } from './chain'
+import { ADMIN_CHAINS } from './chain'
 import { runCron } from './cron'
 import { sqliteDb } from './testing/sqliteDb'
 import type { Env } from './index'
 
+// These tests cover the per-network body on testnet alone. Task 2 replaces them with tests for both networks.
+vi.mock('./chain', async (importOriginal) => {
+  const real = await importOriginal<typeof import('./chain')>()
+  return { ...real, ADMIN_CHAINS: { testnet: real.ADMIN_CHAINS.testnet } }
+})
+
 const SCHEMA = ['0001_nonces.sql', '0002_alerts.sql'].map((f) => readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf8')).join('\n')
 const NOW = Date.UTC(2026, 9, 25, 12, 0, 0)
-const chain = adminChain('testnet')!
+const chain = ADMIN_CHAINS.testnet
 const CURSOR = 'owner_events_next:testnet'
 const HASH: Hex = `0x${'cd'.repeat(32)}`
 
@@ -63,7 +69,7 @@ function world(over: Partial<World> = {}): World & { fetcher: typeof fetch } {
 }
 
 function env(over: Partial<Env> = {}): Env & { ADMIN_DB: ReturnType<typeof sqliteDb> } {
-  return { NETWORK: 'testnet', ADMIN_DB: sqliteDb(SCHEMA), TELEGRAM_BOT_TOKEN: 'tok', TELEGRAM_CHAT_ID: '7', ...over } as Env & { ADMIN_DB: ReturnType<typeof sqliteDb> }
+  return { ADMIN_DB: sqliteDb(SCHEMA), TELEGRAM_BOT_TOKEN: 'tok', TELEGRAM_CHAT_ID: '7', ...over } as Env & { ADMIN_DB: ReturnType<typeof sqliteDb> }
 }
 
 const meta = async (e: Env, key: string) => (await e.ADMIN_DB.prepare('SELECT value FROM meta WHERE key = ?').bind(key).first<{ value: string }>())?.value ?? null

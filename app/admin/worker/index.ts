@@ -1,15 +1,18 @@
 // The fundit-admin Worker (admin.fundit.fun). It runs before every file, so the panel is only ever sent to a
-// browser holding a session for the wallet that is CampaignFactory.owner() on this Worker's NETWORK.
+// browser holding a session for a wallet that is CampaignFactory.owner() on Arc mainnet or Arc testnet. One
+// deployment covers both networks.
 //
-// Sign-in: Turnstile, then a single-use nonce from D1, then a Sign-In with Ethereum message signed by the owner.
-// owner() is read fresh at login and again (cached at most OWNER_CACHE_MS) on every session check, so moving
-// ownership ends the old owner's session within a minute. Any missing config, secret or RPC answer refuses.
+// Sign-in: Turnstile, then a single-use nonce from D1, then a Sign-In with Ethereum message (for either Arc chain)
+// signed by the owner. owner() is read on both networks, fresh at login and again (cached at most OWNER_CACHE_MS)
+// on every session check, so moving ownership ends the old owner's session within a minute. The session holds
+// while one network confirms the address. A failed read is never taken as an answer: if no network confirms and
+// one could not be read, the Worker refuses. Any missing config or secret refuses.
 //
 // Never log a request or response body, a cookie, a signature, a message or a secret.
 import { getAddress, type Address, type Hex } from 'viem'
 import { TURNSTILE_TOKEN, verifyTurnstile } from '../../worker/turnstile'
 import { loginFiles, MANIFEST_PATH, type ManifestChunk } from './assets'
-import { adminChain, type AdminChain } from './chain'
+import { ADMIN_CHAINS } from './chain'
 import { runCron } from './cron'
 import type { Db } from './db'
 import { secure } from './headers'
@@ -17,6 +20,7 @@ import { consumeNonce, issueNonce, pruneNonces } from './nonces'
 import { cachedOwner, readOwner } from './owner'
 import { clearSessionCookie, readSession, secretOk, SESSION_TTL_SEC, sessionCookie, signSession, type Session } from './session'
 import { checkLoginMessage, signerMatches } from './siwe'
+import type { WorkerNetwork } from '../../worker/networks'
 
 // Cloudflare's rate limiting binding (wrangler.jsonc ratelimits).
 type RateLimit = { limit(options: { key: string }): Promise<{ success: boolean }> }
@@ -27,7 +31,6 @@ export interface Env {
   // Optional: without the binding (local dev), Turnstile stands alone.
   ADMIN_LIMIT?: RateLimit
   // Vars.
-  NETWORK: string
   ADMIN_ORIGIN: string
   // Secrets.
   ADMIN_SESSION_SECRET: string
@@ -37,8 +40,14 @@ export interface Env {
   TELEGRAM_CHAT_ID?: string
 }
 
-type Config = { chain: AdminChain; origin: string; secret: string; turnstileSecret: string; db: Db }
+type Config = { origin: string; secret: string; turnstileSecret: string; db: Db }
 type Body = Record<string, unknown>
+
+// The panel's pages. The browser routes between them, so a reload on any of them is sent the panel.
+export const PANEL_PATHS = ['/', '/fundits', '/gifts', '/activity', '/health', '/settings'] as const
+
+const NETWORKS = ['mainnet', 'testnet'] as const satisfies readonly WorkerNetwork[]
+const CHAIN_IDS = NETWORKS.map((n) => ADMIN_CHAINS[n].chainId)
 
 const MAX_BODY = 4 * 1024
 const SIGNATURE = /^0x[0-9a-fA-F]{2,1024}$/
@@ -62,7 +71,6 @@ const fail = (status: number, code: string, cookies: readonly string[] = []) => 
 const notFound = () => new Response('Not found', { status: 404, headers: { 'content-type': 'text/plain' } })
 
 function config(env: Env): Config | null {
-  const chain = adminChain(env.NETWORK)
   let origin: string | null = null
   try {
     // An exact https origin, nothing after the host.
@@ -70,8 +78,8 @@ function config(env: Env): Config | null {
   } catch {
     origin = null
   }
-  if (!chain || !origin || !secretOk(env.ADMIN_SESSION_SECRET) || !env.TURNSTILE_SECRET || !env.ADMIN_DB) return null
-  return { chain, origin, secret: env.ADMIN_SESSION_SECRET, turnstileSecret: env.TURNSTILE_SECRET, db: env.ADMIN_DB }
+  if (!origin || !secretOk(env.ADMIN_SESSION_SECRET) || !env.TURNSTILE_SECRET || !env.ADMIN_DB) return null
+  return { origin, secret: env.ADMIN_SESSION_SECRET, turnstileSecret: env.TURNSTILE_SECRET, db: env.ADMIN_DB }
 }
 
 async function rateLimit(env: Env, key: string): Promise<void> {
@@ -94,48 +102,77 @@ async function readBody(request: Request): Promise<Body> {
   return body as Body
 }
 
-type SessionState = { kind: 'ok'; session: Session } | { kind: 'out' } | { kind: 'unavailable' }
+// Per network: true when `address` is owner(), false when another wallet is, null when the read failed.
+type Owned = Record<WorkerNetwork, boolean | null>
+type SessionState = { kind: 'ok'; session: Session; owned: Owned } | { kind: 'out' } | { kind: 'unavailable' }
 
-// In order: the cookie's MAC and expiry, the network it was made for, and that its address is still owner().
+async function ownedBy(address: string, read: (rpcUrl: string, factory: Address) => Promise<Address>): Promise<Owned> {
+  const answers = await Promise.all(
+    NETWORKS.map(async (n) => {
+      try {
+        return (await read(ADMIN_CHAINS[n].rpcUrl, ADMIN_CHAINS[n].factory)).toLowerCase() === address.toLowerCase()
+      } catch {
+        return null
+      }
+    }),
+  )
+  return Object.fromEntries(NETWORKS.map((n, i) => [n, answers[i] ?? null])) as Owned
+}
+
+// In: one network confirms. Out: every network answered and none confirms. Otherwise the answer is unknown.
+function decide(owned: Owned): 'in' | 'out' | 'unknown' {
+  const values = Object.values(owned)
+  if (values.includes(true)) return 'in'
+  return values.every((v) => v === false) ? 'out' : 'unknown'
+}
+
+// In order: the cookie's MAC, version and expiry, then that its address is still owner() on at least one network.
 async function checkSession(request: Request, cfg: Config, nowMs: number): Promise<SessionState> {
   const session = await readSession(request.headers.get('cookie'), cfg.secret, Math.floor(nowMs / 1000))
   if (!session) return { kind: 'out' }
-  if (session.chainId !== cfg.chain.chainId || session.factory !== cfg.chain.factory.toLowerCase()) return { kind: 'out' }
-  let owner: Address
-  try {
-    owner = await cachedOwner(cfg.chain.rpcUrl, cfg.chain.factory, nowMs)
-  } catch {
-    return { kind: 'unavailable' }
-  }
-  return owner.toLowerCase() === session.address ? { kind: 'ok', session } : { kind: 'out' }
+  const owned = await ownedBy(session.address, (rpcUrl, factory) => cachedOwner(rpcUrl, factory, nowMs))
+  const verdict = decide(owned)
+  if (verdict === 'in') return { kind: 'ok', session, owned }
+  return verdict === 'out' ? { kind: 'out' } : { kind: 'unavailable' }
 }
 
 async function login(request: Request, cfg: Config, nowMs: number): Promise<Response> {
   const body = await readBody(request)
   const { message, signature } = body
   if (typeof message !== 'string' || typeof signature !== 'string' || !SIGNATURE.test(signature)) return fail(400, 'bad_input')
-  const check = checkLoginMessage(message, { origin: cfg.origin, chainId: cfg.chain.chainId, nowMs })
+  const check = checkLoginMessage(message, { origin: cfg.origin, chainIds: CHAIN_IDS, nowMs })
   if (!check.ok) return fail(403, check.reason)
   if (!(await signerMatches(message, check.address, signature as Hex))) return fail(403, 'bad_signature')
   // Spent before owner() is read, so a refused login cannot be retried with the same signature.
   if (!(await consumeNonce(cfg.db, check.nonce, nowMs))) return fail(403, 'nonce')
-  let owner: Address
-  try {
-    owner = await readOwner(cfg.chain.rpcUrl, cfg.chain.factory)
-  } catch {
-    return fail(503, 'unavailable')
-  }
-  if (owner.toLowerCase() !== check.address.toLowerCase()) return fail(403, 'not_owner')
+  const verdict = decide(await ownedBy(check.address, readOwner))
+  if (verdict === 'unknown') return fail(503, 'unavailable')
+  if (verdict === 'out') return fail(403, 'not_owner')
   const iat = Math.floor(nowMs / 1000)
-  const session: Session = {
-    v: 1,
-    address: check.address.toLowerCase() as Address,
-    chainId: cfg.chain.chainId,
-    factory: cfg.chain.factory.toLowerCase() as Address,
-    iat,
-    exp: iat + SESSION_TTL_SEC,
-  }
+  const session: Session = { v: 2, address: check.address.toLowerCase() as Address, iat, exp: iat + SESSION_TTL_SEC }
   return json(200, { address: check.address }, [sessionCookie(await signSession(session, cfg.secret))])
+}
+
+type HealthRow = { key: string; failing: number; fail_count: number; since: number; last_sent: number }
+
+// The cron's stored state for one network: its alert rows (missing ones left out) and its two meta values.
+// Nothing here holds a Telegram secret or a chat id.
+async function health(db: Db, network: WorkerNetwork): Promise<unknown> {
+  const { results } = await db
+    .prepare('SELECT key, failing, fail_count, since, last_sent FROM alert_state WHERE key IN (?, ?, ?, ?) ORDER BY key')
+    .bind('site', 'ucw', `rpc:arc-${network}`, `events:arc-${network}`)
+    .all<HealthRow>()
+  const cursorKey = `owner_events_next:${network}`
+  const headKey = `rpc_head:${network}`
+  const meta = await db.prepare('SELECT key, value FROM meta WHERE key IN (?, ?)').bind(cursorKey, headKey).all<{ key: string; value: string }>()
+  const value = (key: string) => meta.results.find((r) => r.key === key)?.value ?? null
+  const lastEventBlock = value(cursorKey)
+  return {
+    checks: results.map((r) => ({ key: r.key, ok: r.failing !== 1, failCount: r.fail_count, since: r.since, lastSent: r.last_sent })),
+    alertsStarted: lastEventBlock !== null,
+    lastEventBlock,
+    rpcHead: value(headKey),
+  }
 }
 
 async function api(request: Request, env: Env, name: string, nowMs: number): Promise<Response> {
@@ -148,7 +185,20 @@ async function api(request: Request, env: Env, name: string, nowMs: number): Pro
       const state = await checkSession(request, cfg, nowMs)
       if (state.kind === 'unavailable') return fail(503, 'unavailable')
       if (state.kind === 'out') return fail(401, 'signed_out', [clearSessionCookie()])
-      return json(200, { address: getAddress(state.session.address), network: cfg.chain.network, chainId: cfg.chain.chainId, factory: cfg.chain.factory })
+      const networks = Object.fromEntries(
+        NETWORKS.map((n) => [n, { chainId: ADMIN_CHAINS[n].chainId, factory: ADMIN_CHAINS[n].factory, owner: state.owned[n] }]),
+      )
+      return json(200, { address: getAddress(state.session.address), networks })
+    }
+    // A session is enough: the address owns at least one factory. The rows are the same cron state for both.
+    if (name === 'health') {
+      if (request.method !== 'GET') return fail(405, 'method')
+      const state = await checkSession(request, cfg, nowMs)
+      if (state.kind === 'unavailable') return fail(503, 'unavailable')
+      if (state.kind === 'out') return fail(401, 'signed_out', [clearSessionCookie()])
+      const network = new URL(request.url).searchParams.get('network')
+      if (network !== 'mainnet' && network !== 'testnet') return fail(400, 'bad_input')
+      return json(200, await health(cfg.db, network))
     }
     if (name !== 'nonce' && name !== 'login' && name !== 'logout') return fail(404, 'not_found')
     if (request.method !== 'POST') return fail(405, 'method')
@@ -201,17 +251,26 @@ function isManifest(pathname: string): boolean {
   return path.toLowerCase().replace(/\/+$/, '').endsWith('manifest.json')
 }
 
+// A panel page, with or without one trailing slash. "/" is itself, and "//" is not a panel page.
+function isPanelPath(pathname: string): boolean {
+  if (pathname === '/') return true
+  const path = pathname.endsWith('/') ? pathname.slice(0, -1) : pathname
+  return path !== '/' && (PANEL_PATHS as readonly string[]).includes(path)
+}
+
 async function files(request: Request, env: Env, nowMs: number): Promise<Response> {
   const { pathname } = new URL(request.url)
   if (isManifest(pathname)) return notFound()
   const cfg = config(env)
   const state = cfg ? await checkSession(request, cfg, nowMs) : null
+  const panelPage = isPanelPath(pathname)
   if (state?.kind === 'ok') {
-    if (pathname === '/') return env.ASSETS.fetch(new Request(new URL('/index.html', request.url), request))
+    if (panelPage) return env.ASSETS.fetch(new Request(new URL('/index.html', request.url), request))
     return env.ASSETS.fetch(request)
   }
-  // Signed out, or the session cannot be checked: only the login page and the files it loads, by exact path.
-  const path = pathname === '/' ? '/login.html' : pathname
+  // Signed out, or the session cannot be checked: a panel page gets the login page; otherwise only the login
+  // page's own files, by exact path.
+  const path = panelPage ? '/login.html' : pathname
   let allowed: Set<string>
   try {
     allowed = await publicFiles(env, request)

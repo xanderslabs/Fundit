@@ -11,7 +11,8 @@ export const CLOCK_SKEW_MS = 60_000
 
 export type LoginRefusal = 'bad_message' | 'wrong_domain' | 'wrong_uri' | 'wrong_chain' | 'expired' | 'not_yet_valid' | 'too_long_lived'
 
-type Expect = { origin: string; chainId: number; nowMs: number }
+// chainIds: every chain a message may name. The Worker passes both Arc chains.
+type Expect = { origin: string; chainIds: readonly number[]; nowMs: number }
 
 const valid = (d: Date | undefined): d is Date => d instanceof Date && !Number.isNaN(d.getTime())
 
@@ -31,7 +32,7 @@ export function checkLoginMessage(message: string, expect: Expect): { ok: true; 
   }
   if ((m.scheme !== undefined && m.scheme !== 'https') || m.domain !== new URL(expect.origin).host) return refuse('wrong_domain')
   if (m.uri !== expect.origin) return refuse('wrong_uri')
-  if (m.chainId !== expect.chainId) return refuse('wrong_chain')
+  if (!expect.chainIds.includes(m.chainId)) return refuse('wrong_chain')
   const issued = m.issuedAt.getTime()
   const expires = m.expirationTime.getTime()
   if (expires <= expect.nowMs) return refuse('expired')

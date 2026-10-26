@@ -6,10 +6,8 @@ const SECRET = btoa(String.fromCharCode(...Array.from({ length: 32 }, (_, i) => 
 const OTHER_SECRET = btoa(String.fromCharCode(...Array.from({ length: 32 }, (_, i) => 200 - i)))
 const NOW = 1_800_000_000
 const session: Session = {
-  v: 1,
+  v: 2,
   address: '0x3552e9c14c7b6050839009a5b160a4446a1e916d',
-  chainId: 5042002,
-  factory: '0x6890d40a9a472d0d05adb5938d85b07059ad54ab',
   iat: NOW,
   exp: NOW + SESSION_TTL_SEC,
 }
@@ -53,8 +51,24 @@ describe('session', () => {
     // A well signed payload of the wrong shape is refused too.
     const wrong = await signSession({ ...session, address: '0x3552E9c14C7b6050839009A5B160A4446a1e916D' }, SECRET)
     expect(await readSession(header(wrong), SECRET, NOW)).toBeNull()
-    const v2 = await signSession({ ...session, v: 2 } as unknown as Session, SECRET)
-    expect(await readSession(header(v2), SECRET, NOW)).toBeNull()
+    const v3 = await signSession({ ...session, v: 3 } as unknown as Session, SECRET)
+    expect(await readSession(header(v3), SECRET, NOW)).toBeNull()
+    const extra = await signSession({ ...session, chainId: 5042002 } as unknown as Session, SECRET)
+    expect(await readSession(header(extra), SECRET, NOW)).toBeNull()
+  })
+
+  // A Plan 8 cookie named one network. After the deploy it must read as signed out, never as a session.
+  it('refuses a correctly signed v1 cookie', async () => {
+    const v1 = { v: 1, address: session.address, chainId: 5042002, factory: '0x6890d40a9a472d0d05adb5938d85b07059ad54ab', iat: NOW, exp: NOW + SESSION_TTL_SEC }
+    const value = await signSession(v1 as unknown as Session, SECRET)
+    expect(await readSession(header(value), SECRET, NOW)).toBeNull()
+  })
+
+  it('refuses a v2 cookie whose MAC was changed', async () => {
+    const value = await signSession(session, SECRET)
+    const [payload, mac] = value.split('.') as [string, string]
+    const flipped = `${payload}.${mac[0] === 'A' ? 'B' : 'A'}${mac.slice(1)}`
+    expect(await readSession(header(flipped), SECRET, NOW)).toBeNull()
   })
 
   // __Host- makes the browser refuse the cookie unless it is Secure, Path=/ and has no Domain, so a sibling

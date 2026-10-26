@@ -2,10 +2,10 @@
 import { encodeAbiParameters, encodeEventTopics, type Address, type Hex } from 'viem'
 import { describe, expect, it } from 'vitest'
 import { factoryAbi } from '../../src/abi/factory'
-import { adminChain } from './chain'
+import { ADMIN_CHAINS } from './chain'
 import { fetchOwnerEvents, ownerEventText, OWNER_EVENTS, type OwnerEvent } from './ownerEvents'
 
-const chain = adminChain('testnet')!
+const chain = ADMIN_CHAINS.testnet
 const A: Address = '0x1111111111111111111111111111111111111111'
 const B: Address = '0x2222222222222222222222222222222222222222'
 const HASH: Hex = `0x${'ab'.repeat(32)}`

@@ -4,18 +4,19 @@ import { encodeFunctionResult, parseAbi, type Address } from 'viem'
 import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts'
 import { createSiweMessage } from 'viem/siwe'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { NETWORKS_WORKER } from '../../worker/networks'
+import { NETWORKS_WORKER, type WorkerNetwork } from '../../worker/networks'
 import { KNOWN_FACTORIES } from '../../src/deployConfig'
 import { ADMIN_CSP } from './headers'
-import worker, { type Env } from './index'
+import worker, { PANEL_PATHS, type Env } from './index'
 import { clearOwnerCache } from './owner'
+import { SESSION_COOKIE, SESSION_TTL_SEC, signSession, type Session } from './session'
 import { ADMIN_STATEMENT } from './siwe'
 import { sqliteDb } from './testing/sqliteDb'
 
 const ORIGIN = 'https://admin.fundit.fun'
 const IP = '203.0.113.7'
 const NOW = Date.UTC(2026, 9, 25, 12, 0, 0)
-const SCHEMA = readFileSync(new URL('../migrations/0001_nonces.sql', import.meta.url), 'utf8')
+const SCHEMA = ['0001_nonces.sql', '0002_alerts.sql'].map((f) => readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf8')).join('\n')
 const SECRET = btoa(String.fromCharCode(...Array.from({ length: 32 }, (_, i) => (i * 7 + 3) % 256)))
 const TURNSTILE = 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
 const ownerAbi = parseAbi(['function owner() view returns (address)'])
@@ -66,7 +67,6 @@ function env(over: Partial<Env> = {}): Env {
     ASSETS: { fetch: assets },
     ADMIN_DB: sqliteDb(SCHEMA),
     ADMIN_LIMIT: { limit },
-    NETWORK: 'testnet',
     ADMIN_ORIGIN: ORIGIN,
     ADMIN_SESSION_SECRET: SECRET,
     TURNSTILE_SECRET: 'turnstile-secret',
@@ -88,8 +88,11 @@ function get(path: string, cookie?: string): Request {
 
 type Call = { url: string; init: RequestInit }
 let calls: Call[]
-let currentOwner: Address
+// owner() per network. A network in rpcDown has its eth_call fail, as if its RPC were unreachable.
+let owners: Record<WorkerNetwork, Address>
+let rpcDown: Set<WorkerNetwork>
 let rpcReply: (() => Response) | null
+const setOwner = (a: Address) => (owners = { testnet: a, mainnet: a })
 
 const rpcCalls = () => calls.filter((c) => c.url.startsWith('https://rpc.'))
 const rows = async (e: Env) => (await e.ADMIN_DB.prepare('SELECT COUNT(*) AS n FROM nonces').first<{ n: number }>())?.n
@@ -101,7 +104,8 @@ beforeEach(() => {
   limit.mockReset()
   limit.mockImplementation(async () => ({ success: true }))
   clearOwnerCache()
-  currentOwner = owner.address
+  setOwner(owner.address)
+  rpcDown = new Set()
   rpcReply = null
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(NOW)
@@ -115,12 +119,14 @@ beforeEach(() => {
       calls.push({ url, init })
       if (url === NETWORKS_WORKER.testnet.rpcUrl || url === NETWORKS_WORKER.mainnet.rpcUrl) {
         if (rpcReply) return rpcReply()
+        const net: WorkerNetwork = url === NETWORKS_WORKER.testnet.rpcUrl ? 'testnet' : 'mainnet'
+        if (rpcDown.has(net)) throw new TypeError('fetch failed')
         const req = JSON.parse(String(init.body)) as { method: string; params: [{ to: string; data: string }, string] }
-        const factory = url === NETWORKS_WORKER.testnet.rpcUrl ? KNOWN_FACTORIES.testnet.address : KNOWN_FACTORIES.mainnet.address
+        const factory = KNOWN_FACTORIES[net].address
         if (req.method !== 'eth_call' || req.params[0].to.toLowerCase() !== factory.toLowerCase() || req.params[0].data !== '0x8da5cb5b') {
           return Response.json({ jsonrpc: '2.0', id: 1, error: { code: -32000, message: 'unexpected call' } })
         }
-        return Response.json({ jsonrpc: '2.0', id: 1, result: encodeFunctionResult({ abi: ownerAbi, functionName: 'owner', result: currentOwner }) })
+        return Response.json({ jsonrpc: '2.0', id: 1, result: encodeFunctionResult({ abi: ownerAbi, functionName: 'owner', result: owners[net] }) })
       }
       const reply = replies[url]
       if (!reply) throw new Error(`unexpected fetch ${url}`)
@@ -220,12 +226,86 @@ describe('login', () => {
     expect(await res.json()).toEqual({ address: owner.address })
     const set = res.headers.get('set-cookie') ?? ''
     expect(set).toMatch(/^__Host-fundit_admin=[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+; /)
-    // owner() was read fresh at login.
-    expect(rpcCalls()).toHaveLength(1)
+    // owner() was read fresh at login, once per network.
+    expect(rpcCalls().map((c) => c.url).sort()).toEqual([NETWORKS_WORKER.mainnet.rpcUrl, NETWORKS_WORKER.testnet.rpcUrl])
 
     const session = await worker.fetch(get('/api/admin/session', cookieOf(res)), e)
     expect(session.status).toBe(200)
-    expect(await session.json()).toEqual({ address: owner.address, network: 'testnet', chainId: 5042002, factory: KNOWN_FACTORIES.testnet.address })
+    expect(await session.json()).toEqual({
+      address: owner.address,
+      networks: {
+        mainnet: { chainId: 5042, factory: KNOWN_FACTORIES.mainnet.address, owner: true },
+        testnet: { chainId: 5042002, factory: KNOWN_FACTORIES.testnet.address, owner: true },
+      },
+    })
+  })
+
+  // The owner may hold only one network's factory: sign-in works, and the panel learns which one.
+  it('signs in an address that owns only the testnet factory, and reports mainnet owner false', async () => {
+    const e = env()
+    owners = { testnet: owner.address, mainnet: stranger.address }
+    const { res } = await signedLogin(e, owner, { chainId: 5042002 })
+    expect(res.status).toBe(200)
+    const session = await worker.fetch(get('/api/admin/session', cookieOf(res)), e)
+    expect(session.status).toBe(200)
+    const body = (await session.json()) as { networks: Record<WorkerNetwork, { owner: boolean | null }> }
+    expect(body.networks.testnet.owner).toBe(true)
+    expect(body.networks.mainnet.owner).toBe(false)
+  })
+
+  it('accepts a SIWE message for either Arc chain and refuses chain 1', async () => {
+    for (const chainId of [5042, 5042002]) {
+      const { res } = await signedLogin(env(), owner, { chainId })
+      expect(res.status, String(chainId)).toBe(200)
+    }
+    const { res } = await signedLogin(env(), owner, { chainId: 1 })
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: 'wrong_chain' })
+  })
+
+  it('refuses login when the address owns neither factory', async () => {
+    owners = { testnet: stranger.address, mainnet: stranger.address }
+    const { res } = await signedLogin(env())
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: 'not_owner' })
+    expect(res.headers.get('set-cookie')).toBeNull()
+  })
+
+  // One network's RPC being down must not lock the owner out of the network that answers.
+  it('keeps the session when one network RPC fails and the other confirms the owner', async () => {
+    const e = env()
+    rpcDown = new Set(['mainnet'])
+    const { res } = await signedLogin(e)
+    expect(res.status).toBe(200)
+    const session = await worker.fetch(get('/api/admin/session', cookieOf(res)), e)
+    expect(session.status).toBe(200)
+    const body = (await session.json()) as { networks: Record<WorkerNetwork, { owner: boolean | null }> }
+    expect(body.networks.mainnet.owner).toBeNull()
+    expect(body.networks.testnet.owner).toBe(true)
+    expect(await (await worker.fetch(get('/', cookieOf(res)), e)).text()).toBe('PANEL PAGE')
+  })
+
+  // A failed read is never taken as "not the owner" or as "the owner".
+  it('answers 503 when no network confirms and at least one read failed', async () => {
+    owners = { testnet: stranger.address, mainnet: owner.address }
+    rpcDown = new Set(['mainnet'])
+    const e = env()
+    const { res } = await signedLogin(e)
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ error: 'unavailable' })
+    expect(res.headers.get('set-cookie')).toBeNull()
+
+    // Signed in while both answered, then one goes down and the other no longer confirms.
+    rpcDown = new Set()
+    setOwner(owner.address)
+    const cookie = await signIn(e)
+    clearOwnerCache()
+    owners = { testnet: stranger.address, mainnet: owner.address }
+    rpcDown = new Set(['mainnet'])
+    const session = await worker.fetch(get('/api/admin/session', cookie), e)
+    expect(session.status).toBe(503)
+    expect(await session.json()).toEqual({ error: 'unavailable' })
+    expect(session.headers.get('set-cookie')).toBeNull()
   })
 
   // Only CampaignFactory.owner() gets in, whoever else can sign a valid message.
@@ -277,12 +357,6 @@ describe('login', () => {
     const { res } = await signedLogin(env(), owner, { domain: 'fundit.fun' })
     expect(res.status).toBe(403)
     expect(await res.json()).toEqual({ error: 'wrong_domain' })
-  })
-
-  it('login refuses another chain id', async () => {
-    const { res } = await signedLogin(env(), owner, { chainId: 5042 })
-    expect(res.status).toBe(403)
-    expect(await res.json()).toEqual({ error: 'wrong_chain' })
   })
 
   it('login refuses a body that is not JSON or too large', async () => {
@@ -343,7 +417,7 @@ describe('session', () => {
     const cookie = await signIn(e)
     expect((await worker.fetch(get('/api/admin/session', cookie), e)).status).toBe(200)
     const before = rpcCalls().length
-    currentOwner = stranger.address
+    setOwner(stranger.address)
 
     vi.setSystemTime(NOW + 30_000)
     expect((await worker.fetch(get('/api/admin/session', cookie), e)).status).toBe(200)
@@ -357,12 +431,18 @@ describe('session', () => {
     expect((await worker.fetch(get('/assets/panel-f6.js', cookie), e)).status).toBe(404)
   })
 
-  it('session refuses a testnet cookie on a mainnet Worker', async () => {
-    const cookie = await signIn(env())
-    const mainnet = env({ NETWORK: 'mainnet' })
-    const res = await worker.fetch(get('/api/admin/session', cookie), mainnet)
+  // A Plan 8 cookie still in the browser after the deploy: signed out, never an error page.
+  it('treats a v1 cookie as signed out', async () => {
+    const e = env()
+    const iat = Math.floor(NOW / 1000)
+    const v1 = { v: 1, address: owner.address.toLowerCase(), chainId: 5042002, factory: KNOWN_FACTORIES.testnet.address.toLowerCase(), iat, exp: iat + SESSION_TTL_SEC }
+    const cookie = `${SESSION_COOKIE}=${await signSession(v1 as unknown as Session, SECRET)}`
+    const res = await worker.fetch(get('/api/admin/session', cookie), e)
     expect(res.status).toBe(401)
-    expect(await (await worker.fetch(get('/', cookie), mainnet)).text()).toBe('LOGIN PAGE')
+    expect(await res.json()).toEqual({ error: 'signed_out' })
+    const page = await worker.fetch(get('/', cookie), e)
+    expect(page.status).toBe(200)
+    expect(await page.text()).toBe('LOGIN PAGE')
   })
 
   // An RPC error or junk answer is never read as "this wallet is the owner".
@@ -400,13 +480,11 @@ describe('session', () => {
     }
   })
 
-  it('fails closed without ADMIN_SESSION_SECRET, with a short one, or with a bad NETWORK', async () => {
+  it('fails closed without ADMIN_SESSION_SECRET, with a short one, or without the origin or Turnstile secret', async () => {
     const cookie = await signIn(env())
     const bad: Partial<Env>[] = [
       { ADMIN_SESSION_SECRET: undefined as unknown as string },
       { ADMIN_SESSION_SECRET: btoa('x'.repeat(31)) },
-      { NETWORK: 'devnet' },
-      { NETWORK: undefined as unknown as string },
       { ADMIN_ORIGIN: undefined as unknown as string },
       { TURNSTILE_SECRET: undefined as unknown as string },
     ]
@@ -499,6 +577,33 @@ describe('files', () => {
     expect(await (await worker.fetch(get('/assets/login-a1.js', cookie), e)).text()).toBe('login js')
   })
 
+  // The panel routes its pages in the browser, so a reload on any of them must get the panel.
+  it('serves the panel for each panel path with a session', async () => {
+    const e = env()
+    const cookie = await signIn(e)
+    for (const path of [...PANEL_PATHS, '/fundits/', '/gifts?network=testnet']) {
+      assetPaths.length = 0
+      const res = await worker.fetch(get(path, cookie), e)
+      expect(res.status, path).toBe(200)
+      expect(assetPaths, path).toEqual(['/index.html'])
+      expect(await res.text(), path).toBe('PANEL PAGE')
+    }
+  })
+
+  // Signed out, a panel URL shows the login page (so a bookmark works) but never the panel, and nothing below it.
+  it('serves the login page for panel paths without a session', async () => {
+    const e = env()
+    const res = await worker.fetch(get('/settings'), e)
+    expect(res.status).toBe(200)
+    expect(await res.text()).toBe('LOGIN PAGE')
+    expect(assetPaths.filter((p) => p !== '/manifest.json')).toEqual(['/login.html'])
+    for (const path of ['/settings/x', '/index.html', '//', '/settings//']) {
+      const r = await worker.fetch(get(path), e)
+      expect(r.status, path).toBe(404)
+      expect(await r.text(), path).not.toMatch(PANEL_TEXT)
+    }
+  })
+
   it('logout clears the cookie', async () => {
     const e = env()
     const cookie = await signIn(e)
@@ -523,7 +628,9 @@ describe('files', () => {
       await worker.fetch(get('/index.html'), e),
       await worker.fetch(get('/manifest.json', cookie), e),
       await worker.fetch(post('nonce', {}), env({ ADMIN_SESSION_SECRET: '' })),
-      await worker.fetch(get('/'), env({ NETWORK: 'devnet' })),
+      await worker.fetch(get('/'), env({ ADMIN_ORIGIN: 'http://admin.fundit.fun' })),
+      await worker.fetch(get('/api/admin/health?network=testnet', cookie), e),
+      await worker.fetch(get('/settings'), e),
     ]
     for (const res of responses) {
       expect(res.headers.get('x-robots-tag')).toBe('noindex, nofollow')
@@ -533,5 +640,61 @@ describe('files', () => {
       expect(res.headers.get('content-security-policy')).toBe(ADMIN_CSP)
       expect(res.headers.get('strict-transport-security')).toBe('max-age=31536000; includeSubDomains')
     }
+  })
+})
+
+describe('health', () => {
+  const seed = async (e: Env) => {
+    const insert = 'INSERT INTO alert_state (key, failing, fail_count, since, last_sent) VALUES (?, ?, ?, ?, ?)'
+    await e.ADMIN_DB.prepare(insert).bind('site', 0, 0, 0, 0).run()
+    await e.ADMIN_DB.prepare(insert).bind('ucw', 1, 3, NOW - 900_000, NOW - 600_000).run()
+    await e.ADMIN_DB.prepare(insert).bind('rpc:arc-testnet', 0, 0, 0, 0).run()
+    await e.ADMIN_DB.prepare(insert).bind('rpc:arc-mainnet', 1, 2, NOW - 300_000, 0).run()
+    await e.ADMIN_DB.prepare('INSERT INTO meta (key, value) VALUES (?, ?)').bind('owner_events_next:testnet', '100').run()
+    await e.ADMIN_DB.prepare('INSERT INTO meta (key, value) VALUES (?, ?)').bind('rpc_head:testnet', '1234').run()
+  }
+
+  it('returns health rows for the asked network only', async () => {
+    const e = env({ TELEGRAM_BOT_TOKEN: 'TELEGRAM-TOKEN-123', TELEGRAM_CHAT_ID: '987654321' })
+    await seed(e)
+    const cookie = await signIn(e)
+
+    const testnet = await worker.fetch(get('/api/admin/health?network=testnet', cookie), e)
+    expect(testnet.status).toBe(200)
+    const text = await testnet.text()
+    expect(text).not.toContain('TELEGRAM')
+    expect(text).not.toContain('987654321')
+    const body = JSON.parse(text) as { checks: { key: string }[]; alertsStarted: boolean; lastEventBlock: string | null; rpcHead: string | null }
+    expect(body.checks.map((c) => c.key).sort()).toEqual(['rpc:arc-testnet', 'site', 'ucw'])
+    expect(body.checks.find((c) => c.key === 'ucw')).toEqual({ key: 'ucw', ok: false, failCount: 3, since: NOW - 900_000, lastSent: NOW - 600_000 })
+    expect(body.checks.find((c) => c.key === 'site')).toEqual({ key: 'site', ok: true, failCount: 0, since: 0, lastSent: 0 })
+    expect(body.alertsStarted).toBe(true)
+    expect(body.lastEventBlock).toBe('100')
+    expect(body.rpcHead).toBe('1234')
+
+    const mainnet = await worker.fetch(get('/api/admin/health?network=mainnet', cookie), e)
+    expect(mainnet.status).toBe(200)
+    const m = (await mainnet.json()) as { checks: { key: string }[]; alertsStarted: boolean; lastEventBlock: string | null; rpcHead: string | null }
+    expect(m.checks.map((c) => c.key).sort()).toEqual(['rpc:arc-mainnet', 'site', 'ucw'])
+    expect(m.alertsStarted).toBe(false)
+    expect(m.lastEventBlock).toBeNull()
+    expect(m.rpcHead).toBeNull()
+
+    for (const bad of ['?network=x', '', '?network=', '?network=Testnet']) {
+      const res = await worker.fetch(get(`/api/admin/health${bad}`, cookie), e)
+      expect(res.status, bad).toBe(400)
+      expect(await res.json()).toEqual({ error: 'bad_input' })
+    }
+
+    const out = await worker.fetch(get('/api/admin/health?network=testnet'), e)
+    expect(out.status).toBe(401)
+    expect(await out.json()).toEqual({ error: 'signed_out' })
+  })
+
+  it('health refuses a method other than GET', async () => {
+    const e = env()
+    const cookie = await signIn(e)
+    const res = await worker.fetch(post('health?network=testnet', {}, { cookie }), e)
+    expect(res.status).toBe(405)
   })
 })

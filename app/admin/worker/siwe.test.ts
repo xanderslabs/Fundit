@@ -9,7 +9,7 @@ const CHAIN_ID = 5042002
 const NOW = Date.UTC(2026, 9, 25, 12, 0, 0)
 const owner = privateKeyToAccount(generatePrivateKey())
 const stranger = privateKeyToAccount(generatePrivateKey())
-const expect_ = { origin: ORIGIN, chainId: CHAIN_ID, nowMs: NOW }
+const expect_ = { origin: ORIGIN, chainIds: [5042, 5042002], nowMs: NOW }
 
 // The message the panel builds, with fields a test overrides.
 function message(over: Partial<SiweMessage> = {}): string {
@@ -44,9 +44,12 @@ describe('checkLoginMessage', () => {
     expect(checkLoginMessage(message({ uri: `${ORIGIN}/other` }), expect_)).toEqual({ ok: false, reason: 'wrong_uri' })
   })
 
-  // A mainnet sign-in must not work on the testnet Worker, or the other way round.
-  it('refuses another chain id', () => {
-    expect(checkLoginMessage(message({ chainId: 5042 }), expect_)).toEqual({ ok: false, reason: 'wrong_chain' })
+  // One sign-in covers both Arc chains, so a message for either passes. Any other chain is refused.
+  it('accepts either Arc chain and refuses chain 1', () => {
+    expect(checkLoginMessage(message({ chainId: 5042 }), expect_).ok).toBe(true)
+    expect(checkLoginMessage(message({ chainId: 5042002 }), expect_).ok).toBe(true)
+    expect(checkLoginMessage(message({ chainId: 1 }), expect_)).toEqual({ ok: false, reason: 'wrong_chain' })
+    expect(checkLoginMessage(message({ chainId: 5042 }), { ...expect_, chainIds: [5042002] })).toEqual({ ok: false, reason: 'wrong_chain' })
   })
 
   it('refuses an expired message', () => {

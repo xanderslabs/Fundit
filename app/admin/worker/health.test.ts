@@ -1,9 +1,9 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { adminChain } from './chain'
+import { ADMIN_CHAINS } from './chain'
 import { runChecks, type Check } from './health'
 
-const chain = adminChain('testnet')!
+const chain = ADMIN_CHAINS.testnet
 
 type Routes = { site?: number; ucw?: number; head?: string | 'error' | 'timeout' }
 

@@ -1,12 +1,13 @@
 // The signed-in owner's session: a cookie holding the session as JSON plus an HMAC-SHA256 of it, keyed with
-// ADMIN_SESSION_SECRET. Nothing is stored on the server; the Worker checks owner() again on every request.
+// ADMIN_SESSION_SECRET. Nothing is stored on the server; the Worker checks owner() on both Arc networks again on
+// every request. The session names no network: one sign-in covers mainnet and testnet.
 import type { Address } from 'viem'
 
 export const SESSION_COOKIE = '__Host-fundit_admin'
 export const SESSION_TTL_SEC = 28_800
 
-// Addresses lower case, times in seconds.
-export type Session = { v: 1; address: Address; chainId: number; factory: Address; iat: number; exp: number }
+// Address lower case, times in seconds. v1 (Plan 8) named one network; a v1 cookie reads as no session.
+export type Session = { v: 2; address: Address; iat: number; exp: number }
 
 // __Host- needs Secure, Path=/ and no Domain, so no other subdomain can set or read it.
 const ATTRIBUTES = 'Path=/; HttpOnly; Secure; SameSite=Strict'
@@ -60,13 +61,10 @@ function isSession(x: unknown): x is Session {
   if (typeof x !== 'object' || x === null) return false
   const s = x as Record<string, unknown>
   return (
-    Object.keys(s).length === 6 &&
-    s.v === 1 &&
+    Object.keys(s).length === 4 &&
+    s.v === 2 &&
     typeof s.address === 'string' &&
     LOWER_ADDRESS.test(s.address) &&
-    typeof s.factory === 'string' &&
-    LOWER_ADDRESS.test(s.factory) &&
-    Number.isSafeInteger(s.chainId) &&
     Number.isSafeInteger(s.iat) &&
     Number.isSafeInteger(s.exp)
   )
