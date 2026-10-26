@@ -1,65 +1,52 @@
-import { useState } from 'react'
-import { AddressChip, Button, PageHeader } from '../../src/components/ui'
-import { type AdminSession, logout, ownedNetwork } from './lib/api'
-import { ADMIN_NETWORKS } from './lib/networks'
-import { Gifts } from './Gifts'
-import { Overview } from './Overview'
-import { OwnerControls } from './OwnerControls'
+import { type ComponentType, useState } from 'react'
+import { createBrowserRouter, Navigate, RouterProvider, useLocation } from 'react-router'
+import type { AdminSession } from './lib/api'
+import { SessionContext } from './lib/network'
+import { type PanelPath, PANEL_PATHS } from './lib/panelPaths'
+import { ActivityPage } from './pages/ActivityPage'
+import { FunditsPage } from './pages/FunditsPage'
+import { GiftsPage } from './pages/GiftsPage'
+import { HealthPage } from './pages/HealthPage'
+import { OverviewPage } from './pages/OverviewPage'
+import { SettingsPage } from './pages/SettingsPage'
+import { Shell } from './ui/Shell'
 
-// The panel shell. Later sections go inside <main>.
+const PAGES: Record<PanelPath, ComponentType> = {
+  '/': OverviewPage,
+  '/fundits': FunditsPage,
+  '/gifts': GiftsPage,
+  '/activity': ActivityPage,
+  '/health': HealthPage,
+  '/settings': SettingsPage,
+}
+
+// Any other path goes to Overview, keeping the network in the query.
+function ToOverview() {
+  const { search } = useLocation()
+  return <Navigate to={{ pathname: '/', search }} replace />
+}
+
+function makeRouter() {
+  return createBrowserRouter([
+    {
+      element: <Shell />,
+      children: [
+        ...PANEL_PATHS.map((path) => {
+          const Page = PAGES[path]
+          return path === '/' ? { index: true, element: <Page /> } : { path, element: <Page /> }
+        }),
+        { path: '*', element: <ToOverview /> },
+      ],
+    },
+  ])
+}
+
+// The panel: one page per path, the same six paths the Worker serves it on.
 export function AdminApp({ session }: { session: AdminSession }) {
-  // Stats leave out test Fundits and test donors until this is on.
-  const [showTest, setShowTest] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  async function signOut() {
-    try {
-      await logout()
-      location.assign('/')
-    } catch {
-      setError("Couldn't sign out. Try again.")
-    }
-  }
-
-  // The current one-page panel shows one network: the first the session owns, mainnet first. The Worker answers a
-  // session only when the address owns at least one, so null here means the answer is not usable.
-  const network = ownedNetwork(session)
-  if (!network) return <p className="admin-note">Couldn't check your session. Reload the page to try again.</p>
-
+  const [router] = useState(makeRouter)
   return (
-    <div className="admin-shell">
-      <PageHeader
-        title="Fundit admin"
-        width="wide"
-        subtitle={
-          <>
-            {ADMIN_NETWORKS[network].label}
-            {' · Signed in as '}
-            <AddressChip address={session.address} />
-          </>
-        }
-        actions={
-          <>
-            <label className="admin-switch">
-              <input type="checkbox" role="switch" checked={showTest} onChange={(e) => setShowTest(e.target.checked)} />
-              Show test data
-            </label>
-            <Button variant="secondary" onClick={() => void signOut()}>
-              Sign out
-            </Button>
-          </>
-        }
-      />
-      <main className="admin-main">
-        {error && (
-          <p className="form-error" role="alert">
-            {error}
-          </p>
-        )}
-        <Overview session={session} network={network} showTest={showTest} />
-        <Gifts session={session} network={network} showTest={showTest} />
-        <OwnerControls session={session} network={network} />
-      </main>
-    </div>
+    <SessionContext.Provider value={session}>
+      <RouterProvider router={router} />
+    </SessionContext.Provider>
   )
 }

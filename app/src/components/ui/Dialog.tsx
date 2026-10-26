@@ -15,14 +15,16 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([di
 // Circle's window closes.
 type Name = { title: string; labelledBy?: never } | { labelledBy: string; title?: never }
 // size: sm for short content (sign-in), md for longer content (sharing). Default md.
-type DialogProps = Name & { open: boolean; onClose: () => void; size?: 'sm' | 'md'; children: ReactNode }
+// placement: center (the default) is the dialog the public site uses. left and right make it a full-height drawer
+// that slides in from that side (the admin's phone menu and detail drawers).
+type DialogProps = Name & { open: boolean; onClose: () => void; size?: 'sm' | 'md'; placement?: 'center' | 'left' | 'right'; children: ReactNode }
 
 export function Dialog({ open, ...rest }: DialogProps) {
   if (!open) return null
   return <OpenDialog {...rest} />
 }
 
-function OpenDialog({ onClose, size = 'md', title, labelledBy, children }: Omit<DialogProps, 'open'>) {
+function OpenDialog({ onClose, size = 'md', placement = 'center', title, labelledBy, children }: Omit<DialogProps, 'open'>) {
   const dialog = useRef<HTMLDialogElement>(null)
   const ownHeadingId = useId()
   const headingId = labelledBy ?? ownHeadingId
@@ -77,7 +79,7 @@ function OpenDialog({ onClose, size = 'md', title, labelledBy, children }: Omit<
   return (
     <dialog
       ref={dialog}
-      className={`ui-dialog ui-dialog-${size}`}
+      className={placement === 'center' ? `ui-dialog ui-dialog-${size}` : `ui-dialog ui-dialog-${size} ui-dialog-drawer ui-dialog-drawer-${placement}`}
       aria-labelledby={headingId}
       onKeyDown={onKeyDown}
       onCancel={(e) => {

@@ -4,7 +4,9 @@ import { ConnectWallet } from '../../src/components/ConnectWallet'
 import { AddressChip, Button, Card } from '../../src/components/ui'
 import { TURNSTILE_SITE_KEY } from '../../src/config'
 import { loadTurnstile, type Turnstile } from '../../src/lib/turnstile'
+import { afterSignIn } from './lib/panelPaths'
 import { signIn } from './lib/siweLogin'
+import { Logo } from './ui/Logo'
 import { adminWagmiConfig } from './wagmi'
 import '../../src/components/Form.css'
 
@@ -62,7 +64,8 @@ export function LoginPage() {
     setError(null)
     const result = await signIn(adminWagmiConfig, address, token)
     if (result.ok) {
-      location.assign('/')
+      // The Worker shows this page on any panel path while signed out, so the owner lands on the page they asked for.
+      location.assign(afterSignIn(location.pathname, location.search))
       return
     }
     setError(result.text)
@@ -74,10 +77,13 @@ export function LoginPage() {
 
   return (
     <main className="admin-login">
+      <Logo />
       <Card label="Sign in">
         <div className="admin-login-body">
-          <h1 className="admin-login-title">Sign in</h1>
-          <p className="admin-note">Sign in with the Fundit owner wallet.</p>
+          <div>
+            <h1 className="admin-login-title">Sign in</h1>
+            <p className="admin-note">Sign in with the Fundit owner wallet.</p>
+          </div>
           {!address ? (
             <ConnectWallet config={adminWagmiConfig} onConnected={setAddress} />
           ) : (

@@ -7,11 +7,16 @@ const css = readFileSync('src/styles/tokens.css', 'utf8')
 const root = css.match(/(?:^|\n):root\s*\{([^}]*)\}/)?.[1] ?? ''
 const tokens = new Map([...root.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map((m) => [m[1]!, m[2]!.trim()]))
 
-function value(name: string, seen: string[] = []): string {
-  const raw = tokens.get(name)
+// The dark palette (admin only for now) overrides some tokens under :root[data-theme='dark']. A token it does not
+// set keeps its light value, as it does in the browser.
+const darkBlock = css.match(/:root\[data-theme='dark'\]\s*\{([^}]*)\}/)?.[1] ?? ''
+const darkTokens = new Map([...tokens, ...[...darkBlock.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map((m): [string, string] => [m[1]!, m[2]!.trim()])])
+
+function value(name: string, seen: string[] = [], from: Map<string, string> = tokens): string {
+  const raw = from.get(name)
   if (raw === undefined) throw new Error(`${name} is not defined in tokens.css`)
   if (seen.includes(name)) throw new Error(`${name} refers to itself`)
-  return raw.replace(/var\((--[\w-]+)\)/g, (_, ref: string) => value(ref, [...seen, name]))
+  return raw.replace(/var\((--[\w-]+)\)/g, (_, ref: string) => value(ref, [...seen, name], from))
 }
 
 // WCAG 2.x relative luminance and contrast ratio, for #rrggbb colours.
@@ -25,8 +30,8 @@ function luminance(hex: string): number {
   return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!
 }
 
-function contrast(fg: string, bg: string): number {
-  const [a, b] = [luminance(value(fg)), luminance(value(bg))]
+function contrast(fg: string, bg: string, from: Map<string, string> = tokens): number {
+  const [a, b] = [luminance(value(fg, [], from)), luminance(value(bg, [], from))]
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
 }
 
@@ -124,6 +129,52 @@ describe('design tokens', () => {
     for (const bg of ['--bg', '--surface', '--surface-raised', '--attention-bg', '--success-bg']) {
       expect(contrast('--focus', bg), `--focus on ${bg}`).toBeGreaterThanOrEqual(3)
     }
+  })
+
+  // Figures in tables and stat cards line up when every digit has the same width. Outfit has the tnum feature.
+  it('defines tabular figures', () => {
+    expect(value('--figures')).toBe('tabular-nums')
+  })
+
+  // The dark palette is opt-in: only an <html> with data-theme="dark" gets it, and the public site never sets
+  // that. It must hold the same AA bar as the light one, because the owner reads money figures in it.
+  describe('dark palette', () => {
+    it('is opt-in, under :root[data-theme=\'dark\'] only', () => {
+      expect(darkBlock).not.toBe('')
+      expect(darkBlock).toMatch(/color-scheme:\s*dark;/)
+      // The light :root still says light, so a page without the attribute looks as it does today.
+      expect(root).toMatch(/color-scheme:\s*light;/)
+    })
+
+    it('every text and background pair meets WCAG AA', () => {
+      const pairs: [string, string][] = [
+        ...['--text', '--text-muted', '--action-ink'].flatMap((fg) =>
+          ['--bg', '--surface', '--surface-raised'].map((bg): [string, string] => [fg, bg]),
+        ),
+        ['--danger-ink', '--bg'],
+        ['--danger-ink', '--surface-raised'],
+        ['--text', '--attention-bg'],
+        ['--text', '--success-bg'],
+        ['--action-ink', '--success-bg'],
+        // Light text on the brand green, red and orange fails, so in the dark palette a primary or danger button
+        // and the orange tag set their label in --bg (admin-theme.css).
+        ['--bg', '--action'],
+        ['--bg', '--danger'],
+        ['--bg', '--attention'],
+      ]
+      for (const [fg, bg] of pairs) expect(contrast(fg, bg, darkTokens), `dark ${fg} on ${bg}`).toBeGreaterThanOrEqual(4.5)
+    })
+
+    it('the focus ring meets 3:1 on every dark surface', () => {
+      for (const bg of ['--bg', '--surface', '--surface-raised', '--attention-bg', '--success-bg']) {
+        expect(contrast('--focus', bg, darkTokens), `dark --focus on ${bg}`).toBeGreaterThanOrEqual(3)
+      }
+    })
+
+    // The brand colours are fixed in both palettes.
+    it('keeps the brand green, red and orange', () => {
+      for (const name of ['--action', '--danger', '--attention']) expect(value(name, [], darkTokens), name).toBe(value(name))
+    })
   })
 
   // Every page now uses the semantic names (Plan 6, Task 7). The old names are gone, so a page cannot drift

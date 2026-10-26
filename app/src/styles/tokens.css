@@ -65,6 +65,8 @@
   --tracking-body: 0;
   --tracking-heading: -0.01em;
   --tracking-display: -0.03em;
+  /* Figures that line up in tables and stat cards (font-variant-numeric). Outfit has the tnum feature. */
+  --figures: tabular-nums;
 
   /* Spacing */
   --space-1: 4px;
@@ -103,6 +105,33 @@
   --hit-target: 40px;
   /* The header logo height. Smaller on the narrowest phones, to leave room for the network tag and the account pill. */
   --logo-height: 32px;
+}
+
+/* The dark palette. Opt-in: only a page that sets data-theme="dark" on <html> gets it (the admin panel does; the
+   public site never does). The brand green, red and orange stay as they are. Every pair meets WCAG AA (see
+   tokens.test.ts). Light text on the brand colours fails, so labels on them use --bg here (admin-theme.css). */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #0c121c;
+  --surface: #141b27;
+  --surface-raised: #18202e;
+  --text: #e6eaf0;
+  --text-muted: #9aa4b8;
+  --border: #2a3344;
+  --line: #1f2735;
+  --action-ink: #3fcf47;
+  --attention-bg: #3a2510;
+  --danger-ink: #ff7b72;
+  --success-bg: #11301a;
+  --focus: #8e99b0;
+  --scrollbar-track: #10161f;
+  --scrollbar-thumb: #343e51;
+  --scrollbar-thumb-hover: #4b5670;
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%239aa4b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --shadow-1: 0 4px 12px rgb(0 0 0 / 0.35), 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-pop: 0 14px 36px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.3);
+  --backdrop: rgb(0 0 0 / 0.6);
 }
 
 @media (min-width: 768px) {

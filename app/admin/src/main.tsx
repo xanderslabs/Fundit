@@ -3,9 +3,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createRoot } from 'react-dom/client'
 import '../../src/styles/tokens.css'
 import '../../src/styles/base.css'
+import './ui/admin-theme.css'
 import './admin.css'
 import { AdminApp } from './AdminApp'
 import { type AdminSession, getSession } from './lib/api'
+import { applyStoredTheme } from './lib/theme'
+
+applyStoredTheme()
 
 // The Worker serves this page only with a session, so null here means the session ended since: back to the login page.
 const queryClient = new QueryClient()

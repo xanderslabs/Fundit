@@ -84,3 +84,38 @@ describe('Dialog while Circle\'s window is open', () => {
     expect(topLayer.has(dialog)).toBe(true)
   })
 })
+
+describe('Dialog placement', () => {
+  // The public site's dialogs never pass placement, so their markup must stay exactly as it was.
+  it('renders exactly today\'s markup without placement', () => {
+    render(
+      <Dialog open onClose={() => {}} title="Sign in" size="sm">
+        <p>Body</p>
+      </Dialog>,
+    )
+    const dialog = document.querySelector('dialog')!
+    expect(dialog.className).toBe('ui-dialog ui-dialog-sm')
+    expect(dialog.firstElementChild!.className).toBe('ui-dialog-body')
+  })
+
+  it('renders a drawer from the side it is given', () => {
+    render(
+      <Dialog open onClose={() => {}} title="Details" placement="right">
+        <p>Body</p>
+      </Dialog>,
+    )
+    const dialog = document.querySelector('dialog')!
+    expect(dialog.classList.contains('ui-dialog-drawer')).toBe(true)
+    expect(dialog.classList.contains('ui-dialog-drawer-right')).toBe(true)
+    expect(screen.getByRole('heading', { name: 'Details' })).toBeTruthy()
+  })
+
+  it('renders a sheet from the left', () => {
+    render(
+      <Dialog open onClose={() => {}} title="Menu" placement="left">
+        <p>Body</p>
+      </Dialog>,
+    )
+    expect(document.querySelector('dialog')!.className).toBe('ui-dialog ui-dialog-md ui-dialog-drawer ui-dialog-drawer-left')
+  })
+})

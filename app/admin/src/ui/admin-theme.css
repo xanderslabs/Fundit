@@ -1,0 +1,51 @@
+/* The admin's additions to Fundit's design system. Every value comes from tokens.css. */
+
+:root {
+  --admin-sidebar: 240px;
+  --admin-sidebar-narrow: 64px;
+  --admin-menu-width: 220px;
+}
+
+/* Compact density: smaller type and tighter controls for a dense dashboard. Opt-in: the admin's <html> always
+   has data-density="compact"; the public site never sets it. Captions (--text-xs, 13px) keep their size. */
+:root[data-density='compact'] {
+  --text-sm: 14px;
+  --text-sm-line: 20px;
+  --text-md: 14px;
+  --text-md-line: 20px;
+  --text-lg: 16px;
+  --text-lg-line: 24px;
+  --text-xl: 20px;
+  --text-xl-line: 28px;
+  --text-2xl: 28px;
+  --text-2xl-line: 34px;
+}
+
+[data-density='compact'] .ui-card {
+  padding: var(--space-4);
+  border-radius: var(--radius-sm);
+}
+
+[data-density='compact'] .ui-btn {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+}
+
+[data-density='compact'] .ui-btn-lg {
+  padding: var(--space-2) var(--space-4);
+}
+
+[data-density='compact'] .ui-banner {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+}
+
+[data-density='compact'] .ui-dialog:not(.ui-dialog-drawer) {
+  border-radius: var(--radius-md);
+}
+
+/* Light text on the brand green and red fails AA, so in the dark palette their labels use the dark page colour. */
+:root[data-theme='dark'] .ui-btn-primary,
+:root[data-theme='dark'] .ui-btn-danger {
+  color: var(--bg);
+}

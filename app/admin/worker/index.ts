@@ -10,6 +10,7 @@
 //
 // Never log a request or response body, a cookie, a signature, a message or a secret.
 import { getAddress, type Address, type Hex } from 'viem'
+import { PANEL_PATHS } from '../src/lib/panelPaths'
 import { TURNSTILE_TOKEN, verifyTurnstile } from '../../worker/turnstile'
 import { LOGIN_FONT, loginFiles, MANIFEST_PATH, type ManifestChunk } from './assets'
 import { ADMIN_CHAINS } from './chain'
@@ -43,8 +44,8 @@ export interface Env {
 type Config = { origin: string; secret: string; turnstileSecret: string; db: Db }
 type Body = Record<string, unknown>
 
-// The panel's pages. The browser routes between them, so a reload on any of them is sent the panel.
-export const PANEL_PATHS = ['/', '/fundits', '/gifts', '/activity', '/health', '/settings'] as const
+// The panel's pages, shared with the panel's router. A reload on any of them is sent the panel.
+export { PANEL_PATHS }
 
 const NETWORKS = ['mainnet', 'testnet'] as const satisfies readonly WorkerNetwork[]
 const CHAIN_IDS = NETWORKS.map((n) => ADMIN_CHAINS[n].chainId)
