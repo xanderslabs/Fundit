@@ -1,13 +1,12 @@
 import type { Config } from '@wagmi/core'
 import { parseSiweMessage } from 'viem/siwe'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ARC_CHAIN_ID } from '../../../src/config'
 import { CANCELLED } from '../../../src/lib/errors'
 import { ADMIN_STATEMENT } from '../../worker/siwe'
 import { LOGIN_TEXT, signIn } from './siweLogin'
 
-const core = vi.hoisted(() => ({ signMessage: vi.fn() }))
-vi.mock('@wagmi/core', () => ({ signMessage: core.signMessage }))
+const core = vi.hoisted(() => ({ signMessage: vi.fn(), getAccount: vi.fn() }))
+vi.mock('@wagmi/core', () => ({ signMessage: core.signMessage, getAccount: core.getAccount }))
 
 const CONFIG = {} as Config
 // Lower case on purpose: the server wants the checksummed form, so signIn must convert it.
@@ -27,6 +26,7 @@ beforeEach(() => {
     return new Response(JSON.stringify(r.body), { status: r.status, headers: { 'content-type': 'application/json' } })
   })
   core.signMessage.mockResolvedValue(SIGNATURE)
+  core.getAccount.mockReturnValue({ address: ADDRESS, chainId: 5042 })
   vi.stubGlobal('fetch', fetchMock)
 })
 afterEach(() => {
@@ -51,12 +51,24 @@ describe('signIn', () => {
     expect(JSON.parse(login[1].body)).toEqual({ message: signed().message, signature: SIGNATURE })
   })
 
-  it('uses location.host as domain, location.origin as uri and ARC_CHAIN_ID', async () => {
+  it('uses location.host as domain and location.origin as uri', async () => {
     await signIn(CONFIG, ADDRESS, 'tok')
     const m = parseSiweMessage(signed().message)
     expect(m.domain).toBe(location.host)
     expect(m.uri).toBe(location.origin)
-    expect(m.chainId).toBe(ARC_CHAIN_ID)
+  })
+
+  // One sign-in covers both Arc networks, so the wallet need not switch chains to sign in. Any other chain gets
+  // Arc mainnet's ID, which the Worker accepts.
+  it.each([
+    [5042, 5042],
+    [5042002, 5042002],
+    [1, 5042],
+    [undefined, 5042],
+  ])('a wallet on chain %s signs with chainId %s', async (walletChain, expected) => {
+    core.getAccount.mockReturnValue({ address: ADDRESS, chainId: walletChain })
+    await signIn(CONFIG, ADDRESS, 'tok')
+    expect(parseSiweMessage(signed().message).chainId).toBe(expected)
   })
 
   it('sends the Turnstile token with the nonce request', async () => {

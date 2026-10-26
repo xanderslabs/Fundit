@@ -1,7 +1,7 @@
 import type { Address, Log, PublicClient } from 'viem'
 import { campaignAbi } from '../../../src/abi/campaign'
-import { TEST_CREATORS } from '../../../src/config'
 import { getLogsSplit, type LogClient, type RangeFetch } from '../../../src/lib/activity'
+import { type AdminNetwork, ADMIN_NETWORKS } from './networks'
 import type { FunditSnapshot } from './snapshot'
 import type { ByToken } from './stats'
 
@@ -84,7 +84,8 @@ export async function fetchGiftEvents(
   return { status: 'ok', events, toBlock }
 }
 
-export function giftStats(events: GiftEvent[], rows: FunditSnapshot[], showTest: boolean) {
+export function giftStats(events: GiftEvent[], rows: FunditSnapshot[], showTest: boolean, network: AdminNetwork) {
+  const { testCreators } = ADMIN_NETWORKS[network]
   const byFundit = new Map(rows.map((r) => [r.address.toLowerCase(), r]))
   const zero = (): ByToken => ({ USDC: 0n, EURC: 0n })
   const total = zero()
@@ -103,7 +104,7 @@ export function giftStats(events: GiftEvent[], rows: FunditSnapshot[], showTest:
       continue
     }
     const donor = e.donor.toLowerCase()
-    if (!showTest && TEST_CREATORS.includes(donor)) continue
+    if (!showTest && testCreators.includes(donor)) continue
     gifts++
     perDonor.set(donor, (perDonor.get(donor) ?? 0) + 1)
     total[row.token] += e.amount

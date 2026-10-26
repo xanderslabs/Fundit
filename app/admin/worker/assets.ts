@@ -3,6 +3,9 @@
 
 export const MANIFEST_PATH = '/manifest.json'
 
+// The font the login page's stylesheet loads. It comes from Vite's public dir, so the manifest does not list it.
+export const LOGIN_FONT = '/fonts/Outfit-VariableFont_wght.ttf'
+
 export type ManifestChunk = { file: string; css?: string[]; assets?: string[]; imports?: string[]; dynamicImports?: string[] }
 
 // /login.html plus everything its entry loads, following imports and on-demand imports (the wallet code loads

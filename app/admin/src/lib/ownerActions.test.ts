@@ -1,13 +1,15 @@
 import { type Address, encodeFunctionData, zeroAddress } from 'viem'
 import { describe, expect, it } from 'vitest'
 import { factoryAbi } from '../../../src/abi/factory'
-import { ARC_CHAIN_ID } from '../../../src/config'
 import type { FactoryState } from './factoryState'
+import { ADMIN_NETWORKS } from './networks'
 import { buildCall, canAct, checkFees, checkFeatured, checkTreasury, describe as describeAction } from './ownerActions'
 
 const OWNER = '0x3552E9c14C7b6050839009A5B160A4446a1e916D' as Address
 const OTHER = '0x1111111111111111111111111111111111111111' as Address
-const FACTORY = '0x6890D40a9A472D0d05aDb5938D85B07059ad54ab' as Address
+const FACTORY = ADMIN_NETWORKS.testnet.factory
+const TESTNET = ADMIN_NETWORKS.testnet.chainId
+const MAINNET = ADMIN_NETWORKS.mainnet.chainId
 const FUNDIT = '0x2222222222222222222222222222222222222222' as Address
 const NEW_TREASURY = '0x3333333333333333333333333333333333333333' as Address
 
@@ -25,24 +27,28 @@ const state: FactoryState = {
 const isCampaign = async (a: Address) => a === FUNDIT
 
 describe('buildCall', () => {
-  it('always targets the given factory on ARC_CHAIN_ID', () => {
-    const calls = [
-      buildCall({ kind: 'setFees', donationBps: 1, withdrawBps: 2 }, FACTORY),
-      buildCall({ kind: 'setTreasury', treasury: NEW_TREASURY }, FACTORY),
-      buildCall({ kind: 'setFeatured', campaign: FUNDIT }, FACTORY),
-      buildCall({ kind: 'pauseCreation' }, FACTORY),
-      buildCall({ kind: 'unpauseCreation' }, FACTORY),
-    ]
-    for (const c of calls) {
-      expect(c.address).toBe(FACTORY)
-      expect(c.chainId).toBe(ARC_CHAIN_ID)
-      expect(c.abi).toBe(factoryAbi)
+  it("always targets the network's own factory and chain", () => {
+    for (const network of ['mainnet', 'testnet'] as const) {
+      const calls = [
+        buildCall({ kind: 'setFees', donationBps: 1, withdrawBps: 2 }, network),
+        buildCall({ kind: 'setTreasury', treasury: NEW_TREASURY }, network),
+        buildCall({ kind: 'setFeatured', campaign: FUNDIT }, network),
+        buildCall({ kind: 'pauseCreation' }, network),
+        buildCall({ kind: 'unpauseCreation' }, network),
+      ]
+      for (const c of calls) {
+        expect(c.address).toBe(ADMIN_NETWORKS[network].factory)
+        expect(c.chainId).toBe(ADMIN_NETWORKS[network].chainId)
+        expect(c.abi).toBe(factoryAbi)
+      }
+      expect(calls.map((c) => c.functionName)).toEqual(['setFees', 'setTreasury', 'setFeatured', 'pauseCreation', 'unpauseCreation'])
     }
-    expect(calls.map((c) => c.functionName)).toEqual(['setFees', 'setTreasury', 'setFeatured', 'pauseCreation', 'unpauseCreation'])
+    expect(buildCall({ kind: 'pauseCreation' }, 'mainnet').address).toBe('0xf1b2AEF82c37fC41D254D8e06BD7780ce34617d9')
+    expect(buildCall({ kind: 'pauseCreation' }, 'mainnet').chainId).toBe(5042)
   })
 
   it('encodes setFees(100, 50) exactly', () => {
-    const c = buildCall({ kind: 'setFees', donationBps: 100, withdrawBps: 50 }, FACTORY)
+    const c = buildCall({ kind: 'setFees', donationBps: 100, withdrawBps: 50 }, 'testnet')
     expect(encodeFunctionData({ abi: c.abi, functionName: 'setFees', args: c.args as [number, number] })).toBe(
       encodeFunctionData({ abi: factoryAbi, functionName: 'setFees', args: [100, 50] }),
     )
@@ -51,25 +57,32 @@ describe('buildCall', () => {
 
 describe('canAct', () => {
   it('write buttons stay disabled for a non-owner account', () => {
-    expect(canAct(OTHER, ARC_CHAIN_ID, OWNER, state)).toEqual({ ok: false, reason: 'Connect the owner wallet ending 916d to make changes.' })
-    expect(canAct(undefined, ARC_CHAIN_ID, OWNER, state)).toEqual({ ok: false, reason: 'Connect the owner wallet ending 916d to make changes.' })
+    expect(canAct(OTHER, TESTNET, OWNER, state, 'testnet')).toEqual({ ok: false, reason: 'Connect the owner wallet ending 916d to make changes.' })
+    expect(canAct(undefined, TESTNET, OWNER, state, 'testnet')).toEqual({ ok: false, reason: 'Connect the owner wallet ending 916d to make changes.' })
   })
 
   it('refuses when the wallet account differs from the signed-in address', () => {
     // The factory owner moved on while the session still names the old owner.
     const moved = { ...state, owner: OTHER }
-    expect(canAct(OWNER, ARC_CHAIN_ID, OWNER, moved).ok).toBe(false)
+    expect(canAct(OWNER, TESTNET, OWNER, moved, 'testnet').ok).toBe(false)
     // Same owner on chain, but the wallet switched to another account.
-    expect(canAct(OTHER, ARC_CHAIN_ID, OWNER, { ...state, owner: OTHER }).ok).toBe(false)
+    expect(canAct(OTHER, TESTNET, OWNER, { ...state, owner: OTHER }, 'testnet').ok).toBe(false)
   })
 
   it('accepts the owner on Arc, whatever the address case', () => {
-    expect(canAct(OWNER.toLowerCase() as Address, ARC_CHAIN_ID, OWNER.toLowerCase() as Address, state)).toEqual({ ok: true })
+    expect(canAct(OWNER.toLowerCase() as Address, TESTNET, OWNER.toLowerCase() as Address, state, 'testnet')).toEqual({ ok: true })
   })
 
   it('refuses a wrong chain', () => {
-    expect(canAct(OWNER, 1, OWNER, state)).toEqual({ ok: false, reason: 'Switch your wallet to Arc.' })
-    expect(canAct(OWNER, undefined, OWNER, state)).toEqual({ ok: false, reason: 'Switch your wallet to Arc.' })
+    expect(canAct(OWNER, 1, OWNER, state, 'testnet')).toEqual({ ok: false, reason: 'Switch your wallet to Arc.' })
+    expect(canAct(OWNER, undefined, OWNER, state, 'testnet')).toEqual({ ok: false, reason: 'Switch your wallet to Arc.' })
+  })
+
+  // A wallet on the other Arc chain would send to an address that is not this network's factory.
+  it("refuses the other Arc network's chain", () => {
+    expect(canAct(OWNER, MAINNET, OWNER, state, 'testnet').ok).toBe(false)
+    expect(canAct(OWNER, TESTNET, OWNER, state, 'mainnet').ok).toBe(false)
+    expect(canAct(OWNER, MAINNET, OWNER, state, 'mainnet')).toEqual({ ok: true })
   })
 })
 

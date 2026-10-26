@@ -5,10 +5,9 @@ import { type Address, isAddressEqual, parseEventLogs, type TransactionReceipt, 
 import { factoryAbi } from '../../src/abi/factory'
 import { ConnectWallet } from '../../src/components/ConnectWallet'
 import { AddressChip, Badge, Banner, Button, Field } from '../../src/components/ui'
-import { ARC_CHAIN_ID, FACTORY_ADDRESS } from '../../src/config'
-import { arcClient } from '../../src/lib/clients'
 import { CANCELLED, explainError, isUserRejection, revertText } from '../../src/lib/errors'
-import type { AdminSession } from './lib/api'
+import { type AdminSession, matchesWorker } from './lib/api'
+import { readClient } from './lib/clients'
 import { readFactoryState } from './lib/factoryState'
 import {
   buildCall,
@@ -19,6 +18,7 @@ import {
   describe,
   type OwnerAction,
 } from './lib/ownerActions'
+import { type AdminNetwork, ADMIN_NETWORKS } from './lib/networks'
 import { fetchSnapshot } from './lib/snapshot'
 import { ConfirmAction } from './ConfirmAction'
 import { adminWagmiConfig } from './wagmi'
@@ -56,19 +56,20 @@ function eventText(receipt: TransactionReceipt, action: OwnerAction): string | n
   }
 }
 
-// The owner's controls. Each builds a CampaignFactory call that the connected owner wallet signs. The factory comes
-// from the session and the chain is Arc; nothing is sent until the call has simulated and the owner has confirmed it.
-export function OwnerControls({ session }: { session: AdminSession }) {
-  const matches = session.chainId === ARC_CHAIN_ID && isAddressEqual(session.factory, FACTORY_ADDRESS)
+// The owner's controls. Each builds a CampaignFactory call that the connected owner wallet signs. The factory
+// and chain come from the network; nothing is sent until the call has simulated and the owner has confirmed it.
+export function OwnerControls({ session, network }: { session: AdminSession; network: AdminNetwork }) {
+  const { factory: factoryAddress, chainId } = ADMIN_NETWORKS[network]
+  const matches = matchesWorker(session, network)
   const queryClient = useQueryClient()
   const factory = useQuery({
-    queryKey: ['admin', session.network, 'factory'],
-    queryFn: () => readFactoryState(arcClient, session.factory),
+    queryKey: ['admin', network, 'factory'],
+    queryFn: () => readFactoryState(readClient(network), network),
     enabled: matches,
   })
   const snapshot = useQuery({
-    queryKey: ['admin', session.network, 'snapshot'],
-    queryFn: () => fetchSnapshot(arcClient, session.factory),
+    queryKey: ['admin', network, 'snapshot'],
+    queryFn: () => fetchSnapshot(readClient(network), network),
     enabled: matches,
   })
 
@@ -89,9 +90,9 @@ export function OwnerControls({ session }: { session: AdminSession }) {
   const state = factory.data
   if (!matches || !state) return null
   const featured = pickedFeatured ?? (isAddressEqual(state.featured, zeroAddress) ? '' : state.featured)
-  const can = canAct(account.address, account.chainId, session.address, state)
+  const can = canAct(account.address, account.chainId, session.address, state, network)
 
-  const isCampaign = (a: Address) => arcClient.readContract({ address: session.factory, abi: factoryAbi, functionName: 'isCampaign', args: [a] })
+  const isCampaign = (a: Address) => readClient(network).readContract({ address: factoryAddress, abi: factoryAbi, functionName: 'isCampaign', args: [a] })
 
   function fail(e: unknown) {
     setError(isUserRejection(e) ? CANCELLED : (revertText(e) ?? explainError(e)))
@@ -103,11 +104,11 @@ export function OwnerControls({ session }: { session: AdminSession }) {
     setDone(null)
     if ('refused' in action) return setError(action.refused)
     const live = getAccount(adminWagmiConfig)
-    const ok = canAct(live.address, live.chainId, session.address, state!)
+    const ok = canAct(live.address, live.chainId, session.address, state!, network)
     if (!ok.ok) return setError(ok.reason)
     setBusy(true)
     try {
-      await simulateContract(adminWagmiConfig, { ...buildCall(action, session.factory), account: live.address } as never)
+      await simulateContract(adminWagmiConfig, { ...buildCall(action, network), account: live.address } as never)
       setPending(action)
     } catch (e) {
       fail(e)
@@ -118,18 +119,18 @@ export function OwnerControls({ session }: { session: AdminSession }) {
 
   async function send(action: OwnerAction) {
     const live = getAccount(adminWagmiConfig)
-    const ok = canAct(live.address, live.chainId, session.address, state!)
+    const ok = canAct(live.address, live.chainId, session.address, state!, network)
     if (!ok.ok) {
       setPending(null)
       return setError(ok.reason)
     }
     try {
-      const hash = await writeContract(adminWagmiConfig, { ...buildCall(action, session.factory), account: live.address } as never)
-      const receipt = await waitForTransactionReceipt(adminWagmiConfig, { hash, chainId: ARC_CHAIN_ID })
+      const hash = await writeContract(adminWagmiConfig, { ...buildCall(action, network), account: live.address } as never)
+      const receipt = await waitForTransactionReceipt(adminWagmiConfig, { hash, chainId })
       setPending(null)
       if (receipt.status !== 'success') return setError('The transaction was mined but failed. Nothing changed.')
       setDone(eventText(receipt, action) ?? 'Confirmed, but the expected event was not in the receipt. Check the explorer.')
-      await queryClient.invalidateQueries({ queryKey: ['admin', session.network, 'factory'] })
+      await queryClient.invalidateQueries({ queryKey: ['admin', network, 'factory'] })
     } catch (e) {
       setPending(null)
       fail(e)
@@ -142,7 +143,7 @@ export function OwnerControls({ session }: { session: AdminSession }) {
   }
 
   async function reviewTreasury() {
-    const r = await checkTreasury(treasury, treasuryAgain, session.factory, isCampaign).catch(() => null)
+    const r = await checkTreasury(treasury, treasuryAgain, factoryAddress, isCampaign).catch(() => null)
     if (!r) return setError('We could not check that address. Try again.')
     await review(r.ok ? { kind: 'setTreasury', treasury: r.address } : { refused: r.reason })
   }
@@ -239,7 +240,7 @@ export function OwnerControls({ session }: { session: AdminSession }) {
         rows={
           confirm
             ? [
-                { label: 'Factory', value: session.factory },
+                { label: 'Factory', value: factoryAddress },
                 { label: 'Function', value: confirm.functionName },
                 { label: 'Now', value: confirm.current },
                 { label: 'After', value: confirm.next },

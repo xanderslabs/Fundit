@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { AddressChip, Button, PageHeader } from '../../src/components/ui'
-import { type AdminSession, logout } from './lib/api'
+import { type AdminSession, logout, ownedNetwork } from './lib/api'
+import { ADMIN_NETWORKS } from './lib/networks'
 import { Gifts } from './Gifts'
 import { Overview } from './Overview'
 import { OwnerControls } from './OwnerControls'
-
-const NETWORK_NAME = { testnet: 'Arc Testnet', mainnet: 'Arc Mainnet' } as const
 
 // The panel shell. Later sections go inside <main>.
 export function AdminApp({ session }: { session: AdminSession }) {
@@ -22,6 +21,11 @@ export function AdminApp({ session }: { session: AdminSession }) {
     }
   }
 
+  // The current one-page panel shows one network: the first the session owns, mainnet first. The Worker answers a
+  // session only when the address owns at least one, so null here means the answer is not usable.
+  const network = ownedNetwork(session)
+  if (!network) return <p className="admin-note">Couldn't check your session. Reload the page to try again.</p>
+
   return (
     <div className="admin-shell">
       <PageHeader
@@ -29,7 +33,7 @@ export function AdminApp({ session }: { session: AdminSession }) {
         width="wide"
         subtitle={
           <>
-            {NETWORK_NAME[session.network]}
+            {ADMIN_NETWORKS[network].label}
             {' · Signed in as '}
             <AddressChip address={session.address} />
           </>
@@ -52,9 +56,9 @@ export function AdminApp({ session }: { session: AdminSession }) {
             {error}
           </p>
         )}
-        <Overview session={session} showTest={showTest} />
-        <Gifts session={session} showTest={showTest} />
-        <OwnerControls session={session} />
+        <Overview session={session} network={network} showTest={showTest} />
+        <Gifts session={session} network={network} showTest={showTest} />
+        <OwnerControls session={session} network={network} />
       </main>
     </div>
   )

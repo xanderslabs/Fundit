@@ -11,7 +11,7 @@
 // Never log a request or response body, a cookie, a signature, a message or a secret.
 import { getAddress, type Address, type Hex } from 'viem'
 import { TURNSTILE_TOKEN, verifyTurnstile } from '../../worker/turnstile'
-import { loginFiles, MANIFEST_PATH, type ManifestChunk } from './assets'
+import { LOGIN_FONT, loginFiles, MANIFEST_PATH, type ManifestChunk } from './assets'
 import { ADMIN_CHAINS } from './chain'
 import { runCron } from './cron'
 import type { Db } from './db'
@@ -232,7 +232,8 @@ function publicFiles(env: Env, request: Request): Promise<Set<string>> {
     if (!res.ok) throw new Error('no manifest')
     const manifest = (await res.json()) as unknown
     if (typeof manifest !== 'object' || manifest === null || Array.isArray(manifest)) throw new Error('bad manifest')
-    return loginFiles(manifest as Record<string, ManifestChunk>)
+    // The login font is the one public file the manifest does not list, by its exact path.
+    return new Set([...loginFiles(manifest as Record<string, ManifestChunk>), LOGIN_FONT])
   })()
   loginFileSet.catch(() => {
     loginFileSet = null

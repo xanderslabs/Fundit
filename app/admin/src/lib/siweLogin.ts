@@ -1,9 +1,9 @@
-import { type Config, signMessage } from '@wagmi/core'
+import { type Config, getAccount, signMessage } from '@wagmi/core'
 import { type Address, getAddress } from 'viem'
 import { createSiweMessage } from 'viem/siwe'
-import { ARC_CHAIN_ID } from '../../../src/config'
 import { CANCELLED, isUserRejection } from '../../../src/lib/errors'
 import { ADMIN_STATEMENT } from '../../worker/siwe'
+import { ADMIN_NETWORKS } from './networks'
 
 const FALLBACK = "Couldn't sign in. Try again."
 const EXPIRED = 'The sign-in request expired. Try again.'
@@ -22,6 +22,13 @@ export const LOGIN_TEXT: Record<string, string> = {
 
 type Failure = { ok: false; text: string }
 
+// The chain the wallet is on when it is an Arc chain, else Arc mainnet. The Worker accepts either Arc chain ID, and
+// one sign-in covers both networks.
+function signInChainId(walletChainId: number | undefined): number {
+  const arc = [ADMIN_NETWORKS.mainnet.chainId, ADMIN_NETWORKS.testnet.chainId]
+  return walletChainId !== undefined && arc.includes(walletChainId) ? walletChainId : ADMIN_NETWORKS.mainnet.chainId
+}
+
 async function post(path: string, body: unknown): Promise<{ ok: true; data: unknown } | Failure> {
   const res = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
   if (res.ok) return { ok: true, data: await res.json() }
@@ -38,7 +45,7 @@ export async function signIn(config: Config, address: Address, turnstileToken: s
     const { nonce: value, issuedAt, expirationTime } = nonce.data as { nonce: string; issuedAt: string; expirationTime: string }
     const message = createSiweMessage({
       address: getAddress(address),
-      chainId: ARC_CHAIN_ID,
+      chainId: signInChainId(getAccount(config).chainId),
       domain: location.host,
       uri: location.origin,
       version: '1',

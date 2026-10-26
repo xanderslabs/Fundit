@@ -1,6 +1,26 @@
-import type { Address } from 'viem'
+import { type Address, isAddressEqual } from 'viem'
+import { type AdminNetwork, ADMIN_NETWORKS } from './networks'
 
-export type AdminSession = { address: Address; network: 'testnet' | 'mainnet'; chainId: number; factory: Address }
+// owner is null when that network's owner() read failed, so the panel cannot tell either way.
+export type AdminSession = { address: Address; networks: Record<AdminNetwork, { chainId: number; factory: Address; owner: boolean | null }> }
+
+// The Worker's cron state for one network (GET /api/admin/health). Times are epoch milliseconds; the block numbers
+// are decimal strings, null until the cron has stored one.
+// The first network the session owns, mainnet first, or null when none is confirmed.
+export function ownedNetwork(session: AdminSession): AdminNetwork | null {
+  return (['mainnet', 'testnet'] as const).find((n) => session.networks[n].owner === true) ?? null
+}
+
+// Whether the Worker names the same chain and factory as this build for the network. A mismatch means the two
+// were built from different code, so nothing is read or sent.
+export function matchesWorker(session: AdminSession, network: AdminNetwork): boolean {
+  const s = session.networks[network]
+  const n = ADMIN_NETWORKS[network]
+  return s.chainId === n.chainId && isAddressEqual(s.factory, n.factory)
+}
+
+export type HealthCheck = { key: string; ok: boolean; failCount: number; since: number; lastSent: number }
+export type HealthReport = { checks: HealthCheck[]; alertsStarted: boolean; lastEventBlock: string | null; rpcHead: string | null }
 
 // The signed-in owner, or null with no session (the Worker answers 401). Any other failure throws, so a broken
 // Worker is never shown as "signed out".
@@ -9,6 +29,12 @@ export async function getSession(): Promise<AdminSession | null> {
   if (res.status === 401) return null
   if (!res.ok) throw new Error(`Session check failed (${res.status})`)
   return (await res.json()) as AdminSession
+}
+
+export async function getHealth(network: AdminNetwork): Promise<HealthReport> {
+  const res = await fetch(`/api/admin/health?network=${network}`)
+  if (!res.ok) throw new Error(`Health check failed (${res.status})`)
+  return (await res.json()) as HealthReport
 }
 
 // Ends the session. The cookie is cleared by the Worker; a failed call still leaves the person signed in, so it throws.

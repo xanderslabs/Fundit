@@ -1,7 +1,7 @@
 import { type Address, isAddress, isAddressEqual, zeroAddress } from 'viem'
 import { factoryAbi } from '../../../src/abi/factory'
-import { ARC_CHAIN_ID } from '../../../src/config'
 import type { FactoryState } from './factoryState'
+import { type AdminNetwork, ADMIN_NETWORKS } from './networks'
 
 // The five CampaignFactory calls the owner can make from the panel. Ownership transfer and renounce are left out.
 export type OwnerAction =
@@ -20,17 +20,18 @@ function same(a: Address, b: Address): boolean {
 }
 
 // Whether the connected wallet may send an owner call: it must be the account the server signed in, still the
-// factory's owner on chain, and on Arc. The contract enforces ownership too; this keeps a wrong click from reaching it.
+// factory's owner on chain, and on that network's Arc chain. The contract enforces ownership too; this keeps a wrong click from reaching it.
 export function canAct(
   account: Address | undefined,
   chainId: number | undefined,
   sessionAddress: Address,
   s: FactoryState,
+  network: AdminNetwork,
 ): { ok: true } | Refused {
   if (!account || !same(account, sessionAddress) || !same(account, s.owner)) {
     return { ok: false, reason: `Connect the owner wallet ending ${sessionAddress.slice(-4).toLowerCase()} to make changes.` }
   }
-  if (chainId !== ARC_CHAIN_ID) return { ok: false, reason: 'Switch your wallet to Arc.' }
+  if (chainId !== ADMIN_NETWORKS[network].chainId) return { ok: false, reason: 'Switch your wallet to Arc.' }
   return { ok: true }
 }
 
@@ -80,10 +81,10 @@ export async function checkFeatured(
   return { ok: true, campaign: a }
 }
 
-// The factory comes from the signed-in session and the chain is Arc, never from a form field.
+// The factory and chain come from the network, never from a form field.
 export function buildCall(
   action: OwnerAction,
-  factory: Address,
+  network: AdminNetwork,
 ): {
   address: Address
   abi: typeof factoryAbi
@@ -91,7 +92,8 @@ export function buildCall(
   args: readonly unknown[]
   chainId: number
 } {
-  const base = { address: factory, abi: factoryAbi, chainId: ARC_CHAIN_ID }
+  const { factory, chainId } = ADMIN_NETWORKS[network]
+  const base = { address: factory, abi: factoryAbi, chainId }
   switch (action.kind) {
     case 'setFees':
       return { ...base, functionName: 'setFees', args: [action.donationBps, action.withdrawBps] }

@@ -5,15 +5,16 @@ import userEvent from '@testing-library/user-event'
 import { type Address, encodeAbiParameters, encodeErrorResult, encodeEventTopics, zeroAddress } from 'viem'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { factoryAbi } from '../../src/abi/factory'
-import { ARC_CHAIN_ID } from '../../src/config'
 import { CANCELLED } from '../../src/lib/errors'
 import type { AdminSession } from './lib/api'
 import type { FactoryState } from './lib/factoryState'
+import { ADMIN_NETWORKS } from './lib/networks'
 import { fetchSnapshot } from './lib/snapshot'
 import { OwnerControls } from './OwnerControls'
 
 const OWNER = '0x3552E9c14C7b6050839009A5B160A4446a1e916D' as Address
-const FACTORY = '0x6890D40a9A472D0d05aDb5938D85B07059ad54ab' as Address
+const FACTORY = ADMIN_NETWORKS.testnet.factory
+const TESTNET = ADMIN_NETWORKS.testnet.chainId
 const HASH = `0x${'ab'.repeat(32)}` as const
 
 const wagmi = vi.hoisted(() => ({
@@ -24,18 +25,20 @@ const wagmi = vi.hoisted(() => ({
   waitForTransactionReceipt: vi.fn(),
 }))
 vi.mock('@wagmi/core', () => wagmi)
-vi.mock('../../src/config', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../src/config')>()),
-  FACTORY_ADDRESS: '0x6890D40a9A472D0d05aDb5938D85B07059ad54ab',
-}))
 vi.mock('./wagmi', () => ({ adminWagmiConfig: {} }))
 vi.mock('../../src/components/ConnectWallet', () => ({ ConnectWallet: () => <p>connect</p> }))
-vi.mock('../../src/lib/clients', () => ({ arcClient: { readContract: vi.fn(async () => true) } }))
+vi.mock('./lib/clients', () => ({ readClient: () => ({ readContract: vi.fn(async () => true) }) }))
 const state = vi.hoisted(() => ({ read: vi.fn() }))
 vi.mock('./lib/factoryState', () => ({ readFactoryState: state.read }))
 vi.mock('./lib/snapshot', () => ({ fetchSnapshot: vi.fn(async () => []) }))
 
-const session: AdminSession = { address: OWNER, network: 'testnet', chainId: ARC_CHAIN_ID, factory: FACTORY }
+const session: AdminSession = {
+  address: OWNER,
+  networks: {
+    mainnet: { chainId: ADMIN_NETWORKS.mainnet.chainId, factory: ADMIN_NETWORKS.mainnet.factory, owner: false },
+    testnet: { chainId: TESTNET, factory: FACTORY, owner: true },
+  },
+}
 const factoryState: FactoryState = {
   owner: OWNER,
   pendingOwner: zeroAddress,
@@ -62,13 +65,13 @@ async function submitFees(user: ReturnType<typeof userEvent.setup>) {
 
 beforeEach(() => {
   state.read.mockResolvedValue(factoryState)
-  wagmi.getAccount.mockReturnValue({ address: OWNER, chainId: ARC_CHAIN_ID })
+  wagmi.getAccount.mockReturnValue({ address: OWNER, chainId: TESTNET })
   wagmi.simulateContract.mockResolvedValue({ request: {} })
   wagmi.writeContract.mockResolvedValue(HASH)
   wagmi.waitForTransactionReceipt.mockResolvedValue(feesReceipt())
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <OwnerControls session={session} />
+      <OwnerControls session={session} network="testnet" />
     </QueryClientProvider>,
   )
 })
@@ -101,6 +104,8 @@ describe('OwnerControls', () => {
     await screen.findByRole('button', { name: 'Confirm and sign' })
     expect(wagmi.simulateContract).toHaveBeenCalledTimes(1)
     expect(wagmi.writeContract).not.toHaveBeenCalled()
+    // The call goes to the shown network's factory and chain, never the other network's.
+    expect(wagmi.simulateContract.mock.calls[0]![1]).toMatchObject({ address: FACTORY, chainId: TESTNET })
   })
 
   it('shows the emitted event after the receipt', async () => {
@@ -130,7 +135,7 @@ describe('OwnerControls', () => {
     state.read.mockResolvedValue({ ...factoryState, featured: current })
     render(
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-        <OwnerControls session={session} />
+        <OwnerControls session={session} network="testnet" />
       </QueryClientProvider>,
     )
     const radios = await screen.findAllByRole('radio')

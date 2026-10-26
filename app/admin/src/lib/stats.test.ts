@@ -13,6 +13,8 @@ const base: FunditSnapshot = {
   withdrawn: 0n,
   closed: false,
   donationFeeBps: 250,
+  title: '',
+  createdAt: 0n,
   createdAtBlock: 1n,
   feesAccrued: 0n,
   unaccounted: 0n,

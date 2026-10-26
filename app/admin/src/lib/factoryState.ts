@@ -1,8 +1,8 @@
-import type { Address } from 'viem'
 import { erc20Abi } from '../../../src/abi/erc20'
 import { factoryAbi } from '../../../src/abi/factory'
-import { TOKENS } from '../../../src/config'
+import type { Address } from 'viem'
 import type { ReadClient } from '../../../src/lib/campaigns'
+import { type AdminNetwork, ADMIN_NETWORKS } from './networks'
 import type { ByToken } from './stats'
 
 export type FactoryState = {
@@ -16,7 +16,8 @@ export type FactoryState = {
   treasuryBalance: ByToken
 }
 
-export async function readFactoryState(client: ReadClient, factory: Address): Promise<FactoryState> {
+export async function readFactoryState(client: ReadClient, network: AdminNetwork): Promise<FactoryState> {
+  const { factory, usdc, eurc } = ADMIN_NETWORKS[network]
   const [owner, pendingOwner, donationFeeBps, withdrawFeeBps, treasury, featured, paused] = await client.multicall({
     contracts: [
       { address: factory, abi: factoryAbi, functionName: 'owner' },
@@ -30,9 +31,7 @@ export async function readFactoryState(client: ReadClient, factory: Address): Pr
     allowFailure: false,
   })
   const [USDC, EURC] = await Promise.all(
-    (['USDC', 'EURC'] as const).map((symbol) =>
-      client.readContract({ address: TOKENS[symbol].address, abi: erc20Abi, functionName: 'balanceOf', args: [treasury] }),
-    ),
+    [usdc, eurc].map((token) => client.readContract({ address: token, abi: erc20Abi, functionName: 'balanceOf', args: [treasury] })),
   )
   return { owner, pendingOwner, donationFeeBps, withdrawFeeBps, treasury, featured, paused, treasuryBalance: { USDC: USDC!, EURC: EURC! } }
 }

@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
-import { isAddressEqual } from 'viem'
 import { Button, Stat, StatusBox } from '../../src/components/ui'
-import { ARC_CHAIN_ID, FACTORY_ADDRESS, FACTORY_DEPLOY_BLOCK, type TokenSymbol } from '../../src/config'
-import { arcClient } from '../../src/lib/clients'
+import type { TokenSymbol } from '../../src/config'
 import { formatAmount } from '../../src/lib/format'
-import type { AdminSession } from './lib/api'
+import { type AdminSession, matchesWorker } from './lib/api'
+import { readClient } from './lib/clients'
 import { fetchGiftEvents, giftStats } from './lib/giftLogs'
+import { type AdminNetwork, ADMIN_NETWORKS } from './lib/networks'
 import { fetchSnapshot } from './lib/snapshot'
 import type { ByToken } from './lib/stats'
 import { Tile } from './Tile'
@@ -22,22 +22,23 @@ function PerToken({ label, value }: { label: string; value: ByToken }) {
   )
 }
 
-export function Gifts({ session, showTest }: { session: AdminSession; showTest: boolean }) {
-  const matches = session.chainId === ARC_CHAIN_ID && isAddressEqual(session.factory, FACTORY_ADDRESS)
+export function Gifts({ session, network, showTest }: { session: AdminSession; network: AdminNetwork; showTest: boolean }) {
+  const { deployBlock } = ADMIN_NETWORKS[network]
+  const matches = matchesWorker(session, network)
   // Same key as the Overview, so the two share one read.
   const snapshot = useQuery({
-    queryKey: ['admin', session.network, 'snapshot'],
-    queryFn: () => fetchSnapshot(arcClient, session.factory),
+    queryKey: ['admin', network, 'snapshot'],
+    queryFn: () => fetchSnapshot(readClient(network), network),
     enabled: matches,
   })
   const gifts = useQuery({
     // The count is in the key so a newly created Fundit's gifts are fetched.
-    queryKey: ['admin', session.network, 'gifts', snapshot.data?.length ?? 0],
+    queryKey: ['admin', network, 'gifts', snapshot.data?.length ?? 0],
     queryFn: () =>
       fetchGiftEvents(
-        arcClient,
+        readClient(network),
         (snapshot.data ?? []).map((r) => r.address),
-        FACTORY_DEPLOY_BLOCK,
+        deployBlock,
       ),
     enabled: matches && !!snapshot.data,
   })
@@ -60,19 +61,19 @@ export function Gifts({ session, showTest }: { session: AdminSession; showTest: 
   if (result.status === 'too-long') {
     return (
       <div className="admin-tiles">
-        <Tile title="Gifts since launch" source={`Donated and FeesClaimed events from block ${FACTORY_DEPLOY_BLOCK}.`}>
+        <Tile title="Gifts since launch" source={`Donated and FeesClaimed events from block ${deployBlock}.`}>
           <p>Too much history to read in the browser ({result.windows} block ranges). This needs the indexer.</p>
         </Tile>
       </div>
     )
   }
 
-  const s = giftStats(result.events, snapshot.data, showTest)
+  const s = giftStats(result.events, snapshot.data, showTest, network)
   return (
     <div className="admin-tiles">
       <Tile
         title="Gifts since launch"
-        source={`Donated and FeesClaimed events from block ${FACTORY_DEPLOY_BLOCK} to ${result.toBlock}. USDC and EURC are never added together.`}
+        source={`Donated and FeesClaimed events from block ${deployBlock} to ${result.toBlock}. USDC and EURC are never added together.`}
       >
         <dl className="admin-stats">
           <Stat term label="Gifts" value={String(s.gifts)} />

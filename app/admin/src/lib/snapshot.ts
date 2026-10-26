@@ -1,11 +1,13 @@
 import type { Address } from 'viem'
 import { campaignAbi } from '../../../src/abi/campaign'
 import { factoryAbi } from '../../../src/abi/factory'
-import { TEST_CREATORS, type TokenSymbol } from '../../../src/config'
-import { type ReadClient, type Summary, tokenSymbol } from '../../../src/lib/campaigns'
+import type { TokenSymbol } from '../../../src/config'
+import type { ReadClient, Summary } from '../../../src/lib/campaigns'
+import { type AdminNetwork, ADMIN_NETWORKS } from './networks'
 
 export type FunditSnapshot = {
   address: Address
+  title: string
   creator: Address
   token: TokenSymbol
   goal: bigint
@@ -14,6 +16,7 @@ export type FunditSnapshot = {
   withdrawn: bigint
   closed: boolean
   donationFeeBps: number
+  createdAt: bigint
   createdAtBlock: bigint
   feesAccrued: bigint
   unaccounted: bigint
@@ -22,8 +25,9 @@ export type FunditSnapshot = {
 
 const PAGE = 100n
 
-// Every Fundit the factory made, oldest first: one getCampaigns read and one multicall per page of 100.
-export async function fetchSnapshot(client: ReadClient, factory: Address): Promise<FunditSnapshot[]> {
+// Every Fundit the network's factory made, oldest first: one getCampaigns read and one multicall per page of 100.
+export async function fetchSnapshot(client: ReadClient, network: AdminNetwork): Promise<FunditSnapshot[]> {
+  const { factory, eurc, testCreators } = ADMIN_NETWORKS[network]
   const count = await client.readContract({ address: factory, abi: factoryAbi, functionName: 'campaignCount' })
   const rows: FunditSnapshot[] = []
   for (let offset = 0n; offset < count; offset += PAGE) {
@@ -41,18 +45,21 @@ export async function fetchSnapshot(client: ReadClient, factory: Address): Promi
       const s = results[i * 3] as Summary
       rows.push({
         address,
+        title: s.meta.title,
         creator: s.creator,
-        token: tokenSymbol(s.token),
+        // Each network has its own EURC address.
+        token: s.token.toLowerCase() === eurc.toLowerCase() ? 'EURC' : 'USDC',
         goal: s.goal,
         raised: s.raised,
         available: s.available,
         withdrawn: s.withdrawn,
         closed: s.closed,
         donationFeeBps: s.donationFeeBps,
+        createdAt: s.createdAt,
         createdAtBlock: s.createdAtBlock,
         feesAccrued: results[i * 3 + 1] as bigint,
         unaccounted: results[i * 3 + 2] as bigint,
-        isTest: TEST_CREATORS.includes(s.creator.toLowerCase()),
+        isTest: testCreators.includes(s.creator.toLowerCase()),
       })
     })
   }

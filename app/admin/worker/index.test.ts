@@ -41,6 +41,8 @@ const FILES: Record<string, string> = {
   '/assets/index-e5.js': 'PANEL JS',
   '/assets/index-e5.css': 'PANEL CSS',
   '/assets/panel-f6.js': 'PANEL CHUNK',
+  '/fonts/Outfit-VariableFont_wght.ttf': 'font bytes',
+  '/fonts/OFL.txt': 'font licence',
 }
 const PANEL_TEXT = /PANEL|"index\.html"/
 
@@ -519,6 +521,21 @@ describe('files', () => {
       const res = await worker.fetch(get(path), e)
       expect(res.status).toBe(200)
       expect(await res.text()).toBe(FILES[path])
+    }
+  })
+
+  // The login page's stylesheet loads the font from the public dir, which is not in the manifest. Only that one
+  // exact path is added; other files beside it and spellings of it stay behind the session.
+  it('serves the login font without a session, and nothing else from /fonts', async () => {
+    const e = env()
+    const res = await worker.fetch(get('/fonts/Outfit-VariableFont_wght.ttf'), e)
+    expect(res.status).toBe(200)
+    expect(await res.text()).toBe('font bytes')
+    for (const path of ['/fonts/OFL.txt', '/fonts/Outfit-VariableFont_wght.ttf/', '/fonts/%4Futfit-VariableFont_wght.ttf', '/fonts/', '/fonts']) {
+      expect((await worker.fetch(get(path), e)).status, path).toBe(404)
+    }
+    for (const path of ['/index.html', '/assets/index-e5.js', '/assets/panel-f6.js']) {
+      expect((await worker.fetch(get(path), e)).status, path).toBe(404)
     }
   })
 

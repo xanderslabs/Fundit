@@ -2,11 +2,12 @@ import { useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { isAddressEqual, zeroAddress } from 'viem'
 import { AddressChip, Button, Stat, StatusBox } from '../../src/components/ui'
-import { ARC_CHAIN_ID, FACTORY_ADDRESS, type TokenSymbol } from '../../src/config'
-import { arcClient } from '../../src/lib/clients'
+import type { TokenSymbol } from '../../src/config'
 import { formatAmount } from '../../src/lib/format'
-import type { AdminSession } from './lib/api'
+import { type AdminSession, matchesWorker } from './lib/api'
+import { readClient } from './lib/clients'
 import { type FactoryState, readFactoryState } from './lib/factoryState'
+import type { AdminNetwork } from './lib/networks'
 import { fetchSnapshot } from './lib/snapshot'
 import { type ByToken, claimable, funditCounts, heldInFundits, raisedByToken, visible } from './lib/stats'
 import { Tile } from './Tile'
@@ -79,16 +80,16 @@ function FactoryTile({ state }: { state: FactoryState }) {
   )
 }
 
-export function Overview({ session, showTest }: { session: AdminSession; showTest: boolean }) {
-  const matches = session.chainId === ARC_CHAIN_ID && isAddressEqual(session.factory, FACTORY_ADDRESS)
+export function Overview({ session, network, showTest }: { session: AdminSession; network: AdminNetwork; showTest: boolean }) {
+  const matches = matchesWorker(session, network)
   const factory = useQuery({
-    queryKey: ['admin', session.network, 'factory'],
-    queryFn: () => readFactoryState(arcClient, session.factory),
+    queryKey: ['admin', network, 'factory'],
+    queryFn: () => readFactoryState(readClient(network), network),
     enabled: matches,
   })
   const snapshot = useQuery({
-    queryKey: ['admin', session.network, 'snapshot'],
-    queryFn: () => fetchSnapshot(arcClient, session.factory),
+    queryKey: ['admin', network, 'snapshot'],
+    queryFn: () => fetchSnapshot(readClient(network), network),
     enabled: matches,
   })
 

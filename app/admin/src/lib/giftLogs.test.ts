@@ -3,12 +3,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { ADDRESS_CHUNK, fetchGiftEvents, type GiftEvent, giftStats, LOG_WINDOW, MAX_WINDOWS, windows } from './giftLogs'
 import type { FunditSnapshot } from './snapshot'
 
-const TEST_DONOR = '0x3333333333333333333333333333333333333333' as Address
-
-vi.mock('../../../src/config', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../src/config')>()),
-  TEST_CREATORS: ['0x3333333333333333333333333333333333333333'],
-}))
+// A real testnet test creator (testnet testCreators); mainnet has none.
+const TEST_DONOR = '0x2a867fff6723425c9c835bd6c8f1d3d8ac527de3' as Address
 
 const addr = (i: number) => `0x${i.toString(16).padStart(40, '0')}` as Address
 const F1 = addr(1)
@@ -28,6 +24,8 @@ function row(address: Address, token: 'USDC' | 'EURC', isTest = false): FunditSn
     withdrawn: 0n,
     closed: false,
     donationFeeBps: 250,
+    title: '',
+    createdAt: 0n,
     createdAtBlock: 1n,
     feesAccrued: 0n,
     unaccounted: 0n,
@@ -133,13 +131,15 @@ describe('giftStats', () => {
 
   it('drops gifts on test Fundits and gifts from test donors unless showTest', () => {
     const events = [gift(F1, D1, 10n), gift(F_TEST, D1, 10n), gift(F1, TEST_DONOR, 10n)]
-    expect(giftStats(events, rows, false).gifts).toBe(1)
-    expect(giftStats(events, rows, true).gifts).toBe(3)
+    expect(giftStats(events, rows, false, 'testnet').gifts).toBe(1)
+    expect(giftStats(events, rows, true, 'testnet').gifts).toBe(3)
+    // The test donor list is the network's own: on mainnet that donor's gift counts.
+    expect(giftStats(events, rows, false, 'mainnet').gifts).toBe(2)
   })
 
   it('repeat donors need 2 or more gifts', () => {
     const events = [gift(F1, D1, 1n), gift(F2, D1, 1n), gift(F1, D2, 1n)]
-    const s = giftStats(events, rows, false)
+    const s = giftStats(events, rows, false, 'testnet')
     expect(s.uniqueDonors).toBe(2)
     expect(s.repeatDonors).toBe(1)
   })
@@ -152,7 +152,7 @@ describe('giftStats', () => {
       { kind: 'feesClaimed', fundit: F1, amount: 700n },
       { kind: 'feesClaimed', fundit: F2, amount: 5n },
     ]
-    const s = giftStats(events, rows, false)
+    const s = giftStats(events, rows, false, 'testnet')
     expect(s.averageGift).toEqual({ USDC: 15_000_000n, EURC: 100n })
     expect(s.fees).toEqual({ USDC: 750_000n, EURC: 3n })
     expect(s.tips).toEqual({ USDC: 3n, EURC: 4n })
