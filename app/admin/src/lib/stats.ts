@@ -37,3 +37,15 @@ export function claimable(rows: FunditSnapshot[]): ByToken {
 export function heldInFundits(rows: FunditSnapshot[]): ByToken {
   return sumByToken(rows, (r) => r.available + r.feesAccrued)
 }
+
+// Fundits still taking gifts.
+export function liveCount(rows: FunditSnapshot[]): number {
+  return rows.filter((r) => !r.closed).length
+}
+
+const WEEK = 7n * 86_400n
+
+// Fundits created in the last 7 days (rolling, not the calendar week).
+export function newThisWeek(rows: FunditSnapshot[], nowSec: bigint): number {
+  return rows.filter((r) => r.createdAt > nowSec - WEEK && r.createdAt <= nowSec).length
+}

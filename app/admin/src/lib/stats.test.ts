@@ -1,6 +1,6 @@
 import type { Address } from 'viem'
 import { describe, expect, it } from 'vitest'
-import { claimable, funditCounts, heldInFundits, raisedByToken, visible } from './stats'
+import { claimable, funditCounts, heldInFundits, liveCount, newThisWeek, raisedByToken, visible } from './stats'
 import type { FunditSnapshot } from './snapshot'
 
 const base: FunditSnapshot = {
@@ -54,5 +54,16 @@ describe('stats', () => {
     const rows = [row({ isTest: true }), row({ isTest: false })]
     expect(visible(rows, false)).toHaveLength(1)
     expect(visible(rows, true)).toHaveLength(2)
+  })
+
+  it('liveCount leaves out closed Fundits', () => {
+    expect(liveCount([row({}), row({ closed: true }), row({})])).toBe(2)
+  })
+
+  it('newThisWeek counts the last 7 days, not older ones', () => {
+    const now = 1_000_000n
+    const week = 7n * 86_400n
+    const rows = [row({ createdAt: now }), row({ createdAt: now - week + 1n }), row({ createdAt: now - week })]
+    expect(newThisWeek(rows, now)).toBe(2)
   })
 })

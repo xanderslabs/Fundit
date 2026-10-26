@@ -3,7 +3,7 @@ import { Badge, Button, Card as BaseCard } from '../../../src/components/ui'
 import { RefreshIcon } from './icons'
 
 // "Updated 5 s ago", in whole seconds, minutes, hours or days.
-function ago(ms: number): string {
+export function ago(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000))
   if (s < 60) return `${s} s ago`
   const m = Math.floor(s / 60)

@@ -616,7 +616,7 @@ body {
   }
 }
 
-/* The page content until Tasks 5 to 8 replace it. */
+/* The Gifts page and owner controls until Tasks 7 and 8 replace them. */
 .admin-tiles {
   display: grid;
   gap: var(--space-4);
@@ -624,29 +624,10 @@ body {
   margin-bottom: var(--space-4);
 }
 
-.admin-tile {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.admin-tile-title {
-  margin: 0;
-  font-size: var(--text-lg);
-  line-height: var(--text-lg-line);
-}
-
 .admin-tile-body {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-}
-
-.admin-tile-source {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  line-height: var(--text-xs-line);
 }
 
 .admin-stats {
@@ -704,6 +685,409 @@ body {
 
 .admin-confirm-value {
   overflow-wrap: anywhere;
+}
+
+/* Pages */
+.admin-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.admin-muted {
+  color: var(--text-muted);
+}
+
+.admin-partial {
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: var(--figures);
+  line-height: var(--text-xs-line);
+}
+
+/* Overview: health strip */
+.admin-health-strip {
+  min-height: calc(var(--hit-target) * 0.75);
+}
+
+.admin-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--text);
+  font-size: var(--text-xs);
+  line-height: var(--text-xs-line);
+  text-decoration: none;
+}
+
+.admin-pill-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.admin-pill-label {
+  font-weight: var(--weight-medium);
+}
+
+.admin-pill-state {
+  color: var(--text-muted);
+}
+
+.admin-pill-ok .admin-pill-dot {
+  background: var(--action);
+}
+
+.admin-pill-failing {
+  border-color: var(--danger);
+  color: var(--danger-ink);
+}
+
+.admin-pill-failing .admin-pill-dot {
+  background: var(--danger);
+}
+
+.admin-pill-failing .admin-pill-state {
+  color: inherit;
+}
+
+a.admin-pill:hover {
+  background: var(--surface);
+}
+
+a.admin-pill:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.admin-health-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--danger-ink);
+  font-size: var(--text-sm);
+}
+
+.admin-health-skeleton {
+  width: 24rem;
+  max-width: 100%;
+  height: var(--space-5);
+}
+
+/* Overview: headline numbers */
+.admin-headline {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+}
+
+.admin-headline .admin-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.admin-figure {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-variant-numeric: var(--figures);
+  font-weight: var(--weight-bold);
+  line-height: var(--text-2xl-line);
+  letter-spacing: var(--tracking-heading);
+}
+
+.admin-figure-lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--text-xl-line);
+  letter-spacing: var(--tracking-heading);
+  list-style: none;
+}
+
+/* Overview: latest activity */
+.admin-feed {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-feed-item {
+  display: grid;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  grid-template-areas: 'kind text time link';
+  grid-template-columns: 8px minmax(0, 1fr) auto auto;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.admin-feed-item:last-child {
+  border-bottom: 0;
+}
+
+.admin-feed-dot {
+  width: 8px;
+  height: 8px;
+  grid-area: kind;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.admin-feed-gift {
+  background: var(--action);
+}
+
+.admin-feed-newFundit {
+  background: var(--text);
+}
+
+.admin-feed-text {
+  overflow: hidden;
+  grid-area: text;
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-line);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-feed-time {
+  grid-area: time;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: var(--figures);
+  line-height: var(--text-xs-line);
+  white-space: nowrap;
+}
+
+.admin-feed-item > a {
+  grid-area: link;
+}
+
+.admin-view-all {
+  display: inline-block;
+  margin-top: var(--space-3);
+  color: var(--action-ink);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+/* Fundits table */
+.admin-table-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  margin-bottom: var(--space-3);
+}
+
+.admin-search {
+  flex: 1 1 14rem;
+  max-width: 22rem;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-line);
+}
+
+.admin-sort-select {
+  display: none;
+}
+
+.admin-table-tools .admin-note {
+  font-size: var(--text-sm);
+  font-variant-numeric: var(--figures);
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-line);
+}
+
+.admin-table th,
+.admin-table td {
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.admin-table th {
+  border-bottom-color: var(--border);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  line-height: var(--text-xs-line);
+}
+
+.admin-table th:first-child,
+.admin-table td:first-child {
+  padding-left: 0;
+}
+
+.admin-table th:last-child,
+.admin-table td:last-child {
+  padding-right: 0;
+}
+
+.admin-table .admin-num {
+  font-variant-numeric: var(--figures);
+  text-align: right;
+}
+
+.admin-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.admin-num .admin-sort {
+  flex-direction: row-reverse;
+}
+
+.admin-sort:hover {
+  color: var(--text);
+}
+
+.admin-sort:focus-visible,
+.admin-row-open:focus-visible {
+  border-radius: var(--radius-sm);
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.admin-sort-mark {
+  display: inline-flex;
+}
+
+.admin-sort-mark .admin-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.admin-sort-idle {
+  visibility: hidden;
+}
+
+.admin-sort-up {
+  transform: rotate(180deg);
+}
+
+.admin-table-row {
+  cursor: pointer;
+}
+
+.admin-table-row:hover td {
+  background: var(--surface);
+}
+
+.admin-title-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 12rem;
+  max-width: 12rem;
+}
+
+.admin-row-open {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: var(--weight-medium);
+  text-align: start;
+  cursor: pointer;
+}
+
+.admin-truncate {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Fundit drawer */
+.admin-drawer-title {
+  overflow-wrap: anywhere;
+}
+
+.admin-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.admin-drawer-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.admin-details {
+  margin: 0;
+  font-variant-numeric: var(--figures);
+}
+
+.admin-details .admin-row {
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.admin-drawer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.admin-drawer-links .ui-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  text-decoration: none;
+}
+
+.admin-drawer-links .admin-icon {
+  width: 16px;
+  height: 16px;
 }
 
 /* Medium screens: the sidebar keeps only its icons. */
@@ -780,6 +1164,74 @@ body {
 
   .admin-menu-list {
     max-width: calc(100vw - 2 * var(--space-4));
+  }
+
+  /* Feed rows: kind and time on top, the line under them, the link at the end. */
+  .admin-feed-time {
+    justify-self: start;
+  }
+
+  .admin-feed-item {
+    grid-template-areas:
+      'kind text link'
+      'kind time link';
+    grid-template-columns: 8px minmax(0, 1fr) auto;
+  }
+
+  .admin-search {
+    max-width: none;
+  }
+
+  .admin-sort-select {
+    display: block;
+    flex: 1 1 100%;
+    padding-top: var(--space-2);
+    padding-bottom: var(--space-2);
+    font-size: var(--text-sm);
+  }
+
+  /* Fundits table: each row is a block, label left and value right, title on top. */
+  .admin-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .admin-table,
+  .admin-table tbody,
+  .admin-table tr {
+    display: block;
+  }
+
+  .admin-table tr {
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .admin-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-1) 0;
+    border-bottom: 0;
+  }
+
+  .admin-table td[data-label]::before {
+    color: var(--text-muted);
+    font-size: var(--text-xs);
+    content: attr(data-label);
+  }
+
+  .admin-title-cell {
+    width: 100%;
+    max-width: none;
+  }
+
+  .admin-table-row:hover td {
+    background: none;
   }
 }
 

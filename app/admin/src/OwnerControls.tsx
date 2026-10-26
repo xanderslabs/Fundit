@@ -22,7 +22,7 @@ import { type AdminNetwork, ADMIN_NETWORKS } from './lib/networks'
 import { fetchSnapshot } from './lib/snapshot'
 import { ConfirmAction } from './ConfirmAction'
 import { adminWagmiConfig } from './wagmi'
-import { Tile } from './Tile'
+import { Card } from './ui/Card'
 
 type Account = { address?: Address; chainId?: number }
 
@@ -158,7 +158,8 @@ export function OwnerControls({ session, network }: { session: AdminSession; net
   const confirm = pending ? describe(pending, state) : null
 
   return (
-    <Tile title="Owner controls" source="Each change is signed by the owner wallet and enforced by the factory contract.">
+    <Card title="Owner controls" state="ready" source="Each change is signed by the owner wallet and enforced by the factory contract.">
+      <div className="admin-tile-body">
       {!can.ok && (
         <Banner tone="attention">
           <p>{can.reason}</p>
@@ -251,6 +252,7 @@ export function OwnerControls({ session, network }: { session: AdminSession; net
         onConfirm={() => (pending ? send(pending) : Promise.resolve())}
         onClose={() => setPending(null)}
       />
-    </Tile>
+      </div>
+    </Card>
   )
 }
