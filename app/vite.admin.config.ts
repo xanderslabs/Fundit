@@ -38,7 +38,7 @@ export default defineConfig(({ command, mode }) => {
     },
     // The env files stay in app/, shared with the public build.
     envDir: '..',
-    // admin/public holds only the font the pages load. The Worker serves it before sign-in (worker/assets.ts).
+    // admin/public holds only the font the pages load and the tab icons. The Worker serves them before sign-in (worker/assets.ts).
     publicDir: 'public',
     plugins: [react()],
     server: { port: 5175 },

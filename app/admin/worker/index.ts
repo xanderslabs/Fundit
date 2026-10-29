@@ -12,7 +12,7 @@
 import { getAddress, type Address, type Hex } from 'viem'
 import { PANEL_PATHS } from '../src/lib/panelPaths'
 import { TURNSTILE_TOKEN, verifyTurnstile } from '../../worker/turnstile'
-import { LOGIN_FONT, loginFiles, MANIFEST_PATH, type ManifestChunk } from './assets'
+import { ICONS, LOGIN_FONT, loginFiles, MANIFEST_PATH, type ManifestChunk } from './assets'
 import { ADMIN_CHAINS } from './chain'
 import { runCron } from './cron'
 import type { Db } from './db'
@@ -233,8 +233,8 @@ function publicFiles(env: Env, request: Request): Promise<Set<string>> {
     if (!res.ok) throw new Error('no manifest')
     const manifest = (await res.json()) as unknown
     if (typeof manifest !== 'object' || manifest === null || Array.isArray(manifest)) throw new Error('bad manifest')
-    // The login font is the one public file the manifest does not list, by its exact path.
-    return new Set([...loginFiles(manifest as Record<string, ManifestChunk>), LOGIN_FONT])
+    // The login font and the tab icons are the public files the manifest does not list, by their exact paths.
+    return new Set([...loginFiles(manifest as Record<string, ManifestChunk>), LOGIN_FONT, ...ICONS])
   })()
   loginFileSet.catch(() => {
     loginFileSet = null

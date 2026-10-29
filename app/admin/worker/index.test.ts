@@ -43,6 +43,9 @@ const FILES: Record<string, string> = {
   '/assets/panel-f6.js': 'PANEL CHUNK',
   '/fonts/Outfit-VariableFont_wght.ttf': 'font bytes',
   '/fonts/OFL.txt': 'font licence',
+  '/favicon.svg': 'svg icon',
+  '/favicon.ico': 'ico icon',
+  '/apple-touch-icon.png': 'touch icon',
 }
 const PANEL_TEXT = /PANEL|"index\.html"/
 
@@ -536,6 +539,16 @@ describe('files', () => {
     }
     for (const path of ['/index.html', '/assets/index-e5.js', '/assets/panel-f6.js']) {
       expect((await worker.fetch(get(path), e)).status, path).toBe(404)
+    }
+  })
+
+  // The browser asks for the tab icon on the login page too, before anyone signs in.
+  it('serves the tab icons without a session', async () => {
+    const e = env()
+    for (const [path, body] of [['/favicon.svg', 'svg icon'], ['/favicon.ico', 'ico icon'], ['/apple-touch-icon.png', 'touch icon']] as const) {
+      const res = await worker.fetch(get(path), e)
+      expect(res.status, path).toBe(200)
+      expect(await res.text()).toBe(body)
     }
   })
 

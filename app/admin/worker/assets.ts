@@ -3,8 +3,10 @@
 
 export const MANIFEST_PATH = '/manifest.json'
 
-// The font the login page's stylesheet loads. It comes from Vite's public dir, so the manifest does not list it.
+// The font the login page's stylesheet loads and the tab icons. They come from Vite's public dir, so the manifest
+// does not list them.
 export const LOGIN_FONT = '/fonts/Outfit-VariableFont_wght.ttf'
+export const ICONS = ['/favicon.svg', '/favicon.ico', '/apple-touch-icon.png']
 
 export type ManifestChunk = { file: string; css?: string[]; assets?: string[]; imports?: string[]; dynamicImports?: string[] }
 
