@@ -248,6 +248,26 @@ describe('runCron', () => {
     expect(w.sent.filter((s) => s.startsWith('[Arc Mainnet] Owner alerts started'))).toHaveLength(1)
   })
 
+  // The public mainnet RPC answers Cloudflare with 429. With a provider secret set, no call may go to it.
+  it('uses the provider RPC secrets for every chain call', async () => {
+    const urls: string[] = []
+    const w = world()
+    const providers: Record<string, string> = { 'https://main.example.org/KEY': main.rpcUrl, 'https://test.example.org/KEY': chain.rpcUrl }
+    const fetcher = ((input: string, init?: RequestInit) => {
+      urls.push(String(input))
+      const real = providers[String(input)]
+      return w.fetcher(real ?? input, init)
+    }) as typeof fetch
+    const e = env({ ARC_MAINNET_RPC_URL: 'https://main.example.org/KEY', ARC_TESTNET_RPC_URL: 'https://test.example.org/KEY' })
+    await runCron(e, NOW, fetcher)
+    w.head = 1100
+    await runCron(e, NOW + 300_000, fetcher)
+    expect(urls).toContain('https://main.example.org/KEY')
+    expect(urls).toContain('https://test.example.org/KEY')
+    expect(urls).not.toContain(main.rpcUrl)
+    expect(urls).not.toContain(chain.rpcUrl)
+  })
+
   it('a failing mainnet RPC does not stop the testnet scan', async () => {
     const e = env()
     const w = world()

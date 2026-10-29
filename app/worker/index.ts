@@ -8,7 +8,7 @@
 // Never log a request or response body, a token, the API key or the Turnstile secret.
 import { decodeFunctionResult, encodeFunctionData, isAddress, parseAbi, type Address } from 'viem'
 import { clearTokenCookies, readTokens, TOKEN, tokenCookies } from './cookies'
-import { NETWORKS_WORKER, type WorkerNetwork, type WorkerNetworkConfig } from './networks'
+import { NETWORKS_WORKER, rpcUrlFor, type WorkerNetwork, type WorkerNetworkConfig } from './networks'
 import { canonicalTransaction, checkSignRequest, type PolicyContext } from './policy'
 import { handleReport } from './report'
 import { TURNSTILE_TOKEN, verifyTurnstile } from './turnstile'
@@ -26,6 +26,8 @@ export interface Env {
   // The bot and chat that receive POST /api/report. Without both the report route answers 503.
   TELEGRAM_BOT_TOKEN?: string
   TELEGRAM_CHAT_ID?: string
+  // Optional: a provider RPC URL for this Worker's network, used in place of the public one.
+  ARC_RPC_URL?: string
   // Vars.
   NETWORK: string
   FACTORY_ADDRESS: string
@@ -73,7 +75,7 @@ function config(env: Env): Config | null {
   if (!net || !isAddress(env.FACTORY_ADDRESS ?? '', { strict: false }) || !env.SITE_ORIGIN || !env.CIRCLE_API_KEY || !env.TURNSTILE_SECRET) return null
   // Circle's keys name their environment: LIVE_API_KEY for mainnet, TEST_API_KEY for testnet.
   if (!env.CIRCLE_API_KEY.startsWith(env.NETWORK === 'mainnet' ? 'LIVE_API_KEY:' : 'TEST_API_KEY:')) return null
-  return { net, factory: env.FACTORY_ADDRESS as Address }
+  return { net: { ...net, rpcUrl: rpcUrlFor(env.NETWORK as WorkerNetwork, env.ARC_RPC_URL) }, factory: env.FACTORY_ADDRESS as Address }
 }
 
 // Calls Circle and returns its `data` on success. On an error, only Circle's status, code and message go back,

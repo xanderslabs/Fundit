@@ -4,7 +4,7 @@
 //
 // Never log the token, the chat id or a message. The one log line is the fixed text `telegram not configured`.
 import { decideAlerts, type AlertRow } from './alerts'
-import { ADMIN_CHAINS, type AdminChain } from './chain'
+import { adminChains, type AdminChain } from './chain'
 import type { Db } from './db'
 import { runChecks } from './health'
 import type { Env } from './index'
@@ -92,7 +92,7 @@ function labelFor(message: string): string {
 export async function runCron(env: Env, nowMs: number, fetcher: typeof fetch = (i, n) => fetch(i, n)): Promise<void> {
   const db = env.ADMIN_DB
   await pruneNonces(db, nowMs)
-  const chains = Object.values(ADMIN_CHAINS)
+  const chains = Object.values(adminChains(env))
 
   const lastTexts = {} as Record<WorkerNetwork, string | null>
   const lastHeads = {} as Record<WorkerNetwork, bigint | null>

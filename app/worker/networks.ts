@@ -41,3 +41,17 @@ export const NETWORKS_WORKER: Record<WorkerNetwork, WorkerNetworkConfig> = {
     multicall3From: MULTICALL3_FROM,
   },
 }
+
+// The public RPCs answer Cloudflare's shared addresses with 429 under load. A Worker secret can name any
+// provider's https URL (dRPC, Alchemy and so on) instead. The URL may hold an API key, so it is never logged.
+export function rpcUrlFor(network: WorkerNetwork, override: string | undefined): string {
+  if (override) {
+    try {
+      if (new URL(override).protocol === 'https:') return override
+    } catch {
+      // Falls through to the warning.
+    }
+    console.log(`${network} RPC secret is not an https URL; using the public RPC`)
+  }
+  return NETWORKS_WORKER[network].rpcUrl
+}

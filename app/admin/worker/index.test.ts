@@ -224,6 +224,25 @@ describe('nonce', () => {
 })
 
 describe('login', () => {
+  // The public mainnet RPC answers Cloudflare with 429, which greyed out Arc Mainnet in the network switch.
+  it('reads owner() through the provider RPC secrets when they are set', async () => {
+    const provider: Record<string, string> = {
+      'https://main.example.org/KEY': NETWORKS_WORKER.mainnet.rpcUrl,
+      'https://test.example.org/KEY': NETWORKS_WORKER.testnet.rpcUrl,
+    }
+    const inner = globalThis.fetch
+    const seen: string[] = []
+    vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+      seen.push(String(input))
+      return inner(provider[String(input)] ?? input, init)
+    })
+    const e = env({ ARC_MAINNET_RPC_URL: 'https://main.example.org/KEY', ARC_TESTNET_RPC_URL: 'https://test.example.org/KEY' })
+    const { res } = await signedLogin(e)
+    expect(res.status).toBe(200)
+    expect(seen.filter((u) => u in provider).sort()).toEqual(['https://main.example.org/KEY', 'https://test.example.org/KEY'])
+    expect(seen).not.toContain(NETWORKS_WORKER.mainnet.rpcUrl)
+  })
+
   it('login with the owner sets the session cookie', async () => {
     const e = env()
     const { res } = await signedLogin(e)

@@ -161,6 +161,15 @@ describe('worker', () => {
     expect(calls.map((c) => c.url)).toEqual([net.rpcUrl])
   })
 
+  // The public RPC rate-limits Cloudflare, so a provider URL set as a secret must be the one asked.
+  it('sign-transaction asks the factory through ARC_RPC_URL when it is set', async () => {
+    const provider = 'https://lb.example.org/arc/KEY'
+    replies[provider] = replies[net.rpcUrl]!
+    const res = await worker.fetch(post('sign-transaction', { walletId: WALLET_ID, transaction: signTx(OTHER) }, cookie), env({ ARC_RPC_URL: provider }))
+    expect(res.status).toBe(403)
+    expect(calls.map((c) => c.url)).toEqual([provider])
+  })
+
   it('sign-transaction refuses when the factory cannot be asked (fail closed)', async () => {
     replies[net.rpcUrl] = () => new Response('bad gateway', { status: 502 })
     const res = await worker.fetch(post('sign-transaction', { walletId: WALLET_ID, transaction: signTx(CAMPAIGN) }, cookie), env())

@@ -13,7 +13,7 @@ import { getAddress, type Address, type Hex } from 'viem'
 import { PANEL_PATHS } from '../src/lib/panelPaths'
 import { TURNSTILE_TOKEN, verifyTurnstile } from '../../worker/turnstile'
 import { ICONS, LOGIN_FONT, loginFiles, MANIFEST_PATH, type ManifestChunk } from './assets'
-import { ADMIN_CHAINS } from './chain'
+import { ADMIN_CHAINS, adminChains, type AdminChain } from './chain'
 import { runCron } from './cron'
 import type { Db } from './db'
 import { secure } from './headers'
@@ -39,9 +39,12 @@ export interface Env {
   // Optional: without them the cron still runs the checks but sends nothing.
   TELEGRAM_BOT_TOKEN?: string
   TELEGRAM_CHAT_ID?: string
+  // Optional: provider RPC URLs used in place of the public ones.
+  ARC_MAINNET_RPC_URL?: string
+  ARC_TESTNET_RPC_URL?: string
 }
 
-type Config = { origin: string; secret: string; turnstileSecret: string; db: Db }
+type Config = { origin: string; secret: string; turnstileSecret: string; db: Db; chains: Record<WorkerNetwork, AdminChain> }
 type Body = Record<string, unknown>
 
 // The panel's pages, shared with the panel's router. A reload on any of them is sent the panel.
@@ -80,7 +83,7 @@ function config(env: Env): Config | null {
     origin = null
   }
   if (!origin || !secretOk(env.ADMIN_SESSION_SECRET) || !env.TURNSTILE_SECRET || !env.ADMIN_DB) return null
-  return { origin, secret: env.ADMIN_SESSION_SECRET, turnstileSecret: env.TURNSTILE_SECRET, db: env.ADMIN_DB }
+  return { origin, secret: env.ADMIN_SESSION_SECRET, turnstileSecret: env.TURNSTILE_SECRET, db: env.ADMIN_DB, chains: adminChains(env) }
 }
 
 async function rateLimit(env: Env, key: string): Promise<void> {
@@ -107,11 +110,11 @@ async function readBody(request: Request): Promise<Body> {
 type Owned = Record<WorkerNetwork, boolean | null>
 type SessionState = { kind: 'ok'; session: Session; owned: Owned } | { kind: 'out' } | { kind: 'unavailable' }
 
-async function ownedBy(address: string, read: (rpcUrl: string, factory: Address) => Promise<Address>): Promise<Owned> {
+async function ownedBy(chains: Record<WorkerNetwork, AdminChain>, address: string, read: (rpcUrl: string, factory: Address) => Promise<Address>): Promise<Owned> {
   const answers = await Promise.all(
     NETWORKS.map(async (n) => {
       try {
-        return (await read(ADMIN_CHAINS[n].rpcUrl, ADMIN_CHAINS[n].factory)).toLowerCase() === address.toLowerCase()
+        return (await read(chains[n].rpcUrl, chains[n].factory)).toLowerCase() === address.toLowerCase()
       } catch {
         return null
       }
@@ -131,7 +134,7 @@ function decide(owned: Owned): 'in' | 'out' | 'unknown' {
 async function checkSession(request: Request, cfg: Config, nowMs: number): Promise<SessionState> {
   const session = await readSession(request.headers.get('cookie'), cfg.secret, Math.floor(nowMs / 1000))
   if (!session) return { kind: 'out' }
-  const owned = await ownedBy(session.address, (rpcUrl, factory) => cachedOwner(rpcUrl, factory, nowMs))
+  const owned = await ownedBy(cfg.chains, session.address, (rpcUrl, factory) => cachedOwner(rpcUrl, factory, nowMs))
   const verdict = decide(owned)
   if (verdict === 'in') return { kind: 'ok', session, owned }
   return verdict === 'out' ? { kind: 'out' } : { kind: 'unavailable' }
@@ -146,7 +149,7 @@ async function login(request: Request, cfg: Config, nowMs: number): Promise<Resp
   if (!(await signerMatches(message, check.address, signature as Hex))) return fail(403, 'bad_signature')
   // Spent before owner() is read, so a refused login cannot be retried with the same signature.
   if (!(await consumeNonce(cfg.db, check.nonce, nowMs))) return fail(403, 'nonce')
-  const verdict = decide(await ownedBy(check.address, readOwner))
+  const verdict = decide(await ownedBy(cfg.chains, check.address, readOwner))
   if (verdict === 'unknown') return fail(503, 'unavailable')
   if (verdict === 'out') return fail(403, 'not_owner')
   const iat = Math.floor(nowMs / 1000)
