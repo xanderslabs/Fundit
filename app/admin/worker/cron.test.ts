@@ -4,7 +4,7 @@ import { encodeAbiParameters, encodeEventTopics, numberToHex, type Hex } from 'v
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { factoryAbi } from '../../src/abi/factory'
 import { ADMIN_CHAINS } from './chain'
-import { runCron } from './cron'
+import { EVENTS_STALE_MS, runCron } from './cron'
 import { sqliteDb } from './testing/sqliteDb'
 import type { Env } from './index'
 
@@ -185,17 +185,31 @@ describe('runCron', () => {
     expect(w.sent[2]).toBe('[Fundit] site is failing: status 500')
   })
 
-  it('alerts after the owner event scan fails two runs in a row', async () => {
+  // The RPC drops some calls from Cloudflare. Short gaps lose no events, so they must not reach the chat.
+  it('stays quiet while the owner event scan fails for less than 30 minutes', async () => {
     const e = env()
     const w = world()
     await runCron(e, NOW, w.fetcher)
-    w.head = 1100
     w.getLogsFails = true
-    await runCron(e, NOW + 300_000, w.fetcher)
+    for (let t = 300_000; t < EVENTS_STALE_MS; t += 300_000) {
+      w.head++
+      await runCron(e, NOW + t, w.fetcher)
+    }
+    expect(tn(w)).toHaveLength(1)
+    expect(await meta(e, CURSOR)).toBe('998')
+  })
+
+  it('alerts once the owner event scan has failed for 30 minutes', async () => {
+    const e = env()
+    const w = world()
+    await runCron(e, NOW, w.fetcher)
+    w.getLogsFails = true
+    w.head = 1100
+    await runCron(e, NOW + EVENTS_STALE_MS, w.fetcher)
     expect(tn(w)).toHaveLength(1)
     w.head = 1101
-    await runCron(e, NOW + 600_000, w.fetcher)
-    expect(tn(w)[1]).toBe('[Arc Testnet] events:arc-testnet is failing: owner event scan failed')
+    await runCron(e, NOW + EVENTS_STALE_MS + 300_000, w.fetcher)
+    expect(tn(w)[1]).toBe('[Arc Testnet] events:arc-testnet is failing: owner events not read for 30 minutes')
     expect(await meta(e, CURSOR)).toBe('998')
   })
 
@@ -203,14 +217,14 @@ describe('runCron', () => {
     const e = env()
     const w = world()
     await runCron(e, NOW, w.fetcher)
-    w.head = 1100
     w.getLogsFails = true
-    await runCron(e, NOW + 300_000, w.fetcher)
+    w.head = 1100
+    await runCron(e, NOW + EVENTS_STALE_MS, w.fetcher)
     w.head = 1101
-    await runCron(e, NOW + 600_000, w.fetcher)
+    await runCron(e, NOW + EVENTS_STALE_MS + 300_000, w.fetcher)
     w.getLogsFails = false
     w.head = 1102
-    await runCron(e, NOW + 900_000, w.fetcher)
+    await runCron(e, NOW + EVENTS_STALE_MS + 600_000, w.fetcher)
     expect(tn(w).at(-1)).toBe('[Arc Testnet] events:arc-testnet is back to normal.')
   })
 

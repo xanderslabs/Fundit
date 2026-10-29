@@ -15,6 +15,9 @@ import { sendTelegram } from '../../worker/telegram'
 
 // Blocks per eth_getLogs call.
 const EVENT_WINDOW_BLOCKS = 10_000n
+// The cursor only moves after a good read, so a failed scan delays alerts but loses none. The scan is reported as
+// failing only after this long without a good read, so a flaky RPC does not flood the chat.
+export const EVENTS_STALE_MS = 30 * 60_000
 
 async function getMeta(db: Db, key: string): Promise<string | null> {
   return (await db.prepare('SELECT value FROM meta WHERE key = ?').bind(key).first<{ value: string }>())?.value ?? null
@@ -60,7 +63,8 @@ async function ownerEvents(db: Db, chain: AdminChain, head: bigint, send: Send, 
     let events
     try {
       events = await fetchOwnerEvents(chain.rpcUrl, chain.factory, from, to, fetcher)
-    } catch {
+    } catch (err) {
+      console.log(`owner events ${chain.network} ${from}-${to}: ${String(err)}`)
       return false
     }
     let sent = 0
@@ -113,8 +117,11 @@ export async function runCron(env: Env, nowMs: number, fetcher: typeof fetch = (
     for (const c of chains) {
       const head = heads[c.network]
       if (head === null) continue
-      const ok = await ownerEvents(db, c, head, send, fetcher)
-      checks.push({ key: `events:arc-${c.network}`, ok, detail: 'owner event scan failed' })
+      const okKey = `owner_events_ok_at:${c.network}`
+      if (await ownerEvents(db, c, head, send, fetcher)) await setMeta(db, okKey, String(nowMs))
+      const lastOk = await getMeta(db, okKey)
+      const ok = lastOk !== null && nowMs - Number(lastOk) < EVENTS_STALE_MS
+      checks.push({ key: `events:arc-${c.network}`, ok, detail: 'owner events not read for 30 minutes' })
     }
   }
 
