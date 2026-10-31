@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { resolveTheme } from './theme'
 
-// The admin follows the system setting until the owner picks a theme, and an explicit pick always wins.
+// The theme follows the system setting until the person picks one, and an explicit pick always wins.
 describe('resolveTheme', () => {
   it('follows the system while the choice is system', () => {
     expect(resolveTheme('system', true)).toBe('dark')

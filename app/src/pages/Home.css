@@ -159,7 +159,7 @@
   height: 40px;
   border-radius: var(--radius-pill);
   background: var(--attention);
-  color: var(--text);
+  color: var(--on-brand);
   font-size: var(--text-md);
   font-weight: var(--weight-bold);
   font-variant-numeric: tabular-nums;

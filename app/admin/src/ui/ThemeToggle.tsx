@@ -1,4 +1,4 @@
-import { resolveTheme, type ThemeChoice, useTheme } from '../lib/theme'
+import { resolveTheme, type ThemeChoice, useTheme } from '../../../src/lib/theme'
 import { MoonIcon, SunIcon } from './icons'
 import { Menu } from './Menu'
 

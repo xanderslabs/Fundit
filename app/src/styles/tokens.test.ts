@@ -7,8 +7,8 @@ const css = readFileSync('src/styles/tokens.css', 'utf8')
 const root = css.match(/(?:^|\n):root\s*\{([^}]*)\}/)?.[1] ?? ''
 const tokens = new Map([...root.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map((m) => [m[1]!, m[2]!.trim()]))
 
-// The dark palette (admin only for now) overrides some tokens under :root[data-theme='dark']. A token it does not
-// set keeps its light value, as it does in the browser.
+// The dark palette overrides some tokens under :root[data-theme='dark']. A token it does not set keeps its light
+// value, as it does in the browser.
 const darkBlock = css.match(/:root\[data-theme='dark'\]\s*\{([^}]*)\}/)?.[1] ?? ''
 const darkTokens = new Map([...tokens, ...[...darkBlock.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map((m): [string, string] => [m[1]!, m[2]!.trim()])])
 
@@ -118,9 +118,10 @@ describe('design tokens', () => {
     for (const [fg, bg] of pairs) expect(contrast(fg, bg), `${fg} on ${bg}`).toBeGreaterThanOrEqual(4.5)
   })
 
-  // Primary buttons set their label in --text on the --action green, because white on that green fails AA.
-  it('primary button labels meet WCAG AA', () => {
-    expect(contrast('--text', '--action')).toBeGreaterThanOrEqual(4.5)
+  // Primary and danger buttons and the orange step numbers set their label in --on-brand, because white on the
+  // brand colours fails AA.
+  it('labels on the brand colours meet WCAG AA', () => {
+    for (const bg of ['--action', '--danger', '--attention']) expect(contrast('--on-brand', bg), `--on-brand on ${bg}`).toBeGreaterThanOrEqual(4.5)
   })
 
   // A keyboard user must see the focus ring on every surface. WCAG 1.4.11 asks 3:1 for UI components.
@@ -136,8 +137,8 @@ describe('design tokens', () => {
     expect(value('--figures')).toBe('tabular-nums')
   })
 
-  // The dark palette is opt-in: only an <html> with data-theme="dark" gets it, and the public site never sets
-  // that. It must hold the same AA bar as the light one, because the owner reads money figures in it.
+  // The dark palette applies only to an <html> with data-theme="dark" (lib/theme.ts). It must hold the same AA bar
+  // as the light one: donors and the owner read money figures in it.
   describe('dark palette', () => {
     it('is opt-in, under :root[data-theme=\'dark\'] only', () => {
       expect(darkBlock).not.toBe('')
@@ -156,13 +157,26 @@ describe('design tokens', () => {
         ['--text', '--attention-bg'],
         ['--text', '--success-bg'],
         ['--action-ink', '--success-bg'],
-        // Light text on the brand green, red and orange fails, so in the dark palette a primary or danger button
-        // and the orange tag set their label in --bg (admin-theme.css).
-        ['--bg', '--action'],
-        ['--bg', '--danger'],
-        ['--bg', '--attention'],
+        // Light text on the brand green, red and orange fails, so --on-brand is the page colour here.
+        ['--on-brand', '--action'],
+        ['--on-brand', '--danger'],
+        ['--on-brand', '--attention'],
       ]
       for (const [fg, bg] of pairs) expect(contrast(fg, bg, darkTokens), `dark ${fg} on ${bg}`).toBeGreaterThanOrEqual(4.5)
+    })
+
+    // styles/theme.css paints the page before the theme script runs, and lib/theme.ts colours the browser bar.
+    // Both must be the dark page colour, or a dark device sees one colour, then another.
+    it('the first paint and the browser bar use the dark --bg', () => {
+      expect(readFileSync('src/styles/theme.css', 'utf8')).toContain('background: var(--bg-dark);')
+      expect(value('--bg', [], darkTokens)).toBe(value('--bg-dark'))
+      expect(readFileSync('src/lib/theme.ts', 'utf8')).toContain(`dark: '${value('--bg-dark')}'`)
+    })
+
+    // The poster preview must look like the poster people download, which poster.ts always draws light.
+    it('leaves the paper colours alone', () => {
+      expect(darkBlock).not.toMatch(/--paper/)
+      expect(contrast('--paper-ink', '--paper')).toBeGreaterThanOrEqual(4.5)
     })
 
     it('the focus ring meets 3:1 on every dark surface', () => {

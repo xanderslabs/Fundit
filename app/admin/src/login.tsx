@@ -4,7 +4,7 @@ import '../../src/styles/tokens.css'
 import '../../src/styles/base.css'
 import './ui/admin-theme.css'
 import './admin.css'
-import { applyStoredTheme } from './lib/theme'
+import { applyStoredTheme } from '../../src/lib/theme'
 import { LoginPage } from './LoginPage'
 
 applyStoredTheme()

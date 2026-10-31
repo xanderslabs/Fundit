@@ -3,7 +3,7 @@ import { TURNSTILE_SCRIPT_URL } from '../config'
 export type Turnstile = {
   render(
     el: HTMLElement,
-    options: { sitekey: string; callback: (token: string) => void; 'error-callback': () => void; 'expired-callback': () => void },
+    options: { sitekey: string; theme?: 'light' | 'dark'; callback: (token: string) => void; 'error-callback': () => void; 'expired-callback': () => void },
   ): string | null | undefined
   reset(widgetId?: string): void
   remove(widgetId?: string): void

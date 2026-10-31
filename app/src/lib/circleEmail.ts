@@ -15,6 +15,7 @@ import {
   tagEmailTokens,
   ucw,
 } from './emailAccount'
+import { currentTheme } from './theme'
 
 // Circle's user-controlled wallets web SDK for email accounts: the code screen at sign-in and the approval window
 // for every challenge. The SDK (with its Node polyfills) loads only from here, on first use, in its own chunk.
@@ -101,6 +102,68 @@ const THEME: ThemeColor = {
   titleGradients: [GREEN, GREEN_INK],
 }
 
+// The same screens in the dark palette (tokens.css). Labels on the green use the dark page colour, as --on-brand.
+const DARK_BG = '#0c121c'
+const DARK_TEXT = '#e6eaf0'
+const DARK_MUTED = '#9aa4b8'
+const DARK_INK = '#3fcf47'
+const DARK_RAISED = '#18202e'
+const DARK_SURFACE = '#141b27'
+const DARK_BORDER = '#2a3344'
+const DARK_LINE = '#1f2735'
+const DARK_SUCCESS_BG = '#11301a'
+const DARK_ERROR = '#ff7b72'
+const DARK_THEME: ThemeColor = {
+  ...THEME,
+  bg: DARK_RAISED,
+  backdrop: '#000000',
+  backdropOpacity: 0.6,
+  divider: DARK_LINE,
+  success: DARK_INK,
+  error: DARK_ERROR,
+  textMain: DARK_TEXT,
+  textMain2: DARK_TEXT,
+  textAuxiliary: DARK_MUTED,
+  textAuxiliary2: DARK_MUTED,
+  textSummary: DARK_TEXT,
+  textSummaryHighlight: DARK_INK,
+  textPlaceholder: DARK_MUTED,
+  textDetailToggle: DARK_INK,
+  textInteractive: DARK_INK,
+  interactiveBg: DARK_SUCCESS_BG,
+  tooltipText: DARK_BG,
+  tooltipBg: DARK_TEXT,
+  pinDotBase: DARK_BG,
+  pinDotBaseBorder: DARK_BORDER,
+  enteredPinText: DARK_TEXT,
+  inputText: DARK_TEXT,
+  inputBorderFocusedError: DARK_ERROR,
+  inputBg: DARK_BG,
+  inputBgDisabled: DARK_SURFACE,
+  dropdownBg: DARK_RAISED,
+  dropdownBorderError: DARK_ERROR,
+  mainBtnText: DARK_BG,
+  mainBtnTextDisabled: DARK_MUTED,
+  mainBtnTextOnHover: DARK_BG,
+  mainBtnBgOnHover: DARK_INK,
+  mainBtnBgDisabled: '#1f4a22',
+  secondBtnText: DARK_TEXT,
+  secondBtnTextDisabled: DARK_MUTED,
+  secondBtnTextOnHover: DARK_TEXT,
+  secondBtnBorder: DARK_BORDER,
+  secondBtnBorderOnHover: DARK_MUTED,
+  secondBtnBgOnHover: DARK_SURFACE,
+  secondBtnBorderDisabled: DARK_LINE,
+  plainBtnText: DARK_INK,
+  plainBtnTextDisabled: DARK_MUTED,
+  plainBtnTextOnHover: DARK_INK,
+  plainBtnBg: DARK_RAISED,
+  plainBtnBgOnHover: DARK_SUCCESS_BG,
+  recoverPinHintTitle: DARK_TEXT,
+  recoverPinHintTitleBg: DARK_SUCCESS_BG,
+  recoverPinHint: DARK_MUTED,
+}
+
 // Circle shows an image only from an https URL (anything else gets its own blue icon), so these always come from
 // the live site, even in local development.
 const SITE = 'https://fundit.fun'
@@ -148,7 +211,6 @@ function circle(): Promise<Ready> {
     await setNodeGlobals()
     const { W3SSdk } = await import('@circle-fin/w3s-pw-web-sdk')
     const sdk = new W3SSdk({ appSettings: appSettings() })
-    sdk.setThemeColor(THEME)
     sdk.setResources(RESOURCES)
     let deviceId: string
     try {
@@ -161,7 +223,11 @@ function circle(): Promise<Ready> {
     ready = null
     throw err
   })
-  return ready
+  // Set on every use, so a window opened after the person switches theme matches the page.
+  return ready.then((r) => {
+    r.sdk.setThemeColor(currentTheme() === 'dark' ? DARK_THEME : THEME)
+    return r
+  })
 }
 
 export async function loadCircleSdk(): Promise<W3SSdk> {

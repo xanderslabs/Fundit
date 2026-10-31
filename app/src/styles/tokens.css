@@ -25,7 +25,15 @@
   --danger: #ff3b30;
   /* Darker red for text, because the brand red is below AA on white. */
   --danger-ink: #c0150b;
+  /* Labels on the brand green, red and orange. White on them fails AA, so this is the ink, or the page colour in
+     the dark palette. */
+  --on-brand: var(--text);
   --success-bg: #e8f7e9;
+  /* Paper: the poster preview shows the downloaded poster, which is always light. The dark palette never sets these. */
+  --paper: #ffffff;
+  --paper-ink: #101928;
+  /* The dark page colour, also painted before the theme is known on a dark device (theme.css). */
+  --bg-dark: #0c121c;
   --focus: #586283;
   /* The soft ring around a focused text field. */
   --focus-halo: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent);
@@ -107,13 +115,13 @@
   --logo-height: 32px;
 }
 
-/* The dark palette. Opt-in: only a page that sets data-theme="dark" on <html> gets it (the admin panel does; the
-   public site never does). The brand green, red and orange stay as they are. Every pair meets WCAG AA (see
-   tokens.test.ts). Light text on the brand colours fails, so labels on them use --bg here (admin-theme.css). */
+/* The dark palette. Only a page that sets data-theme="dark" on <html> gets it (lib/theme.ts does, for fundit.fun
+   and the admin panel; the embed page never does). The brand green, red and orange stay as they are. Every pair
+   meets WCAG AA (see tokens.test.ts). Light text on the brand colours fails, so --on-brand is the page colour. */
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --bg: #0c121c;
+  --bg: var(--bg-dark);
   --surface: #141b27;
   --surface-raised: #18202e;
   --text: #e6eaf0;
@@ -123,11 +131,15 @@
   --action-ink: #3fcf47;
   --attention-bg: #3a2510;
   --danger-ink: #ff7b72;
+  --on-brand: var(--bg);
   --success-bg: #11301a;
   --focus: #8e99b0;
   --scrollbar-track: #10161f;
   --scrollbar-thumb: #343e51;
   --scrollbar-thumb-hover: #4b5670;
+  --photo-label: rgb(12 18 28 / 0.9);
+  --icon-plus: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'%3E%3Cpath d='M0 7h14M7 0v14' stroke='%23e6eaf0' stroke-width='2'/%3E%3C/svg%3E");
+  --icon-minus: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'%3E%3Cpath d='M0 7h14' stroke='%23e6eaf0' stroke-width='2'/%3E%3C/svg%3E");
   --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%239aa4b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --shadow-1: 0 4px 12px rgb(0 0 0 / 0.35), 0 1px 2px rgb(0 0 0 / 0.3);
   --shadow-pop: 0 14px 36px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.3);

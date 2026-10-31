@@ -124,7 +124,9 @@
   aspect-ratio: 4 / 5;
   padding: var(--space-3) var(--space-2) var(--space-2);
   border-radius: var(--radius-sm);
-  background: var(--bg);
+  /* Paper, in both themes: it shows the poster as downloaded. */
+  background: var(--paper);
+  color: var(--paper-ink);
   box-shadow: var(--shadow-1);
   transform: rotate(-2deg);
 }

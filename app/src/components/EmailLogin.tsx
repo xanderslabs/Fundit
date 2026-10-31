@@ -3,6 +3,7 @@ import { TURNSTILE_SITE_KEY } from '../config'
 import { CIRCLE_CODE, EmailLoginStopped, loadCircleSdk, openEmailAccount, sendEmailCode } from '../lib/circleEmail'
 import { EmailError, type EmailSession } from '../lib/emailAccount'
 import { explainError } from '../lib/errors'
+import { currentTheme } from '../lib/theme'
 import { loadTurnstile, type Turnstile } from '../lib/turnstile'
 import { Button, Field } from './ui'
 import './Form.css'
@@ -60,6 +61,8 @@ export function EmailLogin({ onDone }: { onDone: (session: EmailSession) => void
         if (!live || !box.current) return
         const id = turnstile.render(box.current, {
           sitekey: TURNSTILE_SITE_KEY,
+          // Its own 'auto' follows the device, not a theme picked on the site.
+          theme: currentTheme(),
           callback: (t) => {
             setToken(t)
             setError((e) => (e === TURNSTILE_FAILED || e === CHECK_PENDING ? null : e))

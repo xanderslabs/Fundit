@@ -1,0 +1,23 @@
+.theme-button {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: var(--hit-target);
+  height: var(--hit-target);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: background var(--duration) var(--ease);
+}
+
+.theme-button:hover {
+  background: var(--line);
+}
+
+.theme-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}

@@ -4,6 +4,7 @@ import { AccountControl } from './AccountMenu'
 import { NetworkTag, networkTagName } from './NetworkTag'
 import { ScrollToTop } from './ScrollToTop'
 import { SocialIcon } from './SocialIcon'
+import { ThemeButton } from './ThemeButton'
 import './Layout.css'
 
 export function Layout() {
@@ -13,10 +14,15 @@ export function Layout() {
       <ScrollToTop />
       <header className="header">
         <Link to="/" className="header-logo" aria-label={networkTagName('Fundit home', NETWORK_TAG)}>
-          <img src="/images/fundit-logo.svg" alt="Fundit" width={139} height={32} />
+          {/* CSS shows the one that matches the theme. */}
+          <img className="header-logo-light" src="/images/fundit-logo.svg" alt="Fundit" width={139} height={32} />
+          <img className="header-logo-dark" src="/images/fundit-logo-dark.svg" alt="Fundit" width={139} height={32} />
           {NETWORK_TAG && <NetworkTag label={NETWORK_TAG} />}
         </Link>
-        <AccountControl />
+        <div className="header-end">
+          <ThemeButton />
+          <AccountControl />
+        </div>
       </header>
       <main className="main">
         <Outlet />

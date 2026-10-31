@@ -3,6 +3,7 @@ import type { Address } from 'viem'
 import { ConnectWallet } from '../../src/components/ConnectWallet'
 import { AddressChip, Button, Card } from '../../src/components/ui'
 import { TURNSTILE_SITE_KEY } from '../../src/config'
+import { currentTheme } from '../../src/lib/theme'
 import { loadTurnstile, type Turnstile } from '../../src/lib/turnstile'
 import { afterSignIn } from './lib/panelPaths'
 import { signIn } from './lib/siweLogin'
@@ -31,6 +32,8 @@ export function LoginPage() {
         if (!live || !box.current) return
         const id = turnstile.render(box.current, {
           sitekey: TURNSTILE_SITE_KEY,
+          // Its own 'auto' follows the device, not a theme picked in the panel.
+          theme: currentTheme(),
           callback: (t) => {
             setToken(t)
             setError((e) => (e === CHECK_FAILED || e === CHECK_PENDING ? null : e))

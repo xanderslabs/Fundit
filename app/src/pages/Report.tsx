@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { useLocation, useSearchParams } from 'react-router'
 import { Banner, Button, Field, PageHeader } from '../components/ui'
 import { TURNSTILE_SITE_KEY } from '../config'
+import { currentTheme } from '../lib/theme'
 import { loadTurnstile, type Turnstile } from '../lib/turnstile'
 import '../components/Form.css'
 import './Report.css'
@@ -51,6 +52,8 @@ export function Report() {
         if (!live || !box.current) return
         const id = turnstile.render(box.current, {
           sitekey: TURNSTILE_SITE_KEY,
+          // Its own 'auto' follows the device, not a theme picked on the site.
+          theme: currentTheme(),
           callback: setToken,
           'error-callback': () => {
             setToken(null)

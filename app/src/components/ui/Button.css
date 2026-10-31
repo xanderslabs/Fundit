@@ -32,10 +32,10 @@
   cursor: default;
 }
 
-/* Ink on the brand green passes WCAG AA; white on it does not. */
+/* White on the brand green fails WCAG AA; --on-brand passes in both palettes. */
 .ui-btn-primary {
   background: var(--action);
-  color: var(--text);
+  color: var(--on-brand);
 }
 
 .ui-btn-primary:hover:not(:disabled) {
@@ -58,10 +58,10 @@
   color: var(--text);
 }
 
-/* Ink on the brand red passes WCAG AA; white on it does not. */
+/* White on the brand red fails WCAG AA; --on-brand passes in both palettes. */
 .ui-btn-danger {
   background: var(--danger);
-  color: var(--text);
+  color: var(--on-brand);
 }
 
 .ui-btn-danger:hover:not(:disabled) {

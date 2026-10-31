@@ -1,0 +1,8 @@
+/* fundit.fun only (main.tsx), never the embed page. Until lib/theme.ts sets data-theme, a dark device gets the
+   dark page colour, so the first paint is not a white flash. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    background: var(--bg-dark);
+  }
+}

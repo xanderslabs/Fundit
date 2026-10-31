@@ -7,7 +7,7 @@ import './ui/admin-theme.css'
 import './admin.css'
 import { AdminApp } from './AdminApp'
 import { type AdminSession, getSession } from './lib/api'
-import { applyStoredTheme } from './lib/theme'
+import { applyStoredTheme } from '../../src/lib/theme'
 
 applyStoredTheme()
 

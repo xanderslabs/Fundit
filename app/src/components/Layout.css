@@ -38,6 +38,35 @@
   width: auto;
 }
 
+.header-logo .header-logo-dark,
+:root[data-theme='dark'] .header-logo .header-logo-light {
+  display: none;
+}
+
+:root[data-theme='dark'] .header-logo .header-logo-dark {
+  display: block;
+}
+
+/* The theme button and the account pill. The pill may shrink, the button may not. */
+.header-end {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.header-end .ui-btn {
+  white-space: nowrap;
+}
+
+/* The logo, its network tag, the theme button and Sign in only just fit on a phone. */
+@media (max-width: 420px) {
+  .header {
+    gap: var(--space-2);
+  }
+}
+
 .main {
   flex: 1;
   width: 100%;
@@ -114,5 +143,30 @@
   .footer-links a,
   .socials a {
     transition: none;
+  }
+}
+
+/* The narrowest phones, where the testnet tag leaves the least room. */
+@media (max-width: 360px) {
+  .header,
+  .header-end {
+    gap: var(--space-1);
+  }
+
+  .header-logo {
+    gap: 0;
+  }
+
+  .header-logo .network-tag {
+    padding-inline: var(--space-1);
+  }
+
+  .header-end .theme-button {
+    width: 36px;
+    height: 36px;
+  }
+
+  .header-end .ui-btn {
+    padding-inline: var(--space-4);
   }
 }

@@ -44,8 +44,3 @@
   border-radius: var(--radius-md);
 }
 
-/* Light text on the brand green and red fails AA, so in the dark palette their labels use the dark page colour. */
-:root[data-theme='dark'] .ui-btn-primary,
-:root[data-theme='dark'] .ui-btn-danger {
-  color: var(--bg);
-}
