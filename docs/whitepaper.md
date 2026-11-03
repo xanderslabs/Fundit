@@ -57,7 +57,6 @@ Fundit uses these Circle and Arc products:
 | USDC and EURC | The two campaign tokens, used through the ERC-20 interface with 6 decimals. |
 | User-controlled wallets | The Fundit account for email sign-in. Circle signs after the person approves, and Fundit sends the transaction to Arc. |
 | CCTP V2 and the Forwarding Service | USDC payouts and account sends to other chains, in one transaction. |
-| Bridge Kit | **Add money** from another chain, behind the `VITE_CROSSCHAIN` flag. |
 
 ## 4. System overview
 
@@ -68,7 +67,7 @@ Fundit has two parts:
   from a Cloudflare Worker with static assets. The same Worker runs the email sign-in API.
 
 ```
-USDC or EURC sent on Arc, or USDC on another chain (Add money)
+USDC or EURC sent on Arc (Add money)
                                  |
                                  v
          Donor's Fundit account (email or wallet account on Arc)
@@ -123,8 +122,8 @@ each way gives its own account with its own address.
 
 - **Email.** The account is a Circle user-controlled wallet. The person enters an email address and a
   code that Circle sends. Circle signs only after the person approves in Circle's window, and Fundit
-  sends the transaction to Arc. Fundit's server never signs. Email sign-in is behind the
-  `VITE_EMAIL_SIGNIN` flag.
+  sends the transaction to Arc. Fundit's server never signs. Email sign-in is on at `fundit.fun`
+  (`VITE_EMAIL_SIGNIN=1`).
 - **Wallet.** The account is the person's own wallet. Browser wallets connect directly (EIP-6963). Only phone wallets use WalletConnect.
   The wallet asks for approval of each transaction.
 
@@ -135,9 +134,9 @@ transaction.
 The account offers these flows:
 
 - **Add money.** The person sends USDC or EURC on Arc to the account address, from any wallet or
-  exchange. Card and bank are coming soon. With `VITE_CROSSCHAIN` on, Bridge Kit
-  also burns USDC on another CCTP chain with the account as the recipient, and the Forwarding Service
-  mints it on Arc.
+  exchange. Card and bank are planned (section 10).
+- **USDC on every network.** The account page reads the person's USDC on Arc and on each CCTP chain
+  Fundit pays out to, with a total.
 - **Send money out.** The account sends USDC or EURC to any address on Arc, or USDC to another CCTP
   chain with the Forwarding Service.
 
@@ -268,13 +267,10 @@ tier, and all reads use public RPC endpoints.
 
 As of October 2026:
 
-- Contracts: deployed on Arc mainnet and verified on Sourcify (exact match). They are not verified on
-  the Arc explorer, which blocks automated verification. The addresses and deploy block are in the
-  table below.
+- Contracts: deployed on Arc mainnet and verified on Sourcify and the Arc explorer. The addresses and
+  deploy block are in the table below.
 - Contracts on Arc testnet: deployed at block `67870064`. The addresses are in the table below.
-- App: `fundit.fun` runs on Arc mainnet. Sign-in is by wallet, or by email when
-  `VITE_EMAIL_SIGNIN=1`. Email sign-in stays off on mainnet until the mainnet email check passes. Add
-  money from another chain is behind `VITE_CROSSCHAIN`.
+- App: `fundit.fun` runs on Arc mainnet, in beta. Sign-in is by email or by wallet.
 - Traction: none yet. Metrics in this paper are placeholders until launch.
 
 Arc mainnet contracts (deploy block `26452579`):
@@ -298,28 +294,26 @@ Arc testnet contracts (deploy block `67870064`):
 1. Done: deploy the factory to Arc testnet and record its address.
 2. Done: run the end-to-end specs on Arc testnet with a test wallet: sign in, create a fundraiser,
    give, withdraw and send money out.
-3. Run a manual email sign-in check on the mainnet build.
-4. Turn on email sign-in on `fundit.fun`.
+3. Done: run a manual email sign-in check on the mainnet build.
+4. Done: turn on email sign-in on `fundit.fun`.
 
 ## 10. Roadmap and grant milestones
 
-The milestones below are proposed for a Circle Developer Grant paid in USDC on delivery. Targets in
-brackets are placeholders to agree with the program.
+Fundit is live on Arc mainnet in beta. The milestones below are proposed for a Circle Developer
+Grant of 5,000 USDC. Every milestone ships on mainnet.
 
 | Milestone | Deliverable | Evidence |
 | --- | --- | --- |
-| M1: Mainnet launch | Factory deployed and app live on `fundit.fun` (both done), email sign-in released | Arc explorer links, live transactions |
-| M2: Add money from other chains | `VITE_CROSSCHAIN` enabled after testnet checks | Live transactions for each source chain |
-| M3: Audit | Third-party review of `Campaign` and `CampaignFactory`, fixes in a new factory if needed | Published report |
-| M4: Adoption | [placeholder: number of campaigns] campaigns and [placeholder: USDC volume] raised | On-chain factory data |
-| M5: V2 card donations | Onramp Kit card donations into campaigns | Live campaign with a card donation |
+| M1: Give from any chain | Donors give USDC from Ethereum, Base, Arbitrum, OP Mainnet, Avalanche, Polygon or Solana into any Fundit on Arc with one signature, for email and wallet accounts. Fundit's relayer, a Circle developer-controlled smart account, submits the CCTP V2 burn with gas paid by Circle Gas Station. | Mainnet gifts from other chains, read from campaign events and CCTP messages |
+| M2: Out of beta | An independent review of `Campaign`, `CampaignFactory` and the relayer, with every finding fixed and the report published. Then the full launch with the first partner causes. | Published report, live Fundits from partner causes |
+| M3: Fundit V1.5, open to everyone | Card and other fiat gifts through Circle's Onramp and other integrations, so people without crypto can give to any Fundit. | Mainnet gifts paid by card |
 
-Later ideas, not milestones yet:
+Planned for V2, not milestones yet:
 
-- **Private giving.** Gifts through a zero-knowledge (ZK) pool, so the donor's address is not linked to
-  the gift on chain.
-- **Giving agent.** An agent for giving that connects wallets through Reown. No agent will hold a key
-  that controls money.
+- **Giving agent.** Recurring gifts from the donor's own account, within limits the donor signs up
+  front. No agent will hold a key that controls money.
+- **Private giving.** Gifts through a zero-knowledge (ZK) pool, so the donor's address is not linked
+  to the gift on chain. It needs its own audit before mainnet.
 
 ## 11. Risks
 
@@ -327,8 +321,8 @@ Later ideas, not milestones yet:
   the deploy. A new EURC route needs a new factory.
 - **Lost access.** Nobody can recover an email account without its email address, and Fundit cannot
   recover a wallet account. Each person keeps their own email address and wallet safe.
-- **No audit yet.** Mitigated by tests, fork tests, Slither and testnet runs. An audit is milestone
-  M3.
+- **No audit yet.** Mitigated by tests, fork tests, Slither and testnet runs. An independent review is milestone
+  M2.
 
 ## References
 
