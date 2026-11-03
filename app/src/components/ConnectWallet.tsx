@@ -7,8 +7,8 @@ import { qrMatrix, qrPath } from '../lib/qr'
 import { Button } from './ui'
 import './SignInOptions.css'
 
-// Fundit's own wallet list, used by sign-in and the From another chain tab. Importing it loads wagmi, so both load it
-// with import() only once the person asks to connect a wallet.
+// Fundit's own wallet list, used by sign-in. Importing it loads wagmi, so sign-in loads it with import() only once
+// the person asks to connect a wallet.
 
 const SWITCH_REFUSED = 'Your wallet did not switch to the Arc network. Connect again and approve the switch.'
 const PHONE = 'walletConnect'

@@ -12,7 +12,7 @@ import './styles/theme.css'
 // Before the first render, so a dark device never sees a light flash (the CSP allows no inline script).
 applyStoredTheme()
 
-// No wallet code at start. Wallet sign-in and the bridge tab load wagmi when they open (components/WalletTabs.tsx).
+// No wallet code at start. Wallet sign-in loads wagmi when it opens (components/SignInOptions.tsx).
 const queryClient = new QueryClient()
 
 createRoot(document.getElementById('root')!).render(

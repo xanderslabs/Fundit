@@ -50,9 +50,6 @@ The deployed values are the constructor arguments in
 
 ## Circle and Arc products used
 
-One build flag changes what ships: `VITE_CROSSCHAIN` turns on **Add money** from another chain. It is off
-by default ([`app/src/config.ts`](app/src/config.ts)).
-
 | Product | How Fundit uses it | Code | Default build |
 | --- | --- | --- | --- |
 | Arc | Home chain for every campaign. Gas is paid in USDC. | [`app/src/config.ts`](app/src/config.ts) | On |
@@ -62,7 +59,6 @@ by default ([`app/src/config.ts`](app/src/config.ts)).
 | CCTP V2 (`TokenMessengerV2`) | Creator payouts, and **Send money out** from a Fundit account, in USDC to the CCTP chains in `CCTP_CHAINS`. | [`Campaign.sol`](contracts/src/Campaign.sol#L217-L231), [`app/src/lib/payout.ts`](app/src/lib/payout.ts), [`app/src/lib/accountWithdraw.ts`](app/src/lib/accountWithdraw.ts) | On |
 | CCTP Forwarding Service | Hook data on every cross-chain payout and send, so Circle submits the destination mint. | [`app/src/config.ts`](app/src/config.ts) (`FORWARD_HOOK_DATA`) | On |
 | CCTP V2 fees API (Iris) | Fast and Standard fee quotes with forwarding. | [`app/src/lib/iris.ts`](app/src/lib/iris.ts) | On |
-| Bridge Kit | **Add money** from another chain: burns USDC on the person's chain with their Fundit account as the recipient. | [`app/src/lib/bridge.ts`](app/src/lib/bridge.ts), [`AddMoneyPanel.tsx`](app/src/components/AddMoneyPanel.tsx) | Behind `VITE_CROSSCHAIN` |
 
 On Arc mainnet, `CCTP_CHAINS` is Ethereum, Avalanche, OP Mainnet, Arbitrum, Base and Polygon. On Arc
 testnet, it is Ethereum Sepolia and Base Sepolia.
@@ -76,14 +72,13 @@ other Circle product not listed above.
 ### Wallet connections
 
 Browser wallets connect directly, found through EIP-6963. WalletConnect (through a Reown project ID)
-pairs phone wallets for wallet sign-in. No Reown interface is used. The **From another chain** tab
-(`VITE_CROSSCHAIN`, off by default) also connects a wallet.
+pairs phone wallets for wallet sign-in. No Reown interface is used.
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    W["USDC or EURC sent on Arc, or<br/>USDC on another chain (VITE_CROSSCHAIN)"] -- "Add money" --> A
+    W["USDC or EURC sent on Arc"] -- "Add money" --> A
     A["Donor's Fundit account<br/>(email or wallet account on Arc)"] -- "approve, then donate()<br/>in one transaction" --> C
     F["CampaignFactory<br/>(fees capped at 5%)"] -- "CREATE2 clone,<br/>fees copied once" --> C
     C["Campaign escrow on Arc<br/>(one EIP-1167 clone per fundraiser)"]
@@ -142,8 +137,7 @@ action with several calls, such as approve and donate, goes out as one transacti
 - **Add money.** The **Add money** button on **My page** opens a panel. Every Add money link in the app
   opens `/me?add=1`. The panel shows the account address, with a copy button and a QR code, for USDC or
   EURC sent on Arc from any wallet or exchange. Card and bank are coming soon. A wallet connects only for
-  wallet sign-in. With `VITE_CROSSCHAIN=1`, a **From another chain** tab takes USDC from
-  another chain through Bridge Kit. See [`AddMoneyPanel.tsx`](app/src/components/AddMoneyPanel.tsx).
+  wallet sign-in. See [`AddMoneyPanel.tsx`](app/src/components/AddMoneyPanel.tsx).
 - **Give.** The Fundit account approves the campaign and calls `donate` in one transaction. If the
   balance is too low, the **Give** panel links to **Add money**. See
   [`DonatePanel.tsx`](app/src/components/DonatePanel.tsx).
@@ -300,7 +294,6 @@ From [`app/.env.example`](app/.env.example):
 | `VITE_ARC_RPC_URL` | Arc RPC override. Leave it empty to use the network's own RPC. If you set it, it must point at the chosen network. |
 | `VITE_MAINNET_RPC_URL` | Ethereum mainnet RPC. Defaults to `https://ethereum-rpc.publicnode.com`. |
 | `VITE_BETA` | Set to `1` to show the Beta tag on mainnet. Empty by default. A testnet build always shows the Testnet tag. |
-| `VITE_CROSSCHAIN` | Set to `1` to offer **Add money** from another chain. Off by default. Payouts to other chains in **Manage** do not depend on it. |
 
 If you change an RPC host, add it to `connect-src` in `app/public/_headers`.
 
@@ -346,7 +339,6 @@ costs the funder about 0.02 to 0.03 testnet USDC in gas. See [`app/e2e/README.md
   [Arc testnet](#arc-testnet-chain-id-5042002). The end-to-end suite runs on them.
 - App: live at [fundit.fun](https://fundit.fun) on Arc mainnet. Sign-in is by wallet, or by email when
   `VITE_EMAIL_SIGNIN=1`, which fundit.fun sets. Unit tests run with mocks.
-- `VITE_CROSSCHAIN`: off by default.
 - EURC: Arc only. On Arc mainnet, CCTP cannot burn EURC today
   (`depositForBurn(EURC)` reverts with "Burn token not supported" on a fork for domains 0, 1, 6 and
   14). The factory's EURC payout list is fixed at deploy and is empty

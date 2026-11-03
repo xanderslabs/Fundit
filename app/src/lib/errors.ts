@@ -1,7 +1,6 @@
 import { decodeErrorResult, type Hex, InsufficientFundsError, UserRejectedRequestError } from 'viem'
 import { campaignAbi } from '../abi/campaign'
 import { factoryAbi } from '../abi/factory'
-import { CCTP_CHAINS, CHAIN_LABELS, NETWORK } from '../config'
 import { formatAmount } from './format'
 
 // Plain text for every custom error in Campaign and CampaignFactory. errors.test.ts checks none is missing.
@@ -50,61 +49,15 @@ const RATE_LIMITED = 'Too many requests right now. Wait a minute and try again.'
 const TIMED_OUT = 'The network took too long to answer. Try again in a moment.'
 const NETWORK_DOWN = "Fundit couldn't reach the network. Check your connection and try again."
 
-// Every link in the error's cause chain, outermost first. Circle's kits wrap the original error as
-// cause: { trace: { rawError } }, so a link with no cause continues at its trace.rawError.
+// Every link in the error's cause chain, outermost first.
 function chain(e: unknown): unknown[] {
   const out: unknown[] = []
   let cur = e
   while (cur && typeof cur === 'object' && out.length < 20) {
     out.push(cur)
-    const x = cur as { cause?: unknown; trace?: { rawError?: unknown } }
-    cur = x.cause ?? x.trace?.rawError
+    cur = (cur as { cause?: unknown }).cause
   }
   return out
-}
-
-// Circle's KitError for an RPC failure (RPC_ENDPOINT_ERROR) reuses code 4001, which EIP-1193 uses for a
-// user rejection. Such a link is a network problem, never a cancel.
-function isKitRpcError(x: unknown): boolean {
-  const { name, type } = x as { name?: unknown; type?: unknown }
-  return type === 'RPC' || (typeof name === 'string' && name.startsWith('RPC_'))
-}
-
-// Bridge Kit chain names (Base, or Base_Sepolia on testnet). Its messages fall back to 'token' and 'native token'.
-function nativeSymbol(chainName: string): string {
-  return CCTP_CHAINS.find((c) => c.bridgeKitChain === chainName)?.viemChain.nativeCurrency.symbol ?? 'native token'
-}
-
-// The name people know, for a Bridge Kit chain name (OP Mainnet for Optimism, Base Sepolia for Base_Sepolia).
-function chainLabel(chainName: string): string {
-  if (chainName === NETWORK.bridgeKitChain) return CHAIN_LABELS.Arc
-  const chain = CCTP_CHAINS.find((c) => c.bridgeKitChain === chainName)
-  return chain ? CHAIN_LABELS[chain.key] : chainName
-}
-
-// Plain text for Circle Bridge Kit errors, by KitError name. The messages name the token and chain.
-function kitText(e: unknown): string | null {
-  for (const x of chain(e)) {
-    const { name, message } = x as { name?: unknown; message?: unknown }
-    if (typeof message !== 'string') continue
-    if (name === 'BALANCE_INSUFFICIENT_TOKEN') {
-      const m = /^Insufficient (\S+) balance on (.+)$/.exec(message)
-      // Only USDC moves on this path, so the 'token' placeholder means USDC.
-      if (m) return `You do not have enough ${m[1] === 'token' ? 'USDC' : m[1]} on ${chainLabel(m[2]!)}.`
-    }
-    if (name === 'BALANCE_INSUFFICIENT_GAS') {
-      const m = /^Insufficient (.+) on (.+) to cover gas fees$/.exec(message)
-      if (m) return `You do not have enough ${m[1] === 'native token' ? nativeSymbol(m[2]!) : m[1]} on ${chainLabel(m[2]!)} to pay the network fee.`
-    }
-    if (isKitRpcError(x)) {
-      const traced = (x as { cause?: { trace?: { chain?: unknown } } }).cause?.trace?.chain
-      const chainName = typeof traced === 'string' && traced !== '' ? traced : / on (.+)$/.exec(message)?.[1]
-      return chainName
-        ? `The ${chainLabel(chainName)} network did not answer. Try again in a moment.`
-        : 'The network did not answer. Try again in a moment.'
-    }
-  }
-  return null
 }
 
 // A message written for the person, shown as it is.
@@ -112,7 +65,7 @@ export class PlainError extends Error {}
 
 export function isUserRejection(e: unknown): boolean {
   return chain(e).some(
-    (x) => x instanceof UserRejectedRequestError || (!isKitRpcError(x) && (x as { code?: unknown }).code === UserRejectedRequestError.code),
+    (x) => x instanceof UserRejectedRequestError || (x as { code?: unknown }).code === UserRejectedRequestError.code,
   )
 }
 
@@ -205,11 +158,5 @@ export function explainError(e: unknown): string {
   // Every real failure is logged raw for support, whatever text the person gets. The page never shows it.
   console.error(e)
   if (isInsufficientFunds(e)) return NO_NETWORK_FEE
-  return kitText(e) ?? revertText(e) ?? networkText(e) ?? FALLBACK
-}
-
-// For adding money from another chain, which can fail after the wallet already approved something. No text it
-// can return says "Nothing was sent".
-export function explainAfterApproval(e: unknown): string {
-  return explainError(e)
+  return revertText(e) ?? networkText(e) ?? FALLBACK
 }

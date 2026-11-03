@@ -68,9 +68,6 @@ describe('NETWORKS', () => {
       ['Polygon', 137, 7, '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', 'https://polygon.drpc.org'],
     ])
     expect(n.chainLabels.Arc).toBe('Arc')
-    // Circle Bridge Kit chain names. On mainnet they are the same as our keys.
-    expect(n.bridgeKitChain).toBe('Arc')
-    expect(n.cctpChains.map((c) => c.bridgeKitChain)).toEqual(['Ethereum', 'Avalanche', 'Optimism', 'Arbitrum', 'Base', 'Polygon'])
   })
 
   it('resolves the Arc testnet values', () => {
@@ -89,9 +86,6 @@ describe('NETWORKS', () => {
       ['Base', 84532, 6, '0x036CbD53842c5426634e7929541eC2318f3dCF7e', 'https://sepolia.base.org'],
     ])
     expect(n.chainLabels).toMatchObject({ Arc: 'Arc Testnet', Ethereum: 'Ethereum Sepolia', Base: 'Base Sepolia' })
-    // Bridge Kit's Blockchain enum names for the testnets. 'Base' here would bridge on mainnet.
-    expect(n.bridgeKitChain).toBe('Arc_Testnet')
-    expect(n.cctpChains.map((c) => c.bridgeKitChain)).toEqual(['Ethereum_Sepolia', 'Base_Sepolia'])
   })
 
   // viem's arcTestnet still lists the old .arc.network hosts, which the CSP does not allow.

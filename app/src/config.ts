@@ -10,9 +10,6 @@ export const FORWARD_HOOK_DATA: Hex = '0x636374702d666f7277617264000000000000000
 
 export type CctpChainKey = 'Ethereum' | 'Avalanche' | 'Optimism' | 'Arbitrum' | 'Base' | 'Polygon'
 
-// Chain names in Circle Bridge Kit's Blockchain enum (@circle-fin/bridge-kit chains.d.ts).
-export type BridgeKitChain = CctpChainKey | 'Ethereum_Sepolia' | 'Base_Sepolia'
-
 export type CctpChain = {
   key: CctpChainKey
   chainId: number
@@ -22,7 +19,6 @@ export type CctpChain = {
   rpcUrl: string
   // false where only the standard (slow) CCTP transfer is offered.
   fast: boolean
-  bridgeKitChain: BridgeKitChain
 }
 
 // Everything that differs between Arc mainnet and Arc testnet. Values are checked on-chain; see the task 1 report
@@ -42,8 +38,6 @@ export type NetworkConfig = {
   tokenMessengerV2: Address
   irisUrl: string
   cctpChains: readonly CctpChain[]
-  // Arc's name in Circle Bridge Kit.
-  bridgeKitChain: 'Arc' | 'Arc_Testnet'
   // The names people see for each chain.
   chainLabels: Record<'Arc' | CctpChainKey, string>
   // Accounts that made Fundits only to test the app, in lower case. Their Fundits are left out of public lists
@@ -61,7 +55,6 @@ const env = {
   VITE_FACTORY_ADDRESS: import.meta.env?.VITE_FACTORY_ADDRESS,
   VITE_FACTORY_DEPLOY_BLOCK: import.meta.env?.VITE_FACTORY_DEPLOY_BLOCK,
   VITE_REOWN_PROJECT_ID: import.meta.env?.VITE_REOWN_PROJECT_ID,
-  VITE_CROSSCHAIN: import.meta.env?.VITE_CROSSCHAIN,
   VITE_BETA: import.meta.env?.VITE_BETA,
   VITE_EMAIL_SIGNIN: import.meta.env?.VITE_EMAIL_SIGNIN,
   VITE_CIRCLE_UCW_APP_ID: import.meta.env?.VITE_CIRCLE_UCW_APP_ID,
@@ -88,14 +81,13 @@ export const NETWORKS: Record<ArcNetwork, NetworkConfig> = {
     tokenMessengerV2: '0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d',
     irisUrl: 'https://iris-api.circle.com',
     cctpChains: [
-      { key: 'Ethereum', chainId: 1, domain: 0, usdc: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', viemChain: mainnet, rpcUrl: MAINNET_RPC_URL, fast: true, bridgeKitChain: 'Ethereum' },
-      { key: 'Avalanche', chainId: 43114, domain: 1, usdc: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E', viemChain: avalanche, rpcUrl: 'https://api.avax.network/ext/bc/C/rpc', fast: false, bridgeKitChain: 'Avalanche' },
-      { key: 'Optimism', chainId: 10, domain: 2, usdc: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', viemChain: optimism, rpcUrl: 'https://mainnet.optimism.io', fast: true, bridgeKitChain: 'Optimism' },
-      { key: 'Arbitrum', chainId: 42161, domain: 3, usdc: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', viemChain: arbitrum, rpcUrl: 'https://arb1.arbitrum.io/rpc', fast: true, bridgeKitChain: 'Arbitrum' },
-      { key: 'Base', chainId: 8453, domain: 6, usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', viemChain: base, rpcUrl: BASE_RPC_URL, fast: true, bridgeKitChain: 'Base' },
-      { key: 'Polygon', chainId: 137, domain: 7, usdc: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', viemChain: polygon, rpcUrl: 'https://polygon.drpc.org', fast: false, bridgeKitChain: 'Polygon' },
+      { key: 'Ethereum', chainId: 1, domain: 0, usdc: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', viemChain: mainnet, rpcUrl: MAINNET_RPC_URL, fast: true },
+      { key: 'Avalanche', chainId: 43114, domain: 1, usdc: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E', viemChain: avalanche, rpcUrl: 'https://api.avax.network/ext/bc/C/rpc', fast: false },
+      { key: 'Optimism', chainId: 10, domain: 2, usdc: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', viemChain: optimism, rpcUrl: 'https://mainnet.optimism.io', fast: true },
+      { key: 'Arbitrum', chainId: 42161, domain: 3, usdc: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', viemChain: arbitrum, rpcUrl: 'https://arb1.arbitrum.io/rpc', fast: true },
+      { key: 'Base', chainId: 8453, domain: 6, usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', viemChain: base, rpcUrl: BASE_RPC_URL, fast: true },
+      { key: 'Polygon', chainId: 137, domain: 7, usdc: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', viemChain: polygon, rpcUrl: 'https://polygon.drpc.org', fast: false },
     ],
-    bridgeKitChain: 'Arc',
     // Optimism's own name for its chain is OP Mainnet.
     chainLabels: { Arc: 'Arc', Ethereum: 'Ethereum', Avalanche: 'Avalanche', Optimism: 'OP Mainnet', Arbitrum: 'Arbitrum', Base: 'Base', Polygon: 'Polygon' },
     testCreators: [],
@@ -117,10 +109,9 @@ export const NETWORKS: Record<ArcNetwork, NetworkConfig> = {
     irisUrl: 'https://iris-api-sandbox.circle.com',
     // Only the two source chains whose USDC was checked on-chain. Public RPCs as viem lists them.
     cctpChains: [
-      { key: 'Ethereum', chainId: sepolia.id, domain: 0, usdc: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', viemChain: sepolia, rpcUrl: sepolia.rpcUrls.default.http[0], fast: true, bridgeKitChain: 'Ethereum_Sepolia' },
-      { key: 'Base', chainId: baseSepolia.id, domain: 6, usdc: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', viemChain: baseSepolia, rpcUrl: baseSepolia.rpcUrls.default.http[0], fast: true, bridgeKitChain: 'Base_Sepolia' },
+      { key: 'Ethereum', chainId: sepolia.id, domain: 0, usdc: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', viemChain: sepolia, rpcUrl: sepolia.rpcUrls.default.http[0], fast: true },
+      { key: 'Base', chainId: baseSepolia.id, domain: 6, usdc: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', viemChain: baseSepolia, rpcUrl: baseSepolia.rpcUrls.default.http[0], fast: true },
     ],
-    bridgeKitChain: 'Arc_Testnet',
     chainLabels: {
       Arc: 'Arc Testnet',
       Ethereum: 'Ethereum Sepolia',
@@ -237,9 +228,6 @@ export const MULTICALL3_FROM: Address = '0x522fAf9A91c41c443c66765030741e4AaCe14
 // What every Fundit account (email or wallet) keeps back for the network fee: 0.01 USDC. Arc network fees are
 // paid in USDC, and its own transaction pays gas from the same balance.
 export const EOA_GAS_RESERVE = 10_000n
-// Add money from another chain (bridging USDC into the Fundit account). Off by default. A transfer already saved
-// in the browser is still tracked either way.
-export const CROSSCHAIN_ENABLED: boolean = env.VITE_CROSSCHAIN === '1'
 // Continue with email in the sign-in dialog. Off unless VITE_EMAIL_SIGNIN=1.
 export const EMAIL_SIGNIN: boolean = env.VITE_EMAIL_SIGNIN === '1'
 // Circle's App ID for user-controlled wallets (email accounts) and the Cloudflare Turnstile site key the email

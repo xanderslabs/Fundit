@@ -1,4 +1,4 @@
-// Keys wagmi writes to localStorage once a wallet has connected (wallet sign-in or the bridge tab).
+// Keys wagmi writes to localStorage once a wallet has connected (wallet sign-in).
 const REMEMBERED_WALLET_KEYS = ['wagmi.recentConnectorId', 'wagmi.store']
 
 function forgetWallet() {

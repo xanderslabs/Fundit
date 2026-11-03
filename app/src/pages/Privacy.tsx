@@ -85,7 +85,7 @@ export function Privacy() {
       <ul>
         <li>Public RPC providers for Arc, Ethereum and the other supported chains, to read and send transactions.</li>
         <li>
-          Circle, for email accounts (user-controlled wallets) and for cross-chain transfers (CCTP, Bridge Kit and the Forwarding Service).
+          Circle, for email accounts (user-controlled wallets) and for cross-chain transfers (CCTP and the Forwarding Service).
         </li>
         <li>WalletConnect, only when you sign in with a phone wallet.</li>
         <li>The sites that host fundraiser images and avatars.</li>

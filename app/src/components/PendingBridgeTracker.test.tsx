@@ -26,7 +26,7 @@ function setVisibility(state: 'visible' | 'hidden') {
 }
 
 function savePending(createdAt: number) {
-  localStorage.setItem(KEY, JSON.stringify([{ kind: 'bridge', campaign: CAMPAIGN, burnTx: BURN, srcDomain: 6, amount: '25', createdAt }]))
+  localStorage.setItem(KEY, JSON.stringify([{ kind: 'payout', campaign: CAMPAIGN, burnTx: BURN, srcDomain: 26, destDomain: 6, amount: '25', createdAt }]))
 }
 
 afterEach(() => {
@@ -38,36 +38,27 @@ afterEach(() => {
 })
 
 describe('PendingBridgeTracker', () => {
-  // Saved when the wallet sent, before any hash: the donor still learns something is in flight after a reload.
-  it('shows a submitted transfer that has no hash yet, without polling', async () => {
-    localStorage.setItem(KEY, JSON.stringify([{ kind: 'submitted', id: 'a', campaign: CAMPAIGN, srcDomain: 6, amount: '25', createdAt: Date.now() }]))
-    const fetchFn = stubFetch(() => ({ messages: [] }))
-    wrap(<PendingBridgeTracker campaign={CAMPAIGN} />)
-    expect(await screen.findByText(/Submitted, waiting for confirmation/)).toBeTruthy()
-    expect(fetchFn).not.toHaveBeenCalled()
-  })
-
-  // The mint happens even if the tab closed. After a reload the donor still sees it, and the total refreshes.
-  it('picks up a saved transfer after reload and refreshes the campaign once minted', async () => {
+  // The mint happens even if the tab closed. After a reload the organiser still sees it, and the campaign refreshes.
+  it('picks up a saved payout after reload and refreshes the campaign once minted', async () => {
     savePending(Date.now())
     const fetchFn = stubFetch(() => ({ messages: [{ status: 'complete', forwardTxHash: `0x${'ef'.repeat(32)}` }] }))
     const client = new QueryClient()
     const invalidate = vi.spyOn(client, 'invalidateQueries')
     wrap(<PendingBridgeTracker campaign={CAMPAIGN} />, client)
-    expect(await screen.findByText(/reached the Fundit/)).toBeTruthy()
-    expect(fetchFn.mock.calls[0]![0]).toContain(`/v2/messages/6?transactionHash=${BURN}`)
+    expect(await screen.findByText('25 USDC to Base arrived.')).toBeTruthy()
+    expect(fetchFn.mock.calls[0]![0]).toContain(`/v2/messages/26?transactionHash=${BURN}`)
     const keys = invalidate.mock.calls.map(([f]) => JSON.stringify(f?.queryKey))
     expect(keys).toContain(JSON.stringify(['campaign', CAMPAIGN.toLowerCase()]))
   })
 
-  it('shows nothing for transfers to another campaign', () => {
+  it('shows nothing for payouts of another campaign', () => {
     savePending(Date.now())
     stubFetch(() => ({ messages: [] }))
     wrap(<PendingBridgeTracker campaign={getAddress('0x00000000000000000000000000000000000000b2')} />)
     expect(screen.queryByText(/on its way/)).toBeNull()
   })
 
-  // Polling a hidden tab wastes the donor's battery and Circle's rate limit.
+  // Polling a hidden tab wastes the person's battery and Circle's rate limit.
   it('polls only while the tab is visible', async () => {
     savePending(Date.now())
     setVisibility('hidden')
@@ -81,26 +72,6 @@ describe('PendingBridgeTracker', () => {
     await waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1))
   })
 
-  // After 2 hours something is wrong. One last look at Iris, then stop and send the donor to the explorer.
-  it('asks Iris once more after 2 hours, then stops and links the burn on the source-chain explorer', async () => {
-    savePending(Date.now() - 2 * 60 * 60 * 1000 - 1)
-    const fetchFn = stubFetch(() => ({ messages: [] }))
-    wrap(<PendingBridgeTracker campaign={CAMPAIGN} />)
-    const link = await screen.findByRole('link', { name: /Check the explorer/ })
-    expect(link.getAttribute('href')).toBe(`https://basescan.org/tx/${BURN}`)
-    await new Promise((r) => setTimeout(r, 20))
-    expect(fetchFn).toHaveBeenCalledTimes(1)
-  })
-
-  // Money that left from the person's own wallet on another chain: only that wallet's history shows what happened.
-  it('sends an overdue outside-wallet transfer to the wallet activity on its chain', () => {
-    localStorage.setItem(KEY, JSON.stringify([{ kind: 'submitted', id: 'a', campaign: CAMPAIGN, srcDomain: 6, amount: '25', createdAt: Date.now() - 2 * 60 * 60 * 1000 - 1 }]))
-    stubFetch(() => ({ messages: [] }))
-    wrap(<PendingBridgeTracker campaign={CAMPAIGN} />)
-    expect(screen.getByText(/Check your wallet's activity on Base/)).toBeTruthy()
-    expect(screen.queryByText(/Fundit account's activity/)).toBeNull()
-  })
-
   // Money that left from the Fundit account on Arc: the person has no other wallet to check, so point to the
   // account's own page on the Arc explorer.
   it('sends an overdue transfer from Arc to the Fundit account on the Arc explorer', async () => {
@@ -110,7 +81,7 @@ describe('PendingBridgeTracker', () => {
       JSON.stringify([{ kind: 'payout', campaign: CAMPAIGN, burnTx: BURN, srcDomain: 26, destDomain: 6, amount: '25', createdAt: Date.now() - 2 * 60 * 60 * 1000 - 1 }]),
     )
     stubFetch(() => ({ messages: [] }))
-    wrap(<PendingBridgeTracker campaign={CAMPAIGN} account={ACCOUNT} kind="payout" />)
+    wrap(<PendingBridgeTracker campaign={CAMPAIGN} account={ACCOUNT} />)
     expect(await screen.findByText('25 USDC to Base has not been confirmed yet.')).toBeTruthy()
     const link = screen.getByRole('link', { name: "See your Fundit account's activity on the Arc explorer." })
     expect(link.getAttribute('href')).toBe(`${EXPLORER_URL}/address/${ACCOUNT}`)
@@ -124,23 +95,23 @@ describe('PendingBridgeTracker', () => {
       JSON.stringify([{ kind: 'payout', campaign: CAMPAIGN, burnTx: BURN, srcDomain: 26, destDomain: 6, amount: '25', createdAt: Date.now() - 2 * 60 * 60 * 1000 - 1 }]),
     )
     stubFetch(() => ({ messages: [] }))
-    wrap(<PendingBridgeTracker campaign={CAMPAIGN} kind="payout" />)
+    wrap(<PendingBridgeTracker campaign={CAMPAIGN} />)
     const link = await screen.findByRole('link', { name: /Fundit account's activity/ })
     expect(link.getAttribute('href')).toBe(`${EXPLORER_URL}/address/${CAMPAIGN}`)
   })
 
-  // A transfer that arrived while the tab was closed must not show as overdue, nor keep blocking donations.
-  it('marks an overdue transfer minted when the last Iris check finds the mint', async () => {
+  // A payout that arrived while the tab was closed must not show as overdue, and one more can then be sent.
+  it('marks an overdue payout minted when the last Iris check finds the mint', async () => {
     savePending(Date.now() - 2 * 60 * 60 * 1000 - 1)
     stubFetch(() => ({ messages: [{ status: 'complete', forwardTxHash: `0x${'ef'.repeat(32)}` }] }))
     wrap(<PendingBridgeTracker campaign={CAMPAIGN} />)
-    expect(await screen.findByText(/reached the Fundit/)).toBeTruthy()
-    expect(screen.queryByRole('link', { name: /Check the explorer/ })).toBeNull()
+    expect(await screen.findByText('25 USDC to Base arrived.')).toBeTruthy()
+    expect(screen.queryByRole('link', { name: /Fundit account's activity/ })).toBeNull()
     expect(JSON.parse(localStorage.getItem(KEY)!)[0]).toMatchObject({ burnTx: BURN, minted: true })
   })
 
-  // Another tab saved a transfer. The browser tells this tab through a storage event.
-  it('shows a transfer another tab saved, on the storage event', async () => {
+  // Another tab saved a payout. The browser tells this tab through a storage event.
+  it('shows a payout another tab saved, on the storage event', async () => {
     stubFetch(() => ({ messages: [] }))
     wrap(<PendingBridgeTracker campaign={CAMPAIGN} />)
     expect(screen.queryByText(/on its way/)).toBeNull()

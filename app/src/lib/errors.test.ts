@@ -8,7 +8,7 @@ import {
 import { describe, expect, it, vi } from 'vitest'
 import { campaignAbi } from '../abi/campaign'
 import { factoryAbi } from '../abi/factory'
-import { CANCELLED, explainAfterApproval, explainError, FALLBACK, needsAddMoney, PlainError, WrongWalletAccount } from './errors'
+import { CANCELLED, explainError, FALLBACK, needsAddMoney, PlainError, WrongWalletAccount } from './errors'
 
 const GENERIC = FALLBACK
 
@@ -66,116 +66,6 @@ describe('explainError', () => {
     expect(explainError({})).toBe(FALLBACK)
     expect(explainError(undefined)).toBe(FALLBACK)
     log.mockRestore()
-  })
-  // Bridge Kit wraps wallet errors in a KitError whose cause is { trace: { rawError } }, not an Error chain.
-  it('finds a wallet rejection under a KitError trace.rawError', () => {
-    const kitError = Object.assign(new Error('Unknown blockchain error on Base: User rejected the request.'), {
-      name: 'ONCHAIN_UNKNOWN_BLOCKCHAIN_ERROR',
-      cause: { trace: { chain: 'Base', rawError: new UserRejectedRequestError(new Error('x')) } },
-    })
-    expect(explainError(kitError)).toBe("You cancelled the request. Try again when you're ready.")
-  })
-
-  // A balance problem is the donor's to fix. It needs plain words, not the generic "Nothing was sent." text.
-  it('explains a Bridge Kit insufficient balance error in plain words', () => {
-    const token = Object.assign(new Error('Insufficient USDC balance on Base'), {
-      name: 'BALANCE_INSUFFICIENT_TOKEN',
-      cause: { trace: { chain: 'Base', token: 'USDC' } },
-    })
-    expect(explainError(token)).toBe('You do not have enough USDC on Base.')
-    const gas = Object.assign(new Error('Insufficient ETH on Base to cover gas fees'), {
-      name: 'BALANCE_INSUFFICIENT_GAS',
-      cause: { trace: { chain: 'Base' } },
-    })
-    expect(explainError(gas)).toBe('You do not have enough ETH on Base to pay the network fee.')
-    // Wrapped one level down, as a failed bridge step carries it.
-    expect(explainError(new Error('Transfer failed', { cause: token }))).toBe('You do not have enough USDC on Base.')
-  })
-  // Circle's RPC_ENDPOINT_ERROR reuses code 4001, which EIP-1193 means a user rejection. It is a network problem.
-  it('does not read a Bridge Kit RPC error with code 4001 as a cancel', () => {
-    const rpc = Object.assign(new Error('RPC endpoint error on Base'), {
-      name: 'RPC_ENDPOINT_ERROR',
-      code: 4001,
-      type: 'RPC',
-      cause: { trace: { chain: 'Base', rawError: new Error('gas estimation failed') } },
-    })
-    expect(explainError(rpc)).toBe('The Base network did not answer. Try again in a moment.')
-    expect(explainError(new Error('Transfer failed', { cause: rpc }))).toBe('The Base network did not answer. Try again in a moment.')
-  })
-
-  // The chain is in the error's trace. A message that does not end in "on <chain>" must still name it.
-  it('takes the chain name for a Bridge Kit RPC error from cause.trace.chain', () => {
-    const rpc = Object.assign(new Error('RPC endpoint error: request timed out'), {
-      name: 'RPC_ENDPOINT_ERROR',
-      code: 4001,
-      type: 'RPC',
-      cause: { trace: { chain: 'Arbitrum', rawError: new Error('timeout') } },
-    })
-    expect(explainError(rpc)).toBe('The Arbitrum network did not answer. Try again in a moment.')
-  })
-
-  it('still reads a real rejection under a KitError as a cancel', () => {
-    const kitError = Object.assign(new Error('Unknown blockchain error on Base'), {
-      name: 'ONCHAIN_UNKNOWN_BLOCKCHAIN_ERROR',
-      code: 5000,
-      type: 'ONCHAIN',
-      cause: { trace: { chain: 'Base', rawError: Object.assign(new Error('User denied'), { code: 4001 }) } },
-    })
-    expect(explainError(kitError)).toBe("You cancelled the request. Try again when you're ready.")
-  })
-
-  // The SDK falls back to placeholder names. The donor needs the real token to know what to top up.
-  it('fills in real symbols when Bridge Kit uses placeholder token names', () => {
-    const token = Object.assign(new Error('Insufficient token balance on Polygon'), { name: 'BALANCE_INSUFFICIENT_TOKEN' })
-    expect(explainError(token)).toBe('You do not have enough USDC on Polygon.')
-    const gas = Object.assign(new Error('Insufficient native token on Polygon to cover gas fees'), { name: 'BALANCE_INSUFFICIENT_GAS' })
-    expect(explainError(gas)).toBe('You do not have enough POL on Polygon to pay the network fee.')
-    const avax = Object.assign(new Error('Insufficient native token on Avalanche to cover gas fees'), { name: 'BALANCE_INSUFFICIENT_GAS' })
-    expect(explainError(avax)).toBe('You do not have enough AVAX on Avalanche to pay the network fee.')
-  })
-  // Bridge Kit names the chain Optimism. People know it as OP Mainnet, the name shown everywhere else.
-  it('names Optimism as OP Mainnet in Bridge Kit messages', () => {
-    const token = Object.assign(new Error('Insufficient USDC balance on Optimism'), { name: 'BALANCE_INSUFFICIENT_TOKEN' })
-    expect(explainError(token)).toBe('You do not have enough USDC on OP Mainnet.')
-    const gas = Object.assign(new Error('Insufficient native token on Optimism to cover gas fees'), { name: 'BALANCE_INSUFFICIENT_GAS' })
-    expect(explainError(gas)).toBe('You do not have enough ETH on OP Mainnet to pay the network fee.')
-  })
-})
-
-describe('explainAfterApproval', () => {
-  // Adding money from another chain can fail after the wallet already approved. "Nothing was sent"
-  // would then be untrue, so the generic text stops at "Something went wrong."
-  it('never says "Nothing was sent"', () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-    expect(explainAfterApproval(new Error('socket hang up'))).toBe(FALLBACK)
-    expect(explainAfterApproval({})).toBe(FALLBACK)
-    expect(FALLBACK).not.toMatch(/Nothing was sent/)
-    vi.mocked(console.error).mockRestore()
-  })
-
-  it('keeps the specific texts', () => {
-    expect(explainAfterApproval(new UserRejectedRequestError(new Error('x')))).toBe(CANCELLED)
-    const token = Object.assign(new Error('Insufficient USDC balance on Base'), { name: 'BALANCE_INSUFFICIENT_TOKEN' })
-    expect(explainAfterApproval(token)).toBe('You do not have enough USDC on Base.')
-  })
-})
-
-// On testnet Bridge Kit names chains Base_Sepolia and so on. Errors must still show the name people know.
-describe('Bridge Kit errors on testnet', () => {
-  it('maps Base_Sepolia to Base Sepolia and its ETH', async () => {
-    vi.stubEnv('VITE_ARC_NETWORK', 'testnet')
-    vi.resetModules()
-    try {
-      const { explainError: explain } = await import('./errors')
-      const gas = Object.assign(new Error('Insufficient native token on Base_Sepolia to cover gas fees'), {
-        name: 'BALANCE_INSUFFICIENT_GAS',
-        cause: { trace: { chain: 'Base_Sepolia' } },
-      })
-      expect(explain(gas)).toBe('You do not have enough ETH on Base Sepolia to pay the network fee.')
-    } finally {
-      vi.unstubAllEnvs()
-      vi.resetModules()
-    }
   })
 })
 

@@ -1,19 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
-import type { Address, Hex } from 'viem'
-import { ARC_DOMAIN, CCTP_CHAINS, CHAIN_LABELS, EXPLORER_URL } from '../config'
-import {
-  clearBridge,
-  clearSubmitted,
-  markBridgeMinted,
-  type PendingBridge,
-  type PendingCrossChain,
-  pendingCrossChain,
-  type PendingPayout,
-  pendingPayouts,
-  type PendingSubmitted,
-  subscribePending,
-} from '../lib/bridge'
+import type { Address } from 'viem'
+import { CCTP_CHAINS, CHAIN_LABELS, EXPLORER_URL } from '../config'
+import { clearPayout, markPayoutMinted, type PendingPayout, pendingPayouts, subscribePending } from '../lib/bridge'
 import { fetchTransferStatus, type TransferStatus } from '../lib/iris'
 import { Button, StatusBox } from './ui'
 import './Form.css'
@@ -22,77 +11,50 @@ const POLL_MS = 10_000
 // After this the transfer is overdue. Stop polling and point the person to the explorer.
 const MAX_TRACK_MS = 2 * 60 * 60 * 1000
 
-type TrackerKind = 'donation' | 'payout'
-
-function forCampaign(campaign: Address, kind: TrackerKind): (PendingCrossChain | PendingPayout)[] {
-  const all = kind === 'payout' ? pendingPayouts() : pendingCrossChain()
-  return all.filter((b) => b.campaign.toLowerCase() === campaign.toLowerCase())
+function forCampaign(campaign: Address): PendingPayout[] {
+  return pendingPayouts().filter((b) => b.campaign.toLowerCase() === campaign.toLowerCase())
 }
 
-// Cross-chain transfers to this address that have not reached it yet, or with kind 'payout', this campaign's
-// payouts on their way from Arc to another chain. Read from localStorage, so they survive a reload and keep
-// showing until dismissed. destination names the address in the text. account is the Fundit account that sent a
+// This campaign's payouts, or this Fundit account's sends, on their way from Arc to another chain. Read from
+// localStorage, so they survive a reload and keep showing until dismissed. account is the Fundit account that sent a
 // payout from Arc, for the explorer link once it is overdue; without it the entry's own address is linked (Send
 // money out saves the account there).
-export function PendingBridgeTracker({
-  campaign,
-  account,
-  destination = 'the Fundit',
-  kind = 'donation',
-}: {
-  campaign: Address
-  account?: Address
-  destination?: string
-  kind?: TrackerKind
-}) {
-  const [entries, setEntries] = useState(() => forCampaign(campaign, kind))
+export function PendingBridgeTracker({ campaign, account }: { campaign: Address; account?: Address }) {
+  const [entries, setEntries] = useState(() => forCampaign(campaign))
 
   useEffect(() => {
-    const reload = () => setEntries(forCampaign(campaign, kind))
+    const reload = () => setEntries(forCampaign(campaign))
     reload()
     return subscribePending(reload)
-  }, [campaign, kind])
+  }, [campaign])
 
   if (entries.length === 0) return null
   return (
-    <section className="bridge-tracker" aria-label={kind === 'payout' ? 'Payouts on the way' : 'Cross-chain transfers on the way'}>
-      {entries.map((e) =>
-        e.kind === 'submitted' ? <SubmittedRow key={e.id} entry={e} /> : <BridgeRow key={e.burnTx} entry={e} destination={destination} account={account ?? campaign} />,
-      )}
+    <section className="bridge-tracker" aria-label="Payouts on the way">
+      {entries.map((e) => (
+        <BridgeRow key={e.burnTx} entry={e} account={account ?? campaign} />
+      ))}
     </section>
   )
 }
 
 type RowStatus = TransferStatus | 'expired'
 
-// Dismissing a transfer that has not arrived forgets money that may still move (and unblocks donating), so it asks first.
+// Dismissing a transfer that has not arrived forgets money that may still move, so it asks first.
 const DISMISS_UNKNOWN = 'This transfer may still arrive. Dismiss it anyway?'
 
-// Text for one tracked burn: a donation on its way to Arc, or a payout on its way from Arc.
-function rowText(entry: PendingBridge | PendingPayout, destination: string) {
-  if (entry.kind === 'payout') {
-    const to = CHAIN_LABELS[CCTP_CHAINS.find((c) => c.domain === entry.destDomain)!.key]
-    return {
-      what: `${entry.amount} USDC to ${to}`,
-      arrived: 'arrived.',
-      attested: `Circle confirmed it. Arriving on ${to} now.`,
-      waiting: 'Waiting for Arc to confirm it.',
-      explorer: EXPLORER_URL,
-      thanks: null,
-    }
-  }
-  const from = CCTP_CHAINS.find((c) => c.domain === entry.srcDomain)!
+// Text for one tracked burn: a payout on its way from Arc.
+function rowText(entry: PendingPayout) {
+  const to = CHAIN_LABELS[CCTP_CHAINS.find((c) => c.domain === entry.destDomain)!.key]
   return {
-    what: `${entry.amount} USDC from ${CHAIN_LABELS[from.key]}`,
-    arrived: `reached ${destination}.`,
-    attested: 'Circle confirmed it. Arriving on Arc now.',
-    waiting: `Waiting for ${CHAIN_LABELS[from.key]} to confirm it.`,
-    explorer: from.viemChain.blockExplorers?.default.url,
-    thanks: destination === 'the Fundit' ? ' Thank you.' : null,
+    what: `${entry.amount} USDC to ${to}`,
+    arrived: 'arrived.',
+    attested: `Circle confirmed it. Arriving on ${to} now.`,
+    waiting: 'Waiting for Arc to confirm it.',
   }
 }
 
-function BridgeRow({ entry, destination, account }: { entry: PendingBridge | PendingPayout; destination: string; account: Address }) {
+function BridgeRow({ entry, account }: { entry: PendingPayout; account: Address }) {
   const { campaign, burnTx, srcDomain, createdAt } = entry
   const queryClient = useQueryClient()
   const overdue = () => Date.now() - createdAt > MAX_TRACK_MS
@@ -114,8 +76,8 @@ function BridgeRow({ entry, destination, account }: { entry: PendingBridge | Pen
       if (stopped) return
       setStatus(next !== 'minted' && last ? 'expired' : next)
       if (next === 'minted') {
-        // Recorded, so this transfer stops blocking a new donation.
-        markBridgeMinted(burnTx)
+        // Recorded, so the row stays as arrived after a reload.
+        markPayoutMinted(burnTx)
         // raised() already counts unaccounted funds, so the campaign total is right without settle().
         void queryClient.invalidateQueries({ queryKey: ['campaign', campaign.toLowerCase()] })
         void queryClient.invalidateQueries({ queryKey: ['activity', campaign.toLowerCase()] })
@@ -132,7 +94,7 @@ function BridgeRow({ entry, destination, account }: { entry: PendingBridge | Pen
     }
   }, [done, campaign, burnTx, srcDomain, createdAt, queryClient])
 
-  const text = rowText(entry, destination)
+  const text = rowText(entry)
   const what = text.what
   return (
     <StatusBox tone={status === 'minted' ? 'success' : 'info'}>
@@ -141,23 +103,13 @@ function BridgeRow({ entry, destination, account }: { entry: PendingBridge | Pen
           <strong>
             {what} {text.arrived}
           </strong>
-          {text.thanks}
         </p>
-      ) : status === 'expired' && srcDomain === ARC_DOMAIN ? (
-        // Sent from the Fundit account on Arc: there is no other wallet to check, so link the account itself.
+      ) : status === 'expired' ? (
+        // Sent from Arc: there is no other wallet to check, so link the account itself.
         <p>
           <strong>{what} has not been confirmed yet.</strong>{' '}
           <AccountActivityLink account={account} />
         </p>
-      ) : status === 'expired' ? (
-        <>
-          <p>
-            <strong>{what} is taking longer than expected.</strong>
-          </p>
-          <p>
-            <ExplorerLink chainUrl={text.explorer} hash={burnTx} />
-          </p>
-        </>
       ) : (
         <p>
           <strong>{what} is on its way.</strong>{' '}
@@ -170,39 +122,7 @@ function BridgeRow({ entry, destination, account }: { entry: PendingBridge | Pen
       )}
       {done && (
         <div className="form-actions">
-          <Button variant="secondary" onClick={() => (status === 'minted' || window.confirm(DISMISS_UNKNOWN)) && clearBridge(burnTx)}>
-            Dismiss
-          </Button>
-        </div>
-      )}
-    </StatusBox>
-  )
-}
-
-// The wallet sent, but no burn hash was recorded (the tab closed first). Nothing to poll; it expires like the rest.
-function SubmittedRow({ entry }: { entry: PendingSubmitted }) {
-  const chain = CCTP_CHAINS.find((c) => c.domain === entry.srcDomain)!
-  const what = `${entry.amount} USDC from ${CHAIN_LABELS[chain.key]}`
-  const [overdue, setOverdue] = useState(() => Date.now() - entry.createdAt > MAX_TRACK_MS)
-  useEffect(() => {
-    if (overdue) return
-    const timer = setTimeout(() => setOverdue(true), entry.createdAt + MAX_TRACK_MS - Date.now())
-    return () => clearTimeout(timer)
-  }, [overdue, entry.createdAt])
-  return (
-    <StatusBox>
-      {overdue ? (
-        <p>
-          <strong>{what} was not confirmed.</strong> Check your wallet's activity on {CHAIN_LABELS[chain.key]}.
-        </p>
-      ) : (
-        <p>
-          <strong>{what}: Submitted, waiting for confirmation.</strong>
-        </p>
-      )}
-      {overdue && (
-        <div className="form-actions">
-          <Button variant="secondary" onClick={() => window.confirm(DISMISS_UNKNOWN) && clearSubmitted(entry.id)}>
+          <Button variant="secondary" onClick={() => (status === 'minted' || window.confirm(DISMISS_UNKNOWN)) && clearPayout(burnTx)}>
             Dismiss
           </Button>
         </div>
@@ -216,15 +136,6 @@ function AccountActivityLink({ account }: { account: Address }) {
   return (
     <a href={`${EXPLORER_URL}/address/${account}`} target="_blank" rel="noopener noreferrer">
       See your Fundit account's activity on the Arc explorer.
-    </a>
-  )
-}
-
-function ExplorerLink({ chainUrl, hash }: { chainUrl: string | undefined; hash: Hex }) {
-  if (!chainUrl?.startsWith('https://')) return null
-  return (
-    <a href={`${chainUrl}/tx/${hash}`} target="_blank" rel="noopener noreferrer">
-      Check the explorer
     </a>
   )
 }

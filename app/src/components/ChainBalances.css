@@ -1,0 +1,58 @@
+/* My page: the account's USDC on Arc and on each CCTP network, one row each. */
+.chain-balances {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.chain-balances-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  line-height: var(--text-lg-line);
+  letter-spacing: var(--tracking-heading);
+}
+
+.chain-balances-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+/* Name on the left, amount on the right. A long amount wraps under the name on a narrow phone. */
+.chain-balances-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.chain-balances-row dt,
+.chain-balances-row dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.chain-balances-row dd {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.chain-balances-total {
+  border-bottom: 0;
+  font-weight: var(--weight-bold);
+}
+
+.chain-balances-muted {
+  color: var(--text-muted);
+}
+
+.chain-balances-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-line);
+}

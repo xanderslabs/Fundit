@@ -1,21 +1,10 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { Privacy } from './Privacy'
 import { Terms } from './Terms'
 
-const flags = vi.hoisted(() => ({ crosschain: false }))
-vi.mock('../config', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../config')>()),
-  get CROSSCHAIN_ENABLED() {
-    return flags.crosschain
-  },
-}))
-
-afterEach(() => {
-  cleanup()
-  flags.crosschain = false
-})
+afterEach(cleanup)
 
 function text(page: 'terms' | 'privacy') {
   const { container } = render(<MemoryRouter>{page === 'terms' ? <Terms /> : <Privacy />}</MemoryRouter>)
@@ -70,8 +59,7 @@ describe.each(['terms', 'privacy'] as const)('%s page', (page) => {
   })
 
   // Gateway unified balances are no longer used anywhere, so the policy must not name them.
-  it.each([false, true])('never mentions Gateway (cross-chain flag %s)', (on) => {
-    flags.crosschain = on
+  it('never mentions Gateway', () => {
     expect(text(page)).not.toMatch(/Gateway/)
   })
 

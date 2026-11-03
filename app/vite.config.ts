@@ -47,8 +47,7 @@ export default defineConfig(({ command, mode }) => {
     // testnet.
     ...(mode === 'test' && { envDir: false as const }),
     build: {
-      // wagmi loads only when a wallet tab in Add money opens, and the bridge SDK loads on demand too. Its
-      // largest chunk is about 660 kB minified, not on the first load. Raise the limit above it.
+      // wagmi loads only when a wallet connects or a wallet account sends. Its largest chunk is about 660 kB minified, not on the first load. Raise the limit above it.
       chunkSizeWarningLimit: 1400,
       rolldownOptions: {
         input: {
@@ -58,7 +57,7 @@ export default defineConfig(({ command, mode }) => {
         output: {
           // Keep the libraries on the first load in their own long-cached chunks, apart from app code. The
           // $initial tag limits each group to modules on the first-load graph. wagmi is not on it:
-          // it loads with the Add money wallet tabs (components/WalletTabs.tsx).
+          // it loads with Connect a wallet (components/SignInOptions.tsx).
           codeSplitting: {
             groups: [
               { name: 'query', test: /node_modules[\\/]@tanstack[\\/]/, tags: ['$initial'], priority: 2 },

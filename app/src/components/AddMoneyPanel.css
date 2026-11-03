@@ -1,8 +1,4 @@
-/* Add money, on My page: one tab for each way in. */
-.deposit-tabs .ui-tab-panel {
-  padding-top: var(--space-4);
-}
-
+/* Add money, on My page. */
 .deposit-tab {
   display: flex;
   flex-direction: column;

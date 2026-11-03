@@ -6,7 +6,6 @@ interface ImportMetaEnv {
   readonly VITE_FACTORY_DEPLOY_BLOCK?: string
   readonly VITE_ARC_RPC_URL?: string
   readonly VITE_MAINNET_RPC_URL?: string
-  readonly VITE_CROSSCHAIN?: string
   readonly VITE_BETA?: string
   readonly VITE_EMAIL_SIGNIN?: string
   readonly VITE_CIRCLE_UCW_APP_ID?: string

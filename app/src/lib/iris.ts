@@ -9,8 +9,7 @@ type FeeTier = { finalityThreshold: number; minimumFee: number; forwardFee: { lo
 
 export type ForwardFee = { maxFee: bigint; protocolFee: bigint; forwardFee: bigint }
 
-// Fee quote for a forwarded USDC transfer, in 6-decimal units. Used before a wallet is connected, and as
-// the fallback when Bridge Kit's estimate through the wallet's network fails.
+// Fee quote for a forwarded USDC transfer, in 6-decimal units.
 export async function fetchForwardFee(srcDomain: number, dstDomain: number, amount: bigint, fast: boolean): Promise<ForwardFee> {
   const res = await fetch(`${IRIS_URL}/v2/burn/USDC/fees/${srcDomain}/${dstDomain}?forward=true`)
   if (!res.ok) throw new Error(`Circle did not return a fee quote (HTTP ${res.status}).`)
@@ -18,7 +17,7 @@ export async function fetchForwardFee(srcDomain: number, dstDomain: number, amou
   const threshold = fast ? FAST_THRESHOLD : STANDARD_THRESHOLD
   const tier = Array.isArray(tiers) ? tiers.find((t) => t.finalityThreshold === threshold) : undefined
   if (!tier) throw new Error('Circle did not return a fee quote for this speed.')
-  // high, as Bridge Kit budgets: the fee charged is never above it, so "at least" amounts stay true.
+  // high: the fee charged is never above it, so "at least" amounts stay true.
   // BigInt throws on a fractional or missing value, so a malformed quote fails loudly.
   const forwardFee = BigInt(tier.forwardFee.high)
   // minimumFee is in basis points with up to two decimals: amount * bps / 10,000. Rounded up, so the cap is

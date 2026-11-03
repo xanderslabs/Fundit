@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Link, MemoryRouter, useLocation } from 'react-router'
 import type { Address } from 'viem'
@@ -14,13 +14,8 @@ import { Profile } from './Profile'
 const ME = '0x00000000000000000000000000000000000000cC' as Address
 const FUNDIT = '0x00000000000000000000000000000000000000a1' as Address
 
-// VITE_CROSSCHAIN now means Add money from another chain. Gifts never come from another chain.
-const flags = vi.hoisted(() => ({ crosschain: false }))
 vi.mock('../config', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../config')>()),
-  get CROSSCHAIN_ENABLED() {
-    return flags.crosschain
-  },
   REOWN_PROJECT_ID: 'test-project',
 }))
 
@@ -55,6 +50,15 @@ vi.mock('../lib/deposit', async (importOriginal) => ({
   fetchAccountBalances: async () => ({ usdc: 12_500000n, eurc: 3_000000n }),
 }))
 vi.mock('../hooks/useActivity', () => ({ blockTimes: async () => new Map([[1n, 1760000000n]]) }))
+// No real RPCs in tests. Arc and Base answer, Ethereum is rate limited.
+vi.mock('../lib/chainBalances', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/chainBalances')>()),
+  usdcSources: () => [
+    { key: 'Arc', label: 'Arc', read: async () => 12_500000n },
+    { key: 'Ethereum', label: 'Ethereum', read: () => Promise.reject(new Error('HTTP 429')) },
+    { key: 'Base', label: 'Base', read: async () => 2_000000n },
+  ],
+}))
 vi.mock('../hooks/useName', () => ({ useName: () => ({ data: undefined }) }))
 vi.mock('../hooks/useCampaigns', () => ({ useCampaign: () => ({ data: view() }) }))
 vi.mock('../lib/account', async (importOriginal) => ({
@@ -67,7 +71,6 @@ afterEach(() => {
   state.sender = null
   state.mine = null
   state.gifts = null
-  flags.crosschain = false
   vi.clearAllMocks()
   localStorage.clear()
 })
@@ -344,11 +347,24 @@ describe('My page tabs', () => {
   // Gifts come only from the Fundit account on Arc, so the list must not say they can come from other chains.
   it('describes the gifts window in time, never blocks or other chains', async () => {
     signIn()
-    flags.crosschain = true
     const user = renderProfile()
     await user.click(screen.getByRole('tab', { name: 'Your gifts' }))
     expect(screen.getByText(/This list covers about the last day on Arc\./)).toBeTruthy()
     expect(screen.queryByText(/blocks|other chains/)).toBeNull()
+  })
+})
+
+describe('My page USDC on every network', () => {
+  // A network that did not answer says so. It never reads as 0, and the total says it left that network out.
+  it('lists each network, marks a failed one and totals only the ones that answered', async () => {
+    signIn()
+    renderProfile()
+    const heading = screen.getByRole('heading', { name: 'Your USDC on every network' })
+    const card = heading.closest('section')!
+    await waitFor(() => expect(within(card).getByText("Couldn't check")).toBeTruthy())
+    await waitFor(() => expect(within(card).getByText('14.50 USDC')).toBeTruthy())
+    expect(within(card).getByText("The total leaves out the network we couldn't check.")).toBeTruthy()
+    expect(within(card).getByText('Gifts use your Arc balance today. Giving straight from other networks is coming next.')).toBeTruthy()
   })
 })
 
@@ -375,15 +391,15 @@ describe('My page Account tab', () => {
     expect(within(panel).getByText('0x0000...00cC').closest('p')?.textContent).toBe('Wallet: 0x0000...00cC')
   })
 
-  // A transfer started before the cross-chain flag went off may still arrive. Its row stays in view.
-  it('tracks a transfer on its way to the account, even with cross-chain off', async () => {
+  // A send from the account to another chain is tracked until it arrives, even after a reload.
+  it('tracks a send on its way from the account to another chain', async () => {
     signIn()
     localStorage.setItem(
       'fundit.pendingBridges',
-      JSON.stringify([{ kind: 'submitted', id: 's-1', campaign: ME.toLowerCase(), srcDomain: 6, amount: '25', createdAt: Date.now() }]),
+      JSON.stringify([{ kind: 'payout', campaign: ME.toLowerCase(), burnTx: `0x${'cd'.repeat(32)}`, srcDomain: 26, destDomain: 6, amount: '25', createdAt: Date.now() }]),
     )
     const { panel } = await openAccount()
-    expect(within(panel).getByText(/25 USDC from Base: Submitted/)).toBeTruthy()
+    expect(within(panel).getByText(/25 USDC to Base is on its way/)).toBeTruthy()
     expect(within(panel).queryByText('No transfers on their way.')).toBeNull()
   })
 

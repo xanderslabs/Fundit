@@ -9,12 +9,9 @@ import type { CampaignView } from '../lib/campaigns'
 import type { Sender } from '../lib/sender'
 import { Home } from './Home'
 
-const flags = vi.hoisted(() => ({ crosschain: false, email: true }))
+const flags = vi.hoisted(() => ({ email: true }))
 vi.mock('../config', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../config')>()),
-  get CROSSCHAIN_ENABLED() {
-    return flags.crosschain
-  },
   get EMAIL_SIGNIN() {
     return flags.email
   },
@@ -50,7 +47,6 @@ afterEach(() => {
   wallet.listOpen = false
   lists.featured = null
   lists.newest = []
-  flags.crosschain = false
   state.sender = null
   localStorage.clear()
 })
@@ -228,9 +224,8 @@ describe('Home FAQ', () => {
   })
 
   // Gifts come only from the Fundit account. The page must not promise ways to give that the donate panel
-  // does not offer, whatever the cross-chain flag says.
-  it.each([false, true])('cross-chain %s: does not mention giving from another chain or a unified balance', (on) => {
-    flags.crosschain = on
+  // does not offer.
+  it('does not mention giving from another chain or a unified balance', () => {
     renderHome()
     expect(faq().textContent).not.toMatch(/from another chain|unified balance/i)
   })

@@ -6,6 +6,7 @@ import { useSignOut } from '../components/AccountMenu'
 import { AccountWithdraw } from '../components/AccountWithdraw'
 import { AddMoneyPanel } from '../components/AddMoneyPanel'
 import { CampaignGrid, LoadError } from '../components/CampaignGrid'
+import { ChainBalances } from '../components/ChainBalances'
 import { PendingBridgeTracker } from '../components/PendingBridgeTracker'
 import { ShareDialog } from '../components/SharePanel'
 import { AddressChip, Button, ButtonLink, Card, EmptyState, Panel, Stat, TabPanel, Tabs } from '../components/ui'
@@ -16,7 +17,7 @@ import { useSender } from '../hooks/useSender'
 import { type Account, useAccount } from '../lib/account'
 import { type DonationItem, recentDonationsBy } from '../lib/activity'
 import { readMessage } from '../lib/anon'
-import { pendingCrossChain, pendingPayouts, subscribePending } from '../lib/bridge'
+import { pendingPayouts, subscribePending } from '../lib/bridge'
 import { myCampaigns } from '../lib/campaigns'
 import { arcClient } from '../lib/clients'
 import { balancesKey, fetchAccountBalances } from '../lib/deposit'
@@ -151,10 +152,10 @@ function YourGifts({ address }: { address: Address }) {
   )
 }
 
-// True while a transfer to this account, or a payout from it, is still on its way.
+// True while a send from this account to another chain is still on its way.
 function hasPending(address: Address) {
   const a = address.toLowerCase()
-  return [...pendingCrossChain(), ...pendingPayouts()].some((b) => b.campaign.toLowerCase() === a)
+  return pendingPayouts().some((b) => b.campaign.toLowerCase() === a)
 }
 
 function useHasPending(address: Address) {
@@ -195,9 +196,7 @@ function AccountTab({ account }: { account: Account }) {
       <section className="dash-account-row" aria-labelledby="dash-pending-heading">
         <h3 id="dash-pending-heading">Transfers on their way</h3>
         {!pending && <p className="dash-muted">No transfers on their way.</p>}
-        {/* A transfer started while cross-chain was on may still arrive, so it is tracked either way. */}
-        <PendingBridgeTracker campaign={address} destination="your Fundit account" />
-        <PendingBridgeTracker campaign={address} kind="payout" />
+        <PendingBridgeTracker campaign={address} />
       </section>
       <div className="dash-signout">
         <Button variant="secondary" onClick={() => signOut()}>
@@ -329,6 +328,7 @@ function Dashboard({ sender, account }: { sender: Sender; account: Account }) {
         addRef={addButton}
         sendRef={sendButton}
       />
+      <ChainBalances account={address} />
 
       <DashPanel id="dash-panel-add" label="Add money" open={open === 'add'} onClose={() => close('add')}>
         {opened.add && (
