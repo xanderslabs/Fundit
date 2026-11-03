@@ -2,8 +2,9 @@
 
 Fundit is a crowdfunding app on Arc, Circle's stablecoin-native blockchain. Each fundraiser is its own
 escrow contract that holds USDC or EURC. Only the creator can withdraw, and anyone can read every
-inflow and outflow on chain. Fundit has no database. The site is static files plus a small Cloudflare
-Worker for email sign-in. The Worker holds the Circle API key and the Turnstile secret. It never signs
+inflow and outflow on chain. Fundit keeps no database of personal data. Its only server records are
+the team's own decisions about which fundraisers are under review or removed. The site is static files
+plus a small Cloudflare Worker for email sign-in, problem reports and that review list. The Worker holds the Circle API key and the Turnstile secret. It never signs
 for anyone and holds no key that can move money. The contracts hold the money.
 
 ## What Fundit is

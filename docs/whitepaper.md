@@ -8,8 +8,9 @@ Fundit is a crowdfunding app where each fundraiser is its own escrow contract on
 stablecoin-native blockchain. Donations arrive in USDC or EURC. The creator withdraws to Arc, or
 receives USDC on another chain through CCTP V2. The platform operator cannot move or freeze any
 creator's balance. People sign in with a Fundit account, by email (a Circle user-controlled wallet) or
-with their own wallet. Fundit has no database. The site is static files plus a
-small Cloudflare Worker for email sign-in. The Worker holds the Circle API key and the Turnstile secret,
+with their own wallet. Fundit keeps no database of personal data. Its only server records are the
+team's own decisions about which fundraisers are under review or removed. The site is static files plus
+a small Cloudflare Worker for email sign-in, problem reports and that review list. The Worker holds the Circle API key and the Turnstile secret,
 never signs for anyone and holds no key that can move money. The contracts are deployed on Arc mainnet
 and Arc testnet. This paper explains the design, the trust model and the plan for launch.
 
@@ -236,6 +237,20 @@ pending recovery. No recovery function moves tokens.
 If someone sends a token other than the campaign token, the creator can call `sweep(token, to)` to
 recover it with no fee. The call reverts if the campaign-token balance drops, which guards against a
 second address that controls the same asset.
+
+### 5.6 Reports and review
+
+Anyone can report a campaign from its page. The report goes to the team's private Telegram chat after a
+Cloudflare Turnstile check and a rate limit, and the server keeps no copy. The owner reviews each report
+in the admin panel and can mark the campaign as under review, removed or cleared. A campaign under
+review or removed is hidden from the home and explore pages. Its page still opens by link and shows a
+warning, and a removed campaign has no Give button in the app. These states live in a small Cloudflare
+D1 database that holds only the team's decisions, never personal data.
+
+Review changes only what the Fundit website shows. No review state can move, freeze or return money,
+and anyone can still send tokens to a campaign address directly. Before a donor's first gift, and before
+every gift to a campaign under review, the app shows a notice that gifts cannot be reversed or refunded
+and that Fundit does not guarantee how an organiser uses the money.
 
 ## 6. Security process
 
