@@ -199,8 +199,8 @@ From [`contracts/deployments/arc-mainnet.json`](contracts/deployments/arc-mainne
   ([deploy transaction](https://explorer.arc.io/tx/0x1e7f9bbc73ebbab575ee8d9a5ffd6ac67aa7ca24df0afcdc738fd590f568a8ad)).
   Set `VITE_FACTORY_DEPLOY_BLOCK` to this value.
 - Source verification: both contracts are an exact match on
-  [Sourcify](https://sourcify.dev/#/lookup/0xf1b2AEF82c37fC41D254D8e06BD7780ce34617d9). They are not verified
-  on the Arc explorer, which blocks automated verification.
+  [Sourcify](https://sourcify.dev/#/lookup/0xf1b2AEF82c37fC41D254D8e06BD7780ce34617d9) and on the
+  [Arc explorer](https://explorer.arc.io/address/0xf1b2AEF82c37fC41D254D8e06BD7780ce34617d9).
 
 ### Arc testnet (chain ID `5042002`)
 
@@ -292,7 +292,7 @@ From [`app/.env.example`](app/.env.example):
 | `VITE_ARC_NETWORK` | `mainnet` (the default when empty) or `testnet`. Every chain ID, token and contract address, RPC and Circle API URL comes from this value. |
 | `VITE_ALLOW_TESTNET_BUILD` | Set to `1` to let a production build (`npm run build`) use `testnet`. Without it, a production testnet build fails, so running a site on testnet is always an explicit choice. |
 | `VITE_REOWN_PROJECT_ID` | Reown (WalletConnect) project ID, for phone wallets. A production build fails without it. |
-| `VITE_EMAIL_SIGNIN` | Set to `1` to show **Continue with email** in the sign-in dialog. Off by default, and off on mainnet until the mainnet email check passes. |
+| `VITE_EMAIL_SIGNIN` | Set to `1` to show **Continue with email** in the sign-in dialog. Off by default. fundit.fun sets it. |
 | `VITE_CIRCLE_UCW_APP_ID` | Circle App ID for user-controlled wallets. A production build with `VITE_EMAIL_SIGNIN=1` fails without it. |
 | `VITE_TURNSTILE_SITE_KEY` | Cloudflare Turnstile site key. A production build with `VITE_EMAIL_SIGNIN=1` fails without it. |
 | `VITE_FACTORY_ADDRESS` | `CampaignFactory` on the chosen network. Set it together with `VITE_FACTORY_DEPLOY_BLOCK`. A production build fails if either is empty. |
@@ -340,13 +340,12 @@ costs the funder about 0.02 to 0.03 testnet USDC in gas. See [`app/e2e/README.md
 
 ### Status
 
-- Contracts: deployed on Arc mainnet and verified on Sourcify. See
+- Contracts: deployed on Arc mainnet and verified on Sourcify and the Arc explorer. See
   [Deployed addresses](#deployed-addresses). Tested with unit, fuzz, invariant and Arc mainnet fork tests.
 - Contracts on Arc testnet: deployed at block `67870064`. See
   [Arc testnet](#arc-testnet-chain-id-5042002). The end-to-end suite runs on them.
 - App: live at [fundit.fun](https://fundit.fun) on Arc mainnet. Sign-in is by wallet, or by email when
-  `VITE_EMAIL_SIGNIN=1`. Email sign-in stays off on mainnet until the mainnet email check passes. Unit
-  tests run with mocks.
+  `VITE_EMAIL_SIGNIN=1`, which fundit.fun sets. Unit tests run with mocks.
 - `VITE_CROSSCHAIN`: off by default.
 - EURC: Arc only. On Arc mainnet, CCTP cannot burn EURC today
   (`depositForBurn(EURC)` reverts with "Burn token not supported" on a fork for domains 0, 1, 6 and
