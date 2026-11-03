@@ -29,6 +29,9 @@ export default defineConfig({
         command: `npx vite --port ${PORT} --strictPort --host localhost`,
         url: BASE_URL,
         reuseExistingServer: false,
+        // The Report form renders only with a Turnstile site key. This is Cloudflare's public always-pass test key,
+        // and the specs replace the Turnstile script and /api/report, so nothing is checked.
+        env: { VITE_TURNSTILE_SITE_KEY: '1x00000000000000000000AA' },
         timeout: 60_000,
       },
 })

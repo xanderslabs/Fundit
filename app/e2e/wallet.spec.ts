@@ -159,6 +159,12 @@ test('gives to it: one transaction to Multicall3From', async () => {
   await give.getByRole('switch', { name: 'Hide my name' }).check()
   const sentBefore = wallet.sent.length
   await give.getByRole('button', { name: 'Give', exact: true }).click()
+  // The first gift from an account opens the "Before you give" notice. Nothing is sent until Continue.
+  const notice = page.getByRole('dialog', { name: 'Before you give' })
+  await expect(notice).toBeVisible()
+  expect(wallet.sent.length).toBe(sentBefore)
+  await notice.getByLabel('I understand').check()
+  await notice.getByRole('button', { name: 'Continue' }).click()
   const done = give.getByText('Thank you. Your donation went through.')
   const failed = give.locator('.status-error')
   await expect(done.or(failed).first()).toBeVisible({ timeout: 90_000 })

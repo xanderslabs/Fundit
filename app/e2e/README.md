@@ -11,7 +11,7 @@ checks the results on chain with viem.
 1. Tops the test wallet up to 0.1 USDC from the funder, then signs in: **Sign in**, **Connect a wallet**,
    **Fundit Test Wallet**. The account pill shows the short address, and the wallet was asked to switch to Arc.
 2. Starts a new Fundit with a goal of 10 USDC.
-3. Gives 0.01 USDC anonymously with a message. The wallet sends one transaction, to `Multicall3From`
+3. Gives 0.01 USDC anonymously with a message. The first gift from the account opens the "Before you give" notice: the spec ticks **I understand** and presses **Continue**. The wallet sends one transaction, to `Multicall3From`
    (`0x522fAf9A91c41c443c66765030741e4AaCe147D0`) from the test address: approve and donate in one call. The
    activity must show "Anonymous" and the message with no `[anon]` text. The `Donated` event must name the
    wallet and start the message with `[anon]`.
@@ -32,6 +32,12 @@ Each step prints the explorer link of its transaction, for example:
 
 The links are also kept as `tx` annotations on each test. The run also prints every host the page talked to and
 any request or WebSocket to a WalletConnect or Reown host, with the step it happened in.
+
+`moderation.spec.ts` sends no transactions. It reads the factory with viem to pick a testnet Fundit that a test
+account did not make, stubs `/api/moderation` and `/api/report` (the dev server has no Worker), and checks the
+review and removed states, the fail-open case and the Fundit report form. It replaces the Turnstile script with
+a stub that returns a token, and `playwright.config.ts` gives the dev server Cloudflare's public test site key so
+the form renders. Run it alone with `npx playwright test e2e/moderation.spec.ts`.
 
 ## Prerequisites
 
