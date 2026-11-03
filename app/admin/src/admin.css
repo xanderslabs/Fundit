@@ -917,6 +917,12 @@ a.admin-pill:focus-visible {
   display: none;
 }
 
+.admin-filter-select {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm-line);
+}
+
 .admin-table-tools .admin-note {
   font-size: var(--text-sm);
   font-variant-numeric: var(--figures);
@@ -1094,6 +1100,43 @@ a.admin-pill:focus-visible {
 .admin-details .admin-row {
   padding: var(--space-2) 0;
   border-bottom: 1px solid var(--line);
+}
+
+.admin-review {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+
+.admin-review > .ui-field,
+.admin-review-confirm {
+  align-self: stretch;
+}
+
+.admin-review-title,
+.admin-review-subtitle {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.admin-review-history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+}
+
+.admin-review-note {
+  display: block;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
 }
 
 .admin-drawer-links {
@@ -1345,6 +1388,10 @@ a.admin-pill:focus-visible {
 
   .admin-search {
     max-width: none;
+  }
+
+  .admin-filter-select {
+    flex: 1 1 100%;
   }
 
   .admin-sort-select {

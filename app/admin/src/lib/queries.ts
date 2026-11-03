@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { type AdminSession, getHealth, matchesWorker } from './api'
+import { type AdminSession, getHealth, getModeration, getModerationHistory, matchesWorker } from './api'
 import { readClient } from './clients'
 import { readFactoryState } from './factoryState'
 import type { AdminNetwork } from './networks'
@@ -60,4 +60,18 @@ export function useHeadTime(session: AdminSession, network: AdminNetwork) {
     enabled: matchesWorker(session, network),
     ...REFRESH,
   })
+}
+
+// Review states for a network, and one Fundit's history under the same prefix, so one invalidation of
+// moderationKey refreshes both after a change.
+export function moderationKey(network: AdminNetwork) {
+  return ['admin', network, 'moderation'] as const
+}
+
+export function useModeration(network: AdminNetwork) {
+  return useQuery({ queryKey: moderationKey(network), queryFn: () => getModeration(network), ...REFRESH })
+}
+
+export function useModerationHistory(network: AdminNetwork, address: string) {
+  return useQuery({ queryKey: [...moderationKey(network), 'history', address.toLowerCase()], queryFn: () => getModerationHistory(network, address) })
 }

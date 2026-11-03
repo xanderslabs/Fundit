@@ -40,6 +40,38 @@ export async function getHealth(network: AdminNetwork): Promise<HealthReport> {
   return (await res.json()) as HealthReport
 }
 
+// The owner's review state for a Fundit (Worker routes /api/admin/moderation). No row means normal. Addresses are
+// lowercase, and note stays in the admin Worker.
+export type ModState = 'review' | 'removed' | 'cleared'
+export type ModerationRow = { address: string; state: ModState; note: string; updatedAt: number }
+export type ModerationEntry = { oldState: ModState | null; newState: ModState; note: string; at: number }
+
+export async function getModeration(network: AdminNetwork): Promise<ModerationRow[]> {
+  const res = await fetch(`/api/admin/moderation?network=${network}`)
+  if (res.status === 401) signedOut()
+  if (!res.ok) throw new Error(`Review states failed to load (${res.status})`)
+  return ((await res.json()) as { states: ModerationRow[] }).states
+}
+
+// Changes for one Fundit, newest first.
+export async function getModerationHistory(network: AdminNetwork, address: string): Promise<ModerationEntry[]> {
+  const res = await fetch(`/api/admin/moderation/history?network=${network}&address=${encodeURIComponent(address)}`)
+  if (res.status === 401) signedOut()
+  if (!res.ok) throw new Error(`Review history failed to load (${res.status})`)
+  return ((await res.json()) as { history: ModerationEntry[] }).history
+}
+
+export async function setModeration(network: AdminNetwork, address: string, state: ModState, note: string): Promise<void> {
+  const res = await fetch('/api/admin/moderation', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ network, address, state, note }),
+  })
+  if (res.status === 401) signedOut()
+  if (!res.ok) throw new Error(`Review state was not saved (${res.status})`)
+}
+
 // Ends the session. The cookie is cleared by the Worker; a failed call still leaves the person signed in, so it throws.
 export async function logout(): Promise<void> {
   const res = await fetch('/api/admin/logout', { method: 'POST' })

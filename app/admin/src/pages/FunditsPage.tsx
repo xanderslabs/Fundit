@@ -1,10 +1,12 @@
-import { type ReactNode, useId, useState } from 'react'
-import { Badge, Dialog, EmptyState } from '../../../src/components/ui'
+import { useQueryClient } from '@tanstack/react-query'
+import { type ReactNode, useEffect, useId, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router'
+import { Actions, Badge, Button, Dialog, EmptyState, Field } from '../../../src/components/ui'
 import { formatExact } from '../../../src/lib/format'
-import { matchesWorker } from '../lib/api'
+import { matchesWorker, type ModState, setModeration } from '../lib/api'
 import type { ScanState } from '../lib/historyScan'
 import { type AdminNetwork, ADMIN_NETWORKS } from '../lib/networks'
-import { STALE_AFTER_MS, useSnapshot } from '../lib/queries'
+import { moderationKey, STALE_AFTER_MS, useModeration, useModerationHistory, useSnapshot } from '../lib/queries'
 import type { FunditSnapshot } from '../lib/snapshot'
 import { visible } from '../lib/stats'
 import { useScan } from '../scan/ScanProvider'
@@ -15,7 +17,7 @@ import { ChevronDownIcon, ExternalLinkIcon } from '../ui/icons'
 import { ScanNote } from '../ui/ScanNote'
 import { usePanel } from '../ui/Shell'
 
-type Column = 'title' | 'creator' | 'token' | 'raised' | 'goal' | 'gifts' | 'created' | 'status'
+type Column = 'title' | 'creator' | 'token' | 'raised' | 'goal' | 'gifts' | 'created' | 'status' | 'review'
 type Sort = { column: Column; desc: boolean }
 
 const COLUMNS: { key: Column; label: string; numeric?: boolean }[] = [
@@ -27,7 +29,24 @@ const COLUMNS: { key: Column; label: string; numeric?: boolean }[] = [
   { key: 'gifts', label: 'Gifts', numeric: true },
   { key: 'created', label: 'Created', numeric: true },
   { key: 'status', label: 'Status' },
+  { key: 'review', label: 'Review' },
 ]
+
+// No row in the moderation list means normal.
+type Review = ModState | 'normal'
+const REVIEW_LABEL: Record<Review, string> = { normal: 'Normal', review: 'Under review', removed: 'Removed', cleared: 'Cleared' }
+const REVIEW_TONE: Record<Review, 'neutral' | 'success' | 'attention'> = { normal: 'neutral', review: 'attention', removed: 'attention', cleared: 'success' }
+const FILTERS: { value: 'all' | ModState; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'review', label: 'Under review' },
+  { value: 'removed', label: 'Removed' },
+  { value: 'cleared', label: 'Cleared' },
+]
+const NOTE_MAX = 500
+
+function ReviewBadge({ state }: { state: Review }) {
+  return <Badge tone={REVIEW_TONE[state]}>{REVIEW_LABEL[state]}</Badge>
+}
 
 const date = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
 const dateTime = new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })
@@ -55,7 +74,7 @@ function giftCounts(scan: ScanState | null, showTest: boolean, network: AdminNet
   }
 }
 
-function compare(a: FunditSnapshot, b: FunditSnapshot, column: Column, gifts: (r: FunditSnapshot) => number | null): number {
+function compare(a: FunditSnapshot, b: FunditSnapshot, column: Column, gifts: (r: FunditSnapshot) => number | null, review: (r: FunditSnapshot) => Review): number {
   const big = (x: bigint, y: bigint) => (x === y ? 0 : x < y ? -1 : 1)
   switch (column) {
     case 'title':
@@ -75,6 +94,8 @@ function compare(a: FunditSnapshot, b: FunditSnapshot, column: Column, gifts: (r
       return big(a.createdAtBlock, b.createdAtBlock)
     case 'status':
       return Number(a.closed) - Number(b.closed)
+    case 'review':
+      return REVIEW_LABEL[review(a)].localeCompare(REVIEW_LABEL[review(b)])
   }
 }
 
@@ -101,7 +122,94 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
-function Drawer({ row, gifts, network, onClose }: { row: FunditSnapshot; gifts: number | null; network: AdminNetwork; onClose(): void }) {
+// The owner's review state for one Fundit: the current state, a form to change it with a confirm step (the panel
+// cannot use window.confirm), and the change history.
+function ReviewSection({ address, network, current }: { address: string; network: AdminNetwork; current: Review }) {
+  const queryClient = useQueryClient()
+  const history = useModerationHistory(network, address)
+  const id = useId()
+  const [state, setState] = useState<ModState>('review')
+  const [note, setNote] = useState('')
+  const [confirming, setConfirming] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function save() {
+    setSaving(true)
+    setError(null)
+    try {
+      await setModeration(network, address.toLowerCase(), state, note.trim())
+      await queryClient.invalidateQueries({ queryKey: moderationKey(network) })
+      setConfirming(false)
+      setNote('')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Review state was not saved')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section className="admin-review" aria-labelledby={`${id}-heading`}>
+      <h3 id={`${id}-heading`} className="admin-review-title">
+        Review state
+      </h3>
+      <div className="admin-drawer-tags">
+        <ReviewBadge state={current} />
+      </div>
+      <Field label="New state" id={`${id}-state`}>
+        <select className="select" value={state} disabled={confirming} onChange={(e) => setState(e.target.value as ModState)}>
+          <option value="review">Under review</option>
+          <option value="removed">Removed</option>
+          <option value="cleared">Cleared</option>
+        </select>
+      </Field>
+      <Field label="Note (stays in the admin panel)" id={`${id}-note`}>
+        <textarea className="ui-input" rows={3} maxLength={NOTE_MAX} value={note} disabled={confirming} onChange={(e) => setNote(e.target.value)} />
+      </Field>
+      {confirming ? (
+        <div className="admin-review-confirm" role="group" aria-label="Confirm review state">
+          <p className="admin-note">{`Set this Fundit to "${REVIEW_LABEL[state]}"? Money is not affected.`}</p>
+          <Actions>
+            <Button variant="secondary" disabled={saving} onClick={() => setConfirming(false)}>
+              Cancel
+            </Button>
+            <Button loading={saving} onClick={() => void save()}>
+              Confirm
+            </Button>
+          </Actions>
+        </div>
+      ) : (
+        <Button onClick={() => setConfirming(true)}>Save</Button>
+      )}
+      {error && (
+        <p className="admin-error" role="alert">
+          {error}
+        </p>
+      )}
+      <h4 className="admin-review-subtitle">History</h4>
+      {history.isError ? (
+        <p className="admin-error">Could not load the history.</p>
+      ) : !history.data ? (
+        <p className="admin-muted">Loading...</p>
+      ) : history.data.length === 0 ? (
+        <p className="admin-muted">No changes yet.</p>
+      ) : (
+        <ul className="admin-review-history">
+          {history.data.map((h) => (
+            <li key={h.at}>
+              <span className="admin-amount">{dateTime.format(new Date(h.at))} UTC</span>{' '}
+              {`${h.oldState ? REVIEW_LABEL[h.oldState] : 'Normal'} to ${REVIEW_LABEL[h.newState]}`}
+              {h.note && <span className="admin-review-note" dir="auto">{h.note}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+function Drawer({ row, gifts, network, review, onClose }: { row: FunditSnapshot; gifts: number | null; network: AdminNetwork; review: Review; onClose(): void }) {
   const { explorerUrl } = ADMIN_NETWORKS[network]
   const headingId = useId()
   const t = row.token
@@ -150,6 +258,7 @@ function Drawer({ row, gifts, network, onClose }: { row: FunditSnapshot; gifts: 
             <span className="admin-amount">{row.createdAtBlock.toString()}</span>
           </Detail>
         </dl>
+        <ReviewSection address={row.address} network={network} current={review} />
         <div className="admin-drawer-links">
           {/* fundit.fun is the mainnet site; testnet Fundits have no public page. */}
           {network === 'mainnet' && (
@@ -174,13 +283,28 @@ export function FunditsPage() {
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<Sort>({ column: 'created', desc: true })
   const [open, setOpen] = useState<FunditSnapshot['address'] | null>(null)
+  const [filter, setFilter] = useState<'all' | ModState>('all')
+  const moderation = useModeration(network)
+  const [params] = useSearchParams()
+  const deepLinked = useRef(false)
+
+  // ?open=<address> opens that Fundit's drawer once, when the snapshot has it (the case differs from the API's).
+  const wanted = params.get('open')?.toLowerCase()
+  useEffect(() => {
+    if (deepLinked.current || !wanted || !snapshot.data) return
+    deepLinked.current = true
+    const hit = snapshot.data.find((r) => r.address.toLowerCase() === wanted)
+    if (hit) setOpen(hit.address)
+  }, [wanted, snapshot.data])
 
   if (!matchesWorker(session, network)) return <p className="admin-error">This panel was built for another network.</p>
 
   const gifts = giftCounts(scan.state, showTest, network)
+  const states = new Map((moderation.data ?? []).map((m) => [m.address.toLowerCase(), m.state]))
+  const review = (r: FunditSnapshot): Review => states.get(r.address.toLowerCase()) ?? 'normal'
   const all = snapshot.data ? visible(snapshot.data, showTest) : []
-  const rows = all.filter((r) => matches(r, query))
-  rows.sort((a, b) => (sort.desc ? -1 : 1) * compare(a, b, sort.column, gifts))
+  const rows = all.filter((r) => matches(r, query) && (filter === 'all' || review(r) === filter))
+  rows.sort((a, b) => (sort.desc ? -1 : 1) * compare(a, b, sort.column, gifts, review))
   const selected = open ? snapshot.data?.find((r) => r.address === open) : undefined
 
   function sortBy(column: Column, numeric?: boolean) {
@@ -208,6 +332,13 @@ export function FunditsPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
+          <select className="select admin-filter-select" aria-label="Filter Fundits by review state" value={filter} onChange={(e) => setFilter(e.target.value as 'all' | ModState)}>
+            {FILTERS.map((f) => (
+              <option key={f.value} value={f.value}>
+                {f.label}
+              </option>
+            ))}
+          </select>
           {/* Phones show rows as blocks without the header row, so sorting moves here. */}
           <select
             className="select admin-sort-select"
@@ -234,7 +365,7 @@ export function FunditsPage() {
         {/* Gift counts come from the history scan, so they are partial until it has caught up. */}
         {all.length > 0 && <ScanNote />}
         {rows.length === 0 ? (
-          <EmptyState>{all.length === 0 ? 'No Fundits yet.' : 'No Fundit matches that search.'}</EmptyState>
+          <EmptyState>{all.length === 0 ? 'No Fundits yet.' : 'No Fundit matches that search or filter.'}</EmptyState>
         ) : (
           <div className="admin-table-wrap">
             <table className="admin-table">
@@ -295,6 +426,9 @@ export function FunditsPage() {
                       <td data-label="Status">
                         <Status closed={r.closed} />
                       </td>
+                      <td data-label="Review">
+                        <ReviewBadge state={review(r)} />
+                      </td>
                     </tr>
                   )
                 })}
@@ -303,7 +437,7 @@ export function FunditsPage() {
           </div>
         )}
       </Card>
-      {selected && <Drawer row={selected} gifts={gifts(selected)} network={network} onClose={() => setOpen(null)} />}
+      {selected && <Drawer row={selected} gifts={gifts(selected)} network={network} review={review(selected)} onClose={() => setOpen(null)} />}
     </div>
   )
 }

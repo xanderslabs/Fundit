@@ -52,6 +52,9 @@ vi.mock('../lib/queries', () => ({
   useSnapshot: () => ({ data: ROWS, isError: false, dataUpdatedAt: Date.now(), refetch: vi.fn() }),
   useHealth: () => ({ data: undefined, isError: false, refetch: vi.fn() }),
   useHeadTime: () => ({ data: undefined }),
+  useModeration: () => ({ data: [], isError: false }),
+  moderationKey: () => [],
+  useModerationHistory: () => ({ data: [], isError: false }),
 }))
 
 const scan = vi.hoisted(() => ({ status: { kind: 'scanning' } as ScanStatus }))
