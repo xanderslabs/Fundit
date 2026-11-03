@@ -30,6 +30,14 @@
 			"database_name": "fundit-admin",
 			"database_id": "5b45d35c-a171-45d6-8128-d900e70a8330",
 			"migrations_dir": "migrations"
+		},
+		// The review states (moderation/migrations): the same database the public Worker reads. This Worker is the
+		// only writer.
+		{
+			"binding": "MOD_DB",
+			"database_name": "fundit-moderation",
+			"database_id": "<owner fills in>",
+			"migrations_dir": "../moderation/migrations"
 		}
 	],
 	// Per IP for nonce and login.

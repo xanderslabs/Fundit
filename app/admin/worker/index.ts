@@ -9,7 +9,7 @@
 // one could not be read, the Worker refuses. Any missing config or secret refuses.
 //
 // Never log a request or response body, a cookie, a signature, a message or a secret.
-import { getAddress, type Address, type Hex } from 'viem'
+import { getAddress, isAddress, type Address, type Hex } from 'viem'
 import { PANEL_PATHS } from '../src/lib/panelPaths'
 import { TURNSTILE_TOKEN, verifyTurnstile } from '../../worker/turnstile'
 import { ICONS, LOGIN_FONT, loginFiles, MANIFEST_PATH, type ManifestChunk } from './assets'
@@ -17,6 +17,7 @@ import { ADMIN_CHAINS, adminChains, type AdminChain } from './chain'
 import { runCron } from './cron'
 import type { Db } from './db'
 import { secure } from './headers'
+import { listStates, setState, stateHistory, type ModState } from './moderation'
 import { consumeNonce, issueNonce, pruneNonces } from './nonces'
 import { cachedOwner, readOwner } from './owner'
 import { clearSessionCookie, readSession, secretOk, SESSION_TTL_SEC, sessionCookie, signSession, type Session } from './session'
@@ -29,6 +30,8 @@ type RateLimit = { limit(options: { key: string }): Promise<{ success: boolean }
 export interface Env {
   ASSETS: { fetch(r: Request): Promise<Response> }
   ADMIN_DB: Db
+  // Optional: without it the moderation endpoints answer 503 and nothing else changes.
+  MOD_DB?: Db
   // Optional: without the binding (local dev), Turnstile stands alone.
   ADMIN_LIMIT?: RateLimit
   // Vars.
@@ -44,7 +47,7 @@ export interface Env {
   ARC_TESTNET_RPC_URL?: string
 }
 
-type Config = { origin: string; secret: string; turnstileSecret: string; db: Db; chains: Record<WorkerNetwork, AdminChain> }
+type Config = { origin: string; secret: string; turnstileSecret: string; db: Db; modDb: Db | null; chains: Record<WorkerNetwork, AdminChain> }
 type Body = Record<string, unknown>
 
 // The panel's pages, shared with the panel's router. A reload on any of them is sent the panel.
@@ -53,6 +56,8 @@ export { PANEL_PATHS }
 const NETWORKS = ['mainnet', 'testnet'] as const satisfies readonly WorkerNetwork[]
 const CHAIN_IDS = NETWORKS.map((n) => ADMIN_CHAINS[n].chainId)
 
+const MOD_STATES: readonly string[] = ['review', 'removed', 'cleared']
+const MAX_NOTE = 500
 const MAX_BODY = 4 * 1024
 const SIGNATURE = /^0x[0-9a-fA-F]{2,1024}$/
 
@@ -83,7 +88,7 @@ function config(env: Env): Config | null {
     origin = null
   }
   if (!origin || !secretOk(env.ADMIN_SESSION_SECRET) || !env.TURNSTILE_SECRET || !env.ADMIN_DB) return null
-  return { origin, secret: env.ADMIN_SESSION_SECRET, turnstileSecret: env.TURNSTILE_SECRET, db: env.ADMIN_DB, chains: adminChains(env) }
+  return { origin, secret: env.ADMIN_SESSION_SECRET, turnstileSecret: env.TURNSTILE_SECRET, db: env.ADMIN_DB, modDb: env.MOD_DB ?? null, chains: adminChains(env) }
 }
 
 async function rateLimit(env: Env, key: string): Promise<void> {
@@ -179,6 +184,39 @@ async function health(db: Db, network: WorkerNetwork): Promise<unknown> {
   }
 }
 
+// The owner's review states. Every call needs a session that owns the asked network: the notes are private.
+async function moderation(request: Request, cfg: Config, name: string, nowMs: number): Promise<Response> {
+  const history = name === 'moderation/history'
+  const isPost = request.method === 'POST'
+  if (request.method !== 'GET' && !isPost) return fail(405, 'method')
+  if (history && isPost) return fail(405, 'method')
+  if (isPost && request.headers.get('origin') !== cfg.origin) return fail(403, 'origin')
+  const state = await checkSession(request, cfg, nowMs)
+  if (state.kind === 'unavailable') return fail(503, 'unavailable')
+  if (state.kind === 'out') return fail(401, 'signed_out', [clearSessionCookie()])
+  const body = isPost ? await readBody(request) : null
+  const query = new URL(request.url).searchParams
+  const network = body ? body.network : query.get('network')
+  if (network !== 'mainnet' && network !== 'testnet') return fail(400, 'bad_input')
+  const owns = state.owned[network]
+  if (owns === null) return fail(503, 'unavailable')
+  if (!owns) return fail(403, 'not_owner')
+  const db = cfg.modDb
+  if (!db) return fail(503, 'unavailable')
+  if (body) {
+    const { address, state: next, note } = body
+    if (typeof address !== 'string' || !isAddress(address, { strict: false })) return fail(400, 'bad_input')
+    if (typeof next !== 'string' || !MOD_STATES.includes(next)) return fail(400, 'bad_input')
+    if (typeof note !== 'string' || note.length > MAX_NOTE) return fail(400, 'bad_input')
+    await setState(db, network, address, next as ModState, note, nowMs)
+    return json(200, { ok: true })
+  }
+  if (!history) return json(200, { states: await listStates(db, network) })
+  const address = query.get('address')
+  if (address === null || !isAddress(address, { strict: false })) return fail(400, 'bad_input')
+  return json(200, { history: await stateHistory(db, network, address) })
+}
+
 async function api(request: Request, env: Env, name: string, nowMs: number): Promise<Response> {
   const cfg = config(env)
   if (!cfg) return fail(503, 'unavailable')
@@ -204,6 +242,7 @@ async function api(request: Request, env: Env, name: string, nowMs: number): Pro
       if (network !== 'mainnet' && network !== 'testnet') return fail(400, 'bad_input')
       return json(200, await health(cfg.db, network))
     }
+    if (name === 'moderation' || name === 'moderation/history') return await moderation(request, cfg, name, nowMs)
     if (name !== 'nonce' && name !== 'login' && name !== 'logout') return fail(404, 'not_found')
     if (request.method !== 'POST') return fail(405, 'method')
     // Same-origin page only. A browser always sends Origin on a POST.
