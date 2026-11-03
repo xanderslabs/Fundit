@@ -36,7 +36,7 @@
 		{
 			"binding": "MOD_DB",
 			"database_name": "fundit-moderation",
-			"database_id": "<owner fills in>",
+			"database_id": "b7eead34-1c89-4088-82cd-0b9fb417d0d5",
 			"migrations_dir": "../moderation/migrations"
 		}
 	],
