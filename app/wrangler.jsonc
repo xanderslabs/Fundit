@@ -1,6 +1,6 @@
 {
-	// The Worker script (worker/index.ts) answers /api/ucw/* for email accounts and hands every other request to
-	// the static files.
+	// The Worker script (worker/index.ts) answers /api/ucw/* for email accounts, /api/report and /api/moderation, and hands
+	// every other request to the static files.
 	"name": "fundit",
 	"compatibility_date": "2026-10-17",
 	"main": "./worker/index.ts",

@@ -59,8 +59,8 @@ export function messageFor(input: ReportInput, network: string): string {
   const head = input.fundit ? `Fundit report: ${input.category}` : `Problem report: ${input.category}`
   const parts = [head]
   if (input.fundit) {
-    const query = network === 'testnet' ? `network=testnet&open=${input.fundit}` : `open=${input.fundit}`
-    parts.push(`Fundit: ${input.fundit}\nNetwork: ${network}\nAdmin: https://admin.fundit.fun/fundits?${query}`)
+    // Always names the network, so a network chosen earlier in the admin panel cannot override the link.
+    parts.push(`Fundit: ${input.fundit}\nNetwork: ${network}\nAdmin: https://admin.fundit.fun/fundits?network=${network}&open=${input.fundit}`)
   }
   parts.push(`Page: ${input.page}`, `What happened:\n${input.what}`)
   if (input.tx) parts.push(`Transaction: ${input.tx}`)

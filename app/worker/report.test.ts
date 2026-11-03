@@ -184,7 +184,7 @@ describe('Fundit reports', () => {
     const main = messageFor(input, 'mainnet')
     expect(main.split('\n')[0]).toBe('Fundit report: Fake or a scam')
     expect(main).toContain(`Fundit: ${ADDR}`)
-    expect(main).toContain(`Admin: https://admin.fundit.fun/fundits?open=${ADDR}`)
+    expect(main).toContain(`Admin: https://admin.fundit.fun/fundits?network=mainnet&open=${ADDR}`)
     const test = messageFor(input, 'testnet')
     expect(test).toContain(`Admin: https://admin.fundit.fun/fundits?network=testnet&open=${ADDR}`)
     expect(test).toContain('Network: testnet')

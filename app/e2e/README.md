@@ -37,7 +37,7 @@ any request or WebSocket to a WalletConnect or Reown host, with the step it happ
 account did not make, stubs `/api/moderation` and `/api/report` (the dev server has no Worker), and checks the
 review and removed states, the fail-open case and the Fundit report form. It replaces the Turnstile script with
 a stub that returns a token, and `playwright.config.ts` gives the dev server Cloudflare's public test site key so
-the form renders. Run it alone with `npx playwright test e2e/moderation.spec.ts`.
+the form renders. Run it alone with `npx playwright test e2e/moderation.spec.ts`. The review test needs at least two public testnet Fundits, so that another card is on the list when the flagged one leaves it.
 
 ## Prerequisites
 

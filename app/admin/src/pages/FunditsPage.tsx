@@ -195,7 +195,12 @@ function ReviewSection({ address, network, current }: { address: string; network
           </Actions>
         </div>
       ) : (
-        <Button onClick={() => setConfirming(true)}>Save</Button>
+        <>
+          <Button disabled={state === current} onClick={() => setConfirming(true)}>
+            Save
+          </Button>
+          {state === current && <p className="admin-note">This is already the current state.</p>}
+        </>
       )}
       {error && (
         <p className="admin-error" role="alert">
@@ -305,6 +310,7 @@ export function FunditsPage() {
 
   // ?open=<address> opens that Fundit's drawer once, when the snapshot has it (the case differs from the API's).
   const wanted = params.get('open')?.toLowerCase()
+  const notOnNetwork = !!wanted && snapshot.data !== undefined && !snapshot.data.some((r) => r.address.toLowerCase() === wanted)
   useEffect(() => {
     if (deepLinked.current || !wanted || !snapshot.data) return
     deepLinked.current = true
@@ -375,7 +381,7 @@ export function FunditsPage() {
               </option>,
             ])}
           </select>
-          {moderation.isError && !loaded && (
+          {moderation.isError && (
             <p className="admin-error" role="alert">
               Review states could not be loaded.{' '}
               <Button variant="ghost" onClick={() => void moderation.refetch()}>
@@ -383,6 +389,7 @@ export function FunditsPage() {
               </Button>
             </p>
           )}
+          {notOnNetwork && <p className="admin-note">{`This Fundit is not on ${network}.`}</p>}
           <p className="admin-note" aria-live="polite">
             {rows.length === all.length ? `${all.length} Fundits` : `${rows.length} of ${all.length} Fundits`}
           </p>

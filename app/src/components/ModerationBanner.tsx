@@ -22,7 +22,7 @@ export function ModerationBanner({ state }: { state: 'review' | 'removed' }) {
     )
   }
   return (
-    <div className="moderation-removed">
+    <div role="status" className="moderation-removed">
       <Banner tone="attention">
         <p>
           <strong>Fundit removed this fundraiser from the site after a review.</strong> We don't recommend giving to it. The

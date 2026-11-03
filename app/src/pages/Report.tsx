@@ -47,15 +47,24 @@ export function Report() {
   return <ReportForm />
 }
 
-// With a valid Fundit address in the query, report that Fundit. An address that is not a Fundit gets the general form.
+// With a valid Fundit address in the query, report that Fundit. Only a confirmed non-Fundit gets the general form.
+// If the lookup fails (the chain read is down), the address is still reported, shown in place of a title.
 function FunditReport({ address }: { address: `0x${string}` }) {
   const query = useCampaign(address)
-  if (query.isPending) return null
+  if (query.isPending) {
+    return (
+      <section className="report">
+        <PageHeader title="Report this Fundit" width="narrow" />
+        <p role="status">Loading...</p>
+      </section>
+    )
+  }
+  if (query.isError) return <ReportForm fundit={{ address }} />
   if (query.data && query.data !== 'not-a-campaign') return <ReportForm fundit={{ address, title: query.data.summary.meta.title }} />
   return <ReportForm />
 }
 
-function ReportForm({ fundit }: { fundit?: { address: string; title: string } }) {
+function ReportForm({ fundit }: { fundit?: { address: string; title?: string } }) {
   const location = useLocation()
   const [search] = useSearchParams()
   const categories = fundit ? FUNDIT_CATEGORIES : CATEGORIES
@@ -166,7 +175,7 @@ function ReportForm({ fundit }: { fundit?: { address: string; title: string } })
   return (
     <section className="report">
       <PageHeader title={heading} subtitle={HELP} width="narrow" />
-      {fundit && <p className="report-fundit">Reporting: {fundit.title}</p>}
+      {fundit && <p className="report-fundit">Reporting: {fundit.title ?? fundit.address}</p>}
       <form className="form" onSubmit={submit} noValidate>
         <Field id="report-category" label="What is it about?">
           <select className="select" value={category} onChange={(e) => setCategory(e.target.value)} disabled={busy}>

@@ -27,7 +27,7 @@ import { Report } from './Report'
 
 vi.mock('../lib/walletSession', () => ({ disconnectWallet: () => {} }))
 
-const campaign = vi.hoisted(() => ({ data: undefined as unknown, isPending: false }))
+const campaign = vi.hoisted(() => ({ data: undefined as unknown, isPending: false, isError: false }))
 vi.mock('../hooks/useCampaigns', () => ({ useCampaign: () => campaign }))
 
 const fetchMock = vi.fn()
@@ -35,6 +35,7 @@ beforeEach(() => {
   state.siteKey = 'site-key'
   campaign.data = undefined
   campaign.isPending = false
+  campaign.isError = false
   fetchMock.mockReset()
   vi.stubGlobal('fetch', fetchMock)
 })
@@ -153,6 +154,28 @@ describe('Report page', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Send report' }))
     await waitFor(() => expect(fetchMock).toHaveBeenCalled())
     expect(JSON.parse(String((fetchMock.mock.calls[0]![1] as RequestInit).body))).toMatchObject({ category: 'Fake or a scam', fundit: ADDR, page: `/c/${ADDR}` })
+  })
+
+  it('shows a loading line, not a blank page, while the Fundit lookup is pending', () => {
+    campaign.isPending = true
+    renderAt(`/report?fundit=${ADDR}`)
+    expect(screen.getByText('Loading...')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Report this Fundit' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Send report' })).toBeNull()
+  })
+
+  it('keeps the Fundit report when the lookup fails, shows the address and sends fundit', async () => {
+    campaign.isError = true
+    reply(200, { ok: true })
+    renderAt(`/report?fundit=${ADDR}`)
+    expect(screen.getByRole('heading', { name: 'Report this Fundit' })).toBeTruthy()
+    expect(screen.getByText(`Reporting: ${ADDR}`)).toBeTruthy()
+    expect(screen.getAllByRole('option')).toHaveLength(6)
+    expect(screen.getByRole('option', { name: 'Fake or a scam' })).toBeTruthy()
+    await userEvent.type(screen.getByLabelText('What happened'), 'Looks fake')
+    await userEvent.click(screen.getByRole('button', { name: 'Send report' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    expect(JSON.parse(String((fetchMock.mock.calls[0]![1] as RequestInit).body))).toMatchObject({ category: 'Fake or a scam', fundit: ADDR })
   })
 
   it('shows the general form for a junk fundit value or an address that is not a Fundit', () => {

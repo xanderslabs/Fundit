@@ -54,38 +54,46 @@ test('a Fundit with no flag is on Home and Explore', async ({ page }) => {
 
 test('a Fundit under review leaves Home and Explore, and its page shows the banner to a signed-out visitor', async ({ page }) => {
   await stubModeration(page, 'review')
+  const first = page.waitForResponse((r) => r.url().includes('/api/moderation'))
   await page.goto('/explore')
+  await first
   // Wait for the list to load with another Fundit on it, so a missing card is not just a slow load.
   await expect(page.locator('a.fundit-card').first()).toBeVisible({ timeout: 60_000 })
   await expect(card(page)).toHaveCount(0)
   // Home lists the same Fundits (the previous test shows this one there), so wait for another card first.
+  const home = page.waitForResponse((r) => r.url().includes('/api/moderation'))
   await page.goto('/')
+  await home
   await expect(page.locator('a.fundit-card').first()).toBeVisible({ timeout: 60_000 })
   await expect(card(page)).toHaveCount(0)
 
   await page.goto(`/c/${fundit}`)
   await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible({ timeout: 60_000 })
-  await expect(page.getByText('This Fundit is under review.')).toBeVisible()
-  await expect(page.getByRole('banner').getByRole('button', { name: 'Sign in', exact: true })).toBeVisible()
+  await expect(page.getByText('This Fundit is under review.')).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByRole('banner').getByRole('button', { name: 'Sign in', exact: true })).toBeVisible({ timeout: 60_000 })
 })
 
 test('a removed Fundit shows the removed notice and no Give panel', async ({ page }) => {
   await stubModeration(page, 'removed')
+  const answered = page.waitForResponse((r) => r.url().includes('/api/moderation'))
   await page.goto(`/c/${fundit}`)
+  await answered
   await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible({ timeout: 60_000 })
-  await expect(page.getByText('Fundit removed this fundraiser from the site after a review.')).toBeVisible()
+  await expect(page.getByText('Fundit removed this fundraiser from the site after a review.')).toBeVisible({ timeout: 60_000 })
   await expect(page.getByRole('region', { name: 'Give' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Give', exact: true })).toHaveCount(0)
 })
 
 test('when /api/moderation fails the Fundit is back on Explore and its page has no banner', async ({ page }) => {
   await stubModeration(page, 503)
+  const failed = page.waitForResponse((r) => r.url().includes('/api/moderation'))
   await page.goto('/explore')
+  expect((await failed).status()).toBe(503)
   await expect(card(page)).toBeVisible({ timeout: 60_000 })
   await card(page).click()
   await expect(page).toHaveURL(new RegExp(`/c/${fundit}$`, 'i'))
-  await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible()
-  await expect(page.getByRole('region', { name: 'Give' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByRole('region', { name: 'Give' })).toBeVisible({ timeout: 60_000 })
   await expect(page.getByText('This Fundit is under review.')).toHaveCount(0)
   await expect(page.getByText('Fundit removed this fundraiser from the site after a review.')).toHaveCount(0)
 })
