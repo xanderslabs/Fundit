@@ -114,8 +114,10 @@ export function Terms() {
         </li>
       </ul>
       <p>
-        Fundit does not check fundraisers or organisers. Before you give, decide for yourself whether you trust the
-        organiser.
+        Fundit does not check fundraisers or organisers before they go live. We may hide a fundraiser from the site,
+        mark it as under review, or mark it as removed after a report. This changes only what the Fundit website
+        shows. It does not affect the money the fundraiser holds. Before you give, decide for yourself whether you
+        trust the organiser.
       </p>
 
       <h2>7. Third-party services</h2>
@@ -130,8 +132,9 @@ export function Terms() {
 
       <h2>8. What we can change</h2>
       <p>
-        The Fundit team can pause the creation of new fundraisers, choose which fundraiser is featured, set the fee
-        rates for fundraisers created in the future, and change the treasury address that receives fees and tips. The
+        The Fundit team can pause the creation of new fundraisers, choose which fundraiser is featured, hide a
+        fundraiser from the site's lists or mark it as under review or removed, set the fee rates for fundraisers
+        created in the future, and change the treasury address that receives fees and tips. The
         team can never move the money held by a fundraiser or change the fee rates of a fundraiser that already
         exists.
       </p>

@@ -9,7 +9,8 @@ export function Privacy() {
 
       <h2>1. Introduction</h2>
       <p>
-        This policy explains what data Fundit uses and where it goes. Fundit has no database of its own. You sign in
+        This policy explains what data Fundit uses and where it goes. Fundit keeps no database of personal data. Its only records are the team's own decisions about which fundraisers
+        are under review or removed. You sign in
         with a Fundit account, in one of two ways: with your email address or with your own wallet.
         The website runs in your browser and reads public blockchains. A small Fundit server also serves the site's
         pages. For email accounts it handles sign-in, keeps your session, and passes each transaction you approve to
