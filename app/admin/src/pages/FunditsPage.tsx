@@ -32,10 +32,25 @@ const COLUMNS: { key: Column; label: string; numeric?: boolean }[] = [
   { key: 'review', label: 'Review' },
 ]
 
-// No row in the moderation list means normal.
-type Review = ModState | 'normal'
-const REVIEW_LABEL: Record<Review, string> = { normal: 'Normal', review: 'Under review', removed: 'Removed', cleared: 'Cleared' }
-const REVIEW_TONE: Record<Review, 'neutral' | 'success' | 'attention'> = { normal: 'neutral', review: 'attention', removed: 'attention', cleared: 'success' }
+// No row in the moderation list means normal, but only once the list has loaded: until then the state is loading,
+// and after a failed load it is unknown, so a Removed Fundit is never shown as Normal.
+type Review = ModState | 'normal' | 'loading' | 'unknown'
+const REVIEW_LABEL: Record<Review, string> = {
+  normal: 'Normal',
+  review: 'Under review',
+  removed: 'Removed',
+  cleared: 'Cleared',
+  loading: 'Loading...',
+  unknown: 'Unknown',
+}
+const REVIEW_TONE: Record<Review, 'neutral' | 'success' | 'attention'> = {
+  normal: 'neutral',
+  review: 'attention',
+  removed: 'attention',
+  cleared: 'success',
+  loading: 'neutral',
+  unknown: 'attention',
+}
 const FILTERS: { value: 'all' | ModState; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'review', label: 'Under review' },
@@ -196,8 +211,8 @@ function ReviewSection({ address, network, current }: { address: string; network
         <p className="admin-muted">No changes yet.</p>
       ) : (
         <ul className="admin-review-history">
-          {history.data.map((h) => (
-            <li key={h.at}>
+          {history.data.map((h, i) => (
+            <li key={`${h.at}-${i}`}>
               <span className="admin-amount">{dateTime.format(new Date(h.at))} UTC</span>{' '}
               {`${h.oldState ? REVIEW_LABEL[h.oldState] : 'Normal'} to ${REVIEW_LABEL[h.newState]}`}
               {h.note && <span className="admin-review-note" dir="auto">{h.note}</span>}
@@ -301,7 +316,9 @@ export function FunditsPage() {
 
   const gifts = giftCounts(scan.state, showTest, network)
   const states = new Map((moderation.data ?? []).map((m) => [m.address.toLowerCase(), m.state]))
-  const review = (r: FunditSnapshot): Review => states.get(r.address.toLowerCase()) ?? 'normal'
+  const loaded = moderation.data !== undefined
+  const review = (r: FunditSnapshot): Review =>
+    loaded ? (states.get(r.address.toLowerCase()) ?? 'normal') : moderation.isError ? 'unknown' : 'loading'
   const all = snapshot.data ? visible(snapshot.data, showTest) : []
   const rows = all.filter((r) => matches(r, query) && (filter === 'all' || review(r) === filter))
   rows.sort((a, b) => (sort.desc ? -1 : 1) * compare(a, b, sort.column, gifts, review))
@@ -332,7 +349,7 @@ export function FunditsPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          <select className="select admin-filter-select" aria-label="Filter Fundits by review state" value={filter} onChange={(e) => setFilter(e.target.value as 'all' | ModState)}>
+          <select className="select admin-filter-select" aria-label="Filter Fundits by review state" disabled={!loaded} value={filter} onChange={(e) => setFilter(e.target.value as 'all' | ModState)}>
             {FILTERS.map((f) => (
               <option key={f.value} value={f.value}>
                 {f.label}
@@ -358,6 +375,14 @@ export function FunditsPage() {
               </option>,
             ])}
           </select>
+          {moderation.isError && !loaded && (
+            <p className="admin-error" role="alert">
+              Review states could not be loaded.{' '}
+              <Button variant="ghost" onClick={() => void moderation.refetch()}>
+                Retry
+              </Button>
+            </p>
+          )}
           <p className="admin-note" aria-live="polite">
             {rows.length === all.length ? `${all.length} Fundits` : `${rows.length} of ${all.length} Fundits`}
           </p>
