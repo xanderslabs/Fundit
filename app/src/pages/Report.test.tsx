@@ -27,9 +27,14 @@ import { Report } from './Report'
 
 vi.mock('../lib/walletSession', () => ({ disconnectWallet: () => {} }))
 
+const campaign = vi.hoisted(() => ({ data: undefined as unknown, isPending: false }))
+vi.mock('../hooks/useCampaigns', () => ({ useCampaign: () => campaign }))
+
 const fetchMock = vi.fn()
 beforeEach(() => {
   state.siteKey = 'site-key'
+  campaign.data = undefined
+  campaign.isPending = false
   fetchMock.mockReset()
   vi.stubGlobal('fetch', fetchMock)
 })
@@ -125,5 +130,40 @@ describe('Report page', () => {
     renderAt()
     expect(screen.getByText("We couldn't send your report. Email hello@fundit.fun instead.")).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Send report' })).toBeNull()
+  })
+
+  const ADDR = '0x1234567890abcdef1234567890abcdef12345678'
+
+  it('reports a Fundit: shows its title, the six Fundit categories and sends fundit', async () => {
+    campaign.data = { address: ADDR, summary: { meta: { title: 'Help Ada' } } }
+    reply(200, { ok: true })
+    renderAt(`/report?fundit=${ADDR}`)
+    expect(screen.getByRole('heading', { name: 'Report this Fundit' })).toBeTruthy()
+    expect(screen.getByText('Reporting: Help Ada')).toBeTruthy()
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'Fake or a scam',
+      'Pretending to be someone else',
+      'Misusing the money',
+      'Harmful or illegal content',
+      'I organise this Fundit and want to respond',
+      'Something else about this Fundit',
+    ])
+    expect((screen.getByLabelText(/^Page/) as HTMLInputElement).value).toBe(`/c/${ADDR}`)
+    await userEvent.type(screen.getByLabelText('What happened'), 'Looks fake')
+    await userEvent.click(screen.getByRole('button', { name: 'Send report' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    expect(JSON.parse(String((fetchMock.mock.calls[0]![1] as RequestInit).body))).toMatchObject({ category: 'Fake or a scam', fundit: ADDR, page: `/c/${ADDR}` })
+  })
+
+  it('shows the general form for a junk fundit value or an address that is not a Fundit', () => {
+    renderAt('/report?fundit=abc')
+    expect(screen.getByRole('heading', { name: 'Report a problem' })).toBeTruthy()
+    expect(screen.queryByText(/^Reporting:/)).toBeNull()
+    cleanup()
+    campaign.data = 'not-a-campaign'
+    renderAt(`/report?fundit=${ADDR}`)
+    expect(screen.getByRole('heading', { name: 'Report a problem' })).toBeTruthy()
+    expect(screen.getAllByRole('option')).toHaveLength(6)
+    expect(screen.getByRole('option', { name: 'Signing in' })).toBeTruthy()
   })
 })

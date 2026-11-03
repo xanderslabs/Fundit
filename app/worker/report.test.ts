@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import worker, { type Env } from './index'
-import { handleReport, messageFor, REPORT_CATEGORIES, validateReport } from './report'
+import { FUNDIT_REPORT_CATEGORIES, handleReport, messageFor, REPORT_CATEGORIES, validateReport } from './report'
 
 const ORIGIN = 'https://fundit.fun'
 const limit = vi.fn(async (_o: { key: string }) => ({ success: true }))
@@ -85,7 +85,7 @@ describe('POST /api/report', () => {
     const sent = JSON.parse(String(telegram()[0]!.init.body)) as Record<string, unknown>
     expect(sent).not.toHaveProperty('parse_mode')
     expect(sent.text).toContain('*bold* <b>x</b> [link](https://evil.example)')
-    expect(messageFor({ category: 'Giving', page: '/c/x', what: 'hi' })).toBe('Problem report: Giving\n\nPage: /c/x\n\nWhat happened:\nhi')
+    expect(messageFor({ category: 'Giving', page: '/c/x', what: 'hi' }, 'mainnet')).toBe('Problem report: Giving\n\nPage: /c/x\n\nWhat happened:\nhi')
   })
 
   it('never adds data the person did not type', async () => {
@@ -150,5 +150,49 @@ describe('POST /api/report', () => {
     expect((await handleReport(new Request(`${ORIGIN}/api/report`), env())).status).toBe(405)
     expect((await handleReport(post('[1]'), env())).status).toBe(400)
     expect((await handleReport(post({ ...GOOD, what: 'x'.repeat(9000) }), env())).status).toBe(400)
+  })
+})
+
+describe('Fundit reports', () => {
+  const ADDR = '0x1234567890abcdef1234567890ABCDEF12345678'
+  const FUNDIT = { ...GOOD, category: 'Fake or a scam', fundit: ADDR }
+
+  it('accepts a Fundit category with a valid fundit address', () => {
+    expect(FUNDIT_REPORT_CATEGORIES).toHaveLength(6)
+    const r = validateReport(FUNDIT)
+    expect(r.ok && r.input.fundit).toBe(ADDR)
+  })
+
+  it('rejects fundit "0x123" and fundit "abc" with 400', async () => {
+    for (const fundit of ['0x123', 'abc']) {
+      expect(validateReport({ ...FUNDIT, fundit }).ok).toBe(false)
+      expect((await handleReport(post({ ...FUNDIT, fundit }), env())).status).toBe(400)
+    }
+    expect(telegram()).toHaveLength(0)
+  })
+
+  it('rejects a Fundit category without a fundit field', () => {
+    expect(validateReport({ ...FUNDIT, fundit: undefined }).ok).toBe(false)
+  })
+
+  it('rejects a general category with a fundit field', () => {
+    expect(validateReport({ ...FUNDIT, category: 'Giving' }).ok).toBe(false)
+  })
+
+  it('puts the address, the network and the admin link in the message', () => {
+    const input = { category: 'Fake or a scam' as const, page: '/c/x', what: 'hi', fundit: ADDR }
+    const main = messageFor(input, 'mainnet')
+    expect(main.split('\n')[0]).toBe('Fundit report: Fake or a scam')
+    expect(main).toContain(`Fundit: ${ADDR}`)
+    expect(main).toContain(`Admin: https://admin.fundit.fun/fundits?open=${ADDR}`)
+    const test = messageFor(input, 'testnet')
+    expect(test).toContain(`Admin: https://admin.fundit.fun/fundits?network=testnet&open=${ADDR}`)
+    expect(test).toContain('Network: testnet')
+  })
+
+  it('sends the Worker network in the Telegram message', async () => {
+    const res = await handleReport(post(FUNDIT), env({ NETWORK: 'testnet' }))
+    expect(res.status).toBe(200)
+    expect(String((JSON.parse(String(telegram()[0]!.init.body)) as { text: string }).text)).toContain('network=testnet&open=')
   })
 })

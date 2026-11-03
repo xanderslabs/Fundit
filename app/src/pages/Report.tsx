@@ -1,7 +1,9 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react'
+import { isAddress } from 'viem'
 import { useLocation, useSearchParams } from 'react-router'
 import { Banner, Button, Field, PageHeader } from '../components/ui'
 import { TURNSTILE_SITE_KEY } from '../config'
+import { useCampaign } from '../hooks/useCampaigns'
 import { currentTheme } from '../lib/theme'
 import { loadTurnstile, type Turnstile } from '../lib/turnstile'
 import '../components/Form.css'
@@ -9,6 +11,15 @@ import './Report.css'
 
 // Same list as the Worker's REPORT_CATEGORIES (worker/report.ts).
 const CATEGORIES = ['Signing in', 'Adding money', 'Giving', 'Creating or managing a Fundit', 'Withdrawing', 'Something else'] as const
+// Same list as the Worker's FUNDIT_REPORT_CATEGORIES (worker/report.ts).
+const FUNDIT_CATEGORIES = [
+  'Fake or a scam',
+  'Pretending to be someone else',
+  'Misusing the money',
+  'Harmful or illegal content',
+  'I organise this Fundit and want to respond',
+  'Something else about this Fundit',
+] as const
 const EMAIL_PATTERN = /^[^\s@]{1,64}@[^\s@]{1,255}$/
 
 const HELP = "Don't include a sign-in code, private key or recovery phrase. Fundit will never ask for them."
@@ -30,10 +41,27 @@ type Stage = 'idle' | 'sending' | 'sent'
 
 // The public "Report a problem" form. The Worker (worker/report.ts) sends it to the team's private Telegram chat.
 export function Report() {
+  const [search] = useSearchParams()
+  const fundit = search.get('fundit')
+  if (fundit && isAddress(fundit, { strict: false })) return <FunditReport address={fundit} />
+  return <ReportForm />
+}
+
+// With a valid Fundit address in the query, report that Fundit. An address that is not a Fundit gets the general form.
+function FunditReport({ address }: { address: `0x${string}` }) {
+  const query = useCampaign(address)
+  if (query.isPending) return null
+  if (query.data && query.data !== 'not-a-campaign') return <ReportForm fundit={{ address, title: query.data.summary.meta.title }} />
+  return <ReportForm />
+}
+
+function ReportForm({ fundit }: { fundit?: { address: string; title: string } }) {
   const location = useLocation()
   const [search] = useSearchParams()
-  const [category, setCategory] = useState<string>(CATEGORIES[0])
-  const [page, setPage] = useState(() => cameFrom(location.state, search.get('from')))
+  const categories = fundit ? FUNDIT_CATEGORIES : CATEGORIES
+  const heading = fundit ? 'Report this Fundit' : 'Report a problem'
+  const [category, setCategory] = useState<string>(categories[0])
+  const [page, setPage] = useState(() => (fundit ? `/c/${fundit.address}` : cameFrom(location.state, search.get('from'))))
   const [what, setWhat] = useState('')
   const [tx, setTx] = useState('')
   const [email, setEmail] = useState('')
@@ -77,7 +105,7 @@ export function Report() {
   if (!TURNSTILE_SITE_KEY) {
     return (
       <section className="report">
-        <PageHeader title="Report a problem" width="narrow" />
+        <PageHeader title={heading} width="narrow" />
         <Banner tone="attention">{FAILED}</Banner>
       </section>
     )
@@ -102,6 +130,7 @@ export function Report() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           category,
+          ...(fundit && { fundit: fundit.address }),
           page: page.trim().slice(0, 200),
           what: what.trim(),
           ...(tx.trim() && { tx: tx.trim() }),
@@ -127,7 +156,7 @@ export function Report() {
   if (stage === 'sent') {
     return (
       <section className="report">
-        <PageHeader title="Report a problem" width="narrow" />
+        <PageHeader title={heading} width="narrow" />
         <Banner>{SENT}</Banner>
       </section>
     )
@@ -136,11 +165,12 @@ export function Report() {
   const busy = stage === 'sending'
   return (
     <section className="report">
-      <PageHeader title="Report a problem" subtitle={HELP} width="narrow" />
+      <PageHeader title={heading} subtitle={HELP} width="narrow" />
+      {fundit && <p className="report-fundit">Reporting: {fundit.title}</p>}
       <form className="form" onSubmit={submit} noValidate>
         <Field id="report-category" label="What is it about?">
           <select className="select" value={category} onChange={(e) => setCategory(e.target.value)} disabled={busy}>
-            {CATEGORIES.map((c) => (
+            {categories.map((c) => (
               <option key={c}>{c}</option>
             ))}
           </select>

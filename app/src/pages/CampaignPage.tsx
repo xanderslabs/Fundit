@@ -1,4 +1,4 @@
-import { useParams } from 'react-router'
+import { Link, useParams } from 'react-router'
 import { type Address, isAddress, isAddressEqual } from 'viem'
 import { ActivityList } from '../components/ActivityList'
 import { BackupBanner } from '../components/BackupBanner'
@@ -134,6 +134,9 @@ function CampaignBody({ view }: { view: CampaignView }) {
               <SharePanel address={view.address} title={summary.meta.title} isCreator={isCreator} headingId="share-heading" />
             </Card>
           </section>
+          <p>
+            <Link to={`/report?fundit=${view.address}`}>Report this Fundit</Link>
+          </p>
           <ActivityList campaign={view.address} createdAtBlock={summary.createdAtBlock} symbol={view.symbol} />
         </div>
       </div>
