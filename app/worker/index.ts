@@ -10,6 +10,7 @@ import { decodeFunctionResult, encodeFunctionData, isAddress, parseAbi, type Add
 import { clearTokenCookies, readTokens, TOKEN, tokenCookies } from './cookies'
 import { NETWORKS_WORKER, rpcUrlFor, type WorkerNetwork, type WorkerNetworkConfig } from './networks'
 import { canonicalTransaction, checkSignRequest, type PolicyContext } from './policy'
+import { handleModeration, type D1Like } from './moderation'
 import { handleReport } from './report'
 import { TURNSTILE_TOKEN, verifyTurnstile } from './turnstile'
 
@@ -20,6 +21,8 @@ export interface Env {
   ASSETS: { fetch(request: Request): Promise<Response> }
   // Optional: without the binding, Turnstile and Circle's own OTP limits stand alone.
   UCW_LIMIT?: RateLimit
+  // Optional, read-only: the moderation database. Without it GET /api/moderation answers empty lists.
+  MOD_DB?: D1Like
   // Secrets.
   CIRCLE_API_KEY: string
   TURNSTILE_SECRET: string
@@ -267,6 +270,7 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const { pathname } = new URL(request.url)
     if (pathname === '/api/report') return handleReport(request, env)
+    if (pathname === '/api/moderation') return handleModeration(request, env)
     if (pathname.startsWith('/api/ucw/')) return api(request, env, pathname.slice('/api/ucw/'.length))
     return env.ASSETS.fetch(request)
   },

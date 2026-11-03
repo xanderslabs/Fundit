@@ -26,6 +26,16 @@
 			"simple": { "limit": 10, "period": 60 }
 		}
 	],
+	// The moderation database, which the admin Worker writes. This Worker only reads it, for GET /api/moderation. The
+	// owner runs `wrangler d1 create fundit-moderation` and puts the id here.
+	"d1_databases": [
+		{
+			"binding": "MOD_DB",
+			"database_name": "fundit-moderation",
+			"database_id": "<owner fills in>",
+			"migrations_dir": "moderation/migrations"
+		}
+	],
 	// fundit.fun is the permanent home.
 	"routes": [
 		{ "pattern": "fundit.fun", "custom_domain": true },
