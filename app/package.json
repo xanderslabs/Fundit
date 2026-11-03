@@ -49,6 +49,9 @@
     "firebase": {
       "undici": "6.29.1",
       "@grpc/grpc-js": "1.13.7"
+    },
+    "@circle-fin/w3s-pw-web-sdk": {
+      "uuid": "11.1.1"
     }
   }
 }
