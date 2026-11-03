@@ -285,3 +285,7 @@
     transition: none;
   }
 }
+
+.give-reminder {
+  text-align: center;
+}

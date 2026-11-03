@@ -3,11 +3,12 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import userEvent from '@testing-library/user-event'
 import { type Address, decodeFunctionData, getAddress, type Hex, type TransactionReceipt } from 'viem'
 import { MemoryRouter } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { campaignAbi } from '../abi/campaign'
 import { erc20Abi } from '../abi/erc20'
-import { TOKENS, type TokenSymbol } from '../config'
+import { NETWORK, TOKENS, type TokenSymbol } from '../config'
 import type { CampaignView } from '../lib/campaigns'
+import { markNoticeSeen } from '../lib/giveNotice'
 import type { Call, Sender, SendOptions, TxResult } from '../lib/sender'
 import { DonatePanel } from './DonatePanel'
 
@@ -78,11 +79,11 @@ function fakeSender(...results: TxResult[]) {
   return send
 }
 
-function renderPanel(v: CampaignView, client = new QueryClient()) {
+function renderPanel(v: CampaignView, client = new QueryClient(), moderation: 'normal' | 'review' = 'normal') {
   render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
-        <DonatePanel view={v} moderation="normal" />
+        <DonatePanel view={v} moderation={moderation} />
       </MemoryRouter>
     </QueryClientProvider>,
   )
@@ -90,6 +91,11 @@ function renderPanel(v: CampaignView, client = new QueryClient()) {
 }
 
 const donateButton = () => screen.getByRole('button', { name: 'Give' }) as HTMLButtonElement
+
+// Most tests are about the gift itself, so the notice counts as already seen. The notice tests clear it.
+beforeEach(() => {
+  markNoticeSeen(NETWORK.name, ME)
+})
 
 afterEach(() => {
   cleanup()
@@ -125,6 +131,122 @@ function expectExplorerLink() {
 }
 
 describe('DonatePanel', () => {
+  describe('donor notice', () => {
+    const unseen = () => localStorage.clear()
+    async function press() {
+      const user = userEvent.setup()
+      await user.type(screen.getByLabelText('Amount'), '10')
+      await waitFor(() => expect(donateButton().disabled).toBe(false))
+      await user.click(donateButton())
+      return user
+    }
+
+    it('the first gift opens the notice and sends nothing', async () => {
+      unseen()
+      state.balance = 100_000000n
+      const send = fakeSender()
+      renderPanel(view('USDC'))
+      await press()
+      expect(await screen.findByText('Before you give')).toBeTruthy()
+      expect(send).not.toHaveBeenCalled()
+      expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(true)
+    })
+
+    it('Continue after ticking I understand sends exactly once, and the next gift skips the notice', async () => {
+      unseen()
+      state.balance = 100_000000n
+      const send = fakeSender()
+      renderPanel(view('USDC'))
+      const user = await press()
+      await user.click(await screen.findByLabelText('I understand'))
+      await user.click(screen.getByRole('button', { name: 'Continue' }))
+      await waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+      await screen.findByText('Thank you. Your donation went through.')
+      expect(screen.queryByText('Before you give')).toBeNull()
+      await press()
+      await waitFor(() => expect(send).toHaveBeenCalledTimes(2))
+      expect(screen.queryByText('Before you give')).toBeNull()
+    })
+
+    it('Cancel sends nothing and keeps the form as it was', async () => {
+      unseen()
+      state.balance = 100_000000n
+      const send = fakeSender()
+      renderPanel(view('USDC'))
+      const user = await press()
+      await user.click(await screen.findByRole('button', { name: 'Cancel' }))
+      expect(screen.queryByText('Before you give')).toBeNull()
+      expect((screen.getByLabelText('Amount') as HTMLInputElement).value).toBe('10')
+      expect(send).not.toHaveBeenCalled()
+      // It was not marked seen, so pressing Give asks again.
+      await user.click(donateButton())
+      expect(await screen.findByText('Before you give')).toBeTruthy()
+    })
+
+    it('a Fundit under review shows the notice every time and says so first', async () => {
+      unseen()
+      state.balance = 100_000000n
+      const send = fakeSender()
+      renderPanel(view('USDC'), new QueryClient(), 'review')
+      const user = await press()
+      expect(await screen.findByText('This Fundit is under review after a report. Think carefully before you give.')).toBeTruthy()
+      await user.click(screen.getByLabelText('I understand'))
+      await user.click(screen.getByRole('button', { name: 'Continue' }))
+      await waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+      await screen.findByText('Thank you. Your donation went through.')
+      // Seeing it on a Fundit under review does not count as seen for normal ones.
+      expect(localStorage.getItem(`fundit:giveNotice:${NETWORK.name}:${ME.toLowerCase()}`)).toBeNull()
+      await press()
+      expect(await screen.findByText('Before you give')).toBeTruthy()
+      expect(send).toHaveBeenCalledTimes(1)
+    })
+
+    it('a normal Fundit does not show the review line', async () => {
+      unseen()
+      state.balance = 100_000000n
+      fakeSender()
+      renderPanel(view('USDC'))
+      await press()
+      await screen.findByText('Before you give')
+      expect(screen.queryByText(/This Fundit is under review/)).toBeNull()
+    })
+
+    it('Check again never shows the notice', async () => {
+      unseen()
+      state.balance = 100_000000n
+      const send = fakeSender({ status: 'timeout', hash: HASH, completed: 0 })
+      recheck.next = async () => success
+      renderPanel(view('USDC'))
+      const user = await press()
+      await user.click(await screen.findByLabelText('I understand'))
+      await user.click(screen.getByRole('button', { name: 'Continue' }))
+      await user.click(await screen.findByRole('button', { name: 'Check again' }))
+      await screen.findByText('Thank you. Your donation went through.')
+      expect(screen.queryByText('Before you give')).toBeNull()
+      expect(send).toHaveBeenCalledTimes(1)
+    })
+
+    it('always shows the reminder with a Terms link under Give, and hides it with the button', async () => {
+      state.balance = 100_000000n
+      fakeSender()
+      renderPanel(view('USDC'))
+      expect(screen.getByText(/Gifts can't be reversed or refunded\./)).toBeTruthy()
+      expect(screen.getByRole('link', { name: 'Terms' }).getAttribute('href')).toBe('/terms')
+    })
+
+    it('shows the full notice when localStorage throws', async () => {
+      state.balance = 100_000000n
+      const send = fakeSender()
+      renderPanel(view('USDC'))
+      vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+        throw new Error('blocked')
+      })
+      await press()
+      expect(await screen.findByText('Before you give')).toBeTruthy()
+      expect(send).not.toHaveBeenCalled()
+    })
+  })
+
   // The transfer would revert on chain, after the donor already paid gas for an approval.
   it('blocks submit when amount plus tip is over the balance, and says why', async () => {
     fakeSender()

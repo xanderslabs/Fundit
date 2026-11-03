@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import type { Hex } from 'viem'
-import { EOA_GAS_RESERVE, EXPLORER_URL } from '../config'
+import { EOA_GAS_RESERVE, EXPLORER_URL, NETWORK } from '../config'
 import { useSender } from '../hooks/useSender'
 import {
   clearPendingArc,
@@ -18,12 +18,14 @@ import { arcClient } from '../lib/clients'
 import { BALANCES_KEY, balancesKey, fetchAccountBalances } from '../lib/deposit'
 import { buildDonateCalls, donationBreakdown, fetchDonorFunds } from '../lib/donate'
 import { confirmLine } from '../lib/account'
+import { markNoticeSeen, needsFullNotice } from '../lib/giveNotice'
 import { addAtLeast, CANCELLED, CHECK_FAILED, explainError, needsAddMoney } from '../lib/errors'
 import { bpsToPercent, formatAmount, formatExact, parseAmount } from '../lib/format'
 import type { TxResult } from '../lib/sender'
 import { ADD_MONEY_PATH } from '../lib/urls'
 import { byteLength } from '../lib/validate'
 import { SignInButton } from './AccountMenu'
+import { GiveNotice } from './GiveNotice'
 import { AddMoneyLink, recheckResult } from './TxStatus'
 import { AmountInput, Button, Card, Field, StatusBox } from './ui'
 import './DonatePanel.css'
@@ -56,8 +58,7 @@ function ExplorerLink({ hash }: { hash: Hex }) {
   )
 }
 
-// moderation is not used yet. A later change uses it to show the full donor notice on every gift while under review.
-export function DonatePanel({ view }: { view: CampaignView; moderation: 'normal' | 'review' }) {
+export function DonatePanel({ view, moderation }: { view: CampaignView; moderation: 'normal' | 'review' }) {
   const { address: campaign, summary, symbol } = view
   const token = summary.token
   const closed = summary.closed
@@ -68,6 +69,7 @@ export function DonatePanel({ view }: { view: CampaignView; moderation: 'normal'
   const [tipPercent, setTipPercent] = useState<(typeof TIP_PERCENTS)[number]>(0)
   const [message, setMessage] = useState('')
   const [anonymous, setAnonymous] = useState(false)
+  const [noticeOpen, setNoticeOpen] = useState(false)
   // Re-read the shared pending store on every change, from this tab or another. A donation another tab left
   // unconfirmed puts this form into its not-confirmed state, unless this tab is sending or checking its own.
   // Only donations block: gifts come from the Fundit account on Arc, so a transfer from another chain saved
@@ -206,6 +208,19 @@ export function DonatePanel({ view }: { view: CampaignView; moderation: 'normal'
 
   function submit(e: FormEvent) {
     e.preventDefault()
+    if (inFlight.current || !canSubmit || !sender) return
+    // The donor reads the notice before anything is sent. Cancel leaves the form as it was.
+    if (needsFullNotice({ network: NETWORK.name, sender: sender.address, moderation })) {
+      setNoticeOpen(true)
+      return
+    }
+    void donate()
+  }
+
+  function continueFromNotice() {
+    setNoticeOpen(false)
+    // A Fundit under review shows the notice every time, so seeing it once proves nothing there.
+    if (sender && moderation === 'normal') markNoticeSeen(NETWORK.name, sender.address)
     void donate()
   }
 
@@ -408,7 +423,16 @@ export function DonatePanel({ view }: { view: CampaignView; moderation: 'normal'
             {busy ? 'Giving...' : 'Give'}
           </Button>
         )}
+        {!(unconfirmed || (!sender && !closed)) && (
+          <p className="give-hint give-reminder">
+            Gifts can't be reversed or refunded.{' '}
+            <Link to="/terms" target="_blank">
+              Terms
+            </Link>
+          </p>
+        )}
       </form>
+      {noticeOpen && <GiveNotice review={moderation === 'review'} onCancel={() => setNoticeOpen(false)} onContinue={continueFromNotice} />}
       {!unconfirmed && !sender && !closed && (
         <SignInButton className="ui-btn ui-btn-primary ui-btn-lg ui-btn-block give-signin" label="Sign in to give" />
       )}
