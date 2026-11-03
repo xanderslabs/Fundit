@@ -82,14 +82,14 @@
     <p class="lede">Every fundraiser is its own escrow contract on Arc. People sign in with a Fundit account, by email (a Circle user-controlled wallet) or with their own wallet. Donations arrive in USDC or EURC, the creator withdraws to Arc or to another CCTP chain, and no operator key can move a creator's balance.</p>
   </header>
 
-  <div class="note prose"><strong>Live on Arc mainnet.</strong> fundit.fun runs on Arc mainnet, and the factory and implementation are deployed. Email sign-in stays off on mainnet until the mainnet email check passes, and wallet sign-in is available. See <a href="#deployed">Deployed contracts</a>. The app has an Arc testnet build setting, and the end-to-end suite runs every money flow on Arc testnet against the testnet factory.</div>
+  <div class="note prose"><strong>Live on Arc mainnet.</strong> fundit.fun runs on Arc mainnet, and the factory and implementation are deployed. It is in beta, with email and wallet sign-in. The account page shows the person's USDC on Arc and on every CCTP chain Fundit pays out to. See <a href="#deployed">Deployed contracts</a>. The app has an Arc testnet build setting, and the end-to-end suite runs every money flow on Arc testnet against the testnet factory.</div>
 
   <section aria-labelledby="flow">
     <h2 id="flow">Money flow</h2>
     <div class="diagram">
       <svg viewBox="0 0 900 470" role="img" aria-labelledby="svg-title svg-desc">
         <title id="svg-title">Fundit money flow</title>
-        <desc id="svg-desc">USDC or EURC sent on Arc from any wallet, or USDC from another chain, adds money to the donor's Fundit account. The Fundit account donates into one campaign escrow on Arc. The factory creates the escrow. The creator withdraws on Arc or through CCTP to another chain, and fees go to the treasury through claimFees.</desc>
+        <desc id="svg-desc">USDC or EURC sent on Arc from any wallet adds money to the donor's Fundit account. Giving from another chain straight into the escrow is planned. The Fundit account donates into one campaign escrow on Arc. The factory creates the escrow. The creator withdraws on Arc or through CCTP to another chain, and fees go to the treasury through claimFees.</desc>
         <defs>
           <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
           <marker id="af" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-flag" d="M0,0 L10,5 L0,10 z"/></marker>
@@ -108,8 +108,8 @@
 
         <rect class="n-box" x="10" y="240" width="230" height="78" rx="12"/>
         <text class="t-h" x="26" y="268">USDC on another chain</text>
-        <text class="t-s" x="26" y="288">Add money with Bridge Kit</text>
-        <text class="t-m" x="26" y="306">useForwarder: true</text>
+        <text class="t-s" x="26" y="288">Planned: give from any chain</text>
+        <text class="t-m" x="26" y="306">CCTP V2, Gas Station relayer</text>
 
         <!-- Factory -->
         <rect class="n-box" x="335" y="360" width="230" height="78" rx="12"/>
@@ -144,7 +144,7 @@
 
         <!-- Edges in -->
         <path class="e" d="M125,98 L125,128" marker-end="url(#a)"/>
-        <path class="e-flag" d="M125,240 L125,210" marker-end="url(#af)"/>
+        <path class="e-flag" d="M240,279 C290,279 290,230 333,230" marker-end="url(#af)"/>
         <path class="e" d="M240,169 L333,175" marker-end="url(#a)"/>
         <path class="e" d="M450,360 L450,252" marker-end="url(#a)"/>
         <!-- Edges out -->
@@ -154,8 +154,8 @@
       </svg>
     </div>
     <div class="legend">
-      <span><i class="swatch"></i>Default build</span>
-      <span><i class="swatch flag"></i>Behind <code>VITE_CROSSCHAIN</code>, off by default</span>
+      <span><i class="swatch"></i>Live on mainnet</span>
+      <span><i class="swatch flag"></i>Planned, grant milestone 1</span>
     </div>
   </section>
 
@@ -163,13 +163,14 @@
     <h2 id="products">Circle and Arc products</h2>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Product</th><th>Role</th><th>Code</th><th>Default build</th></tr></thead>
+        <thead><tr><th>Product</th><th>Role</th><th>Code</th><th>Status</th></tr></thead>
         <tbody>
           <tr><td>Arc</td><td>Home chain. Gas is paid in USDC.</td><td><code>app/src/config.ts</code></td><td><span class="pill on">On</span></td></tr>
           <tr><td>USDC and EURC</td><td>Campaign tokens, ERC-20 interface, 6 decimals</td><td><code>CampaignFactory.sol</code></td><td><span class="pill on">On</span></td></tr>
-          <tr><td>User-controlled wallets</td><td>Email sign-in. Circle signs after the person approves, and Fundit sends the transaction to Arc.</td><td><code>app/src/lib/emailSender.ts</code></td><td><span class="pill off">Flag</span></td></tr>
+          <tr><td>User-controlled wallets</td><td>Email sign-in. Circle signs after the person approves, and Fundit sends the transaction to Arc.</td><td><code>app/src/lib/emailSender.ts</code></td><td><span class="pill on">On</span></td></tr>
           <tr><td>CCTP V2 and Forwarding Service</td><td>USDC payouts and account sends to other CCTP chains</td><td><code>Campaign.sol</code>, <code>app/src/lib/payout.ts</code>, <code>app/src/lib/accountWithdraw.ts</code></td><td><span class="pill on">On</span></td></tr>
-          <tr><td>Bridge Kit</td><td>Add money from another chain into the Fundit account</td><td><code>app/src/lib/bridge.ts</code></td><td><span class="pill off">Flag</span></td></tr>
+          <tr><td>Gas Station and developer-controlled wallets</td><td>Fundit's relayer for giving from any chain: a Circle smart account submits the CCTP burn and Gas Station pays the gas</td><td>Planned</td><td><span class="pill off">Planned</span></td></tr>
+          <tr><td>Onramp</td><td>Card and other fiat gifts into a Fundit</td><td>Planned</td><td><span class="pill off">Planned</span></td></tr>
         </tbody>
       </table>
     </div>
@@ -215,7 +216,7 @@
 
   <section aria-labelledby="deployed">
     <h2 id="deployed">Deployed contracts</h2>
-    <p class="prose">Arc mainnet, chain ID <code>5042</code>, from <code>contracts/deployments/arc-mainnet.json</code>. Deploy block <code>26452579</code>. Both contracts are an exact match on Sourcify. Arc testnet, chain ID <code>5042002</code>, from <code>contracts/deployments/arc-testnet.json</code>: deploy block <code>67870064</code>.</p>
+    <p class="prose">Arc mainnet, chain ID <code>5042</code>, from <code>contracts/deployments/arc-mainnet.json</code>. Deploy block <code>26452579</code>. Both contracts are verified on Sourcify (exact match) and on the Arc explorer. Arc testnet, chain ID <code>5042002</code>, from <code>contracts/deployments/arc-testnet.json</code>: deploy block <code>67870064</code>.</p>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Contract</th><th>Arc mainnet</th><th>Arc testnet</th></tr></thead>
@@ -228,5 +229,5 @@
     </div>
   </section>
 
-  <footer>Source: <code>contracts/src/</code>, <code>contracts/SECURITY.md</code> and <code>app/src/lib/</code> in the Fundit repository. Draft, October 2026.</footer>
+  <footer>Source: <code>contracts/src/</code>, <code>contracts/SECURITY.md</code> and <code>app/src/lib/</code> in the Fundit repository. November 2026.</footer>
 </main>
