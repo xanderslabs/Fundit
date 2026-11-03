@@ -56,7 +56,8 @@ function ExplorerLink({ hash }: { hash: Hex }) {
   )
 }
 
-export function DonatePanel({ view }: { view: CampaignView }) {
+// moderation is not used yet. A later change uses it to show the full donor notice on every gift while under review.
+export function DonatePanel({ view }: { view: CampaignView; moderation: 'normal' | 'review' }) {
   const { address: campaign, summary, symbol } = view
   const token = summary.token
   const closed = summary.closed

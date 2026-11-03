@@ -54,6 +54,7 @@ function client(known: boolean, s: Summary = summary()): ReadClient {
 
 afterEach(() => {
   cleanup()
+  vi.unstubAllGlobals()
   state.tag = null
 })
 
@@ -148,5 +149,26 @@ describe('embed entry', () => {
     document.body.append(root)
     await import('../embed')
     expect(await screen.findByText('Not a Fundit')).toBeTruthy()
+  })
+
+  function flag(list: 'review' | 'removed') {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ review: list === 'review' ? [ADDRESS] : [], removed: list === 'removed' ? [ADDRESS] : [] }))),
+    )
+  }
+
+  it('shows Under review next to the Give link for a Fundit under review', async () => {
+    flag('review')
+    render(<Embed address={ADDRESS} origin={ORIGIN} client={client(true)} />)
+    expect(await screen.findByText('Under review')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Give' })).toBeTruthy()
+  })
+
+  it('shows Removed by Fundit and no Give link for a removed Fundit', async () => {
+    flag('removed')
+    render(<Embed address={ADDRESS} origin={ORIGIN} client={client(true)} />)
+    expect(await screen.findByText('Removed by Fundit')).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Give' })).toBeNull()
   })
 })

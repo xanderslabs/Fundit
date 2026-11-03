@@ -1,0 +1,12 @@
+.moderation-removed .ui-banner-attention {
+  border-color: var(--danger);
+  background: var(--surface);
+}
+
+.moderation-removed .ui-banner-text strong {
+  color: var(--danger-ink);
+}
+
+.moderation-review {
+  margin-bottom: var(--space-5);
+}

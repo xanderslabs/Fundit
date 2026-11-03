@@ -69,6 +69,7 @@ function renderPage(path = `/c/${ADDRESS}`) {
 
 afterEach(() => {
   cleanup()
+  vi.unstubAllGlobals()
   hookState.current = { isPending: true, isError: false }
   signedIn.sender = null
 })
@@ -200,5 +201,35 @@ describe('CampaignPage', () => {
     renderPage()
     expect(screen.getByText('This Fundit is closed.')).toBeTruthy()
     expect((screen.getByRole('button', { name: 'Give' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  function flag(list: 'review' | 'removed') {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ review: list === 'review' ? [ADDRESS] : [], removed: list === 'removed' ? [ADDRESS] : [] }))),
+    )
+    hookState.current = { data: view({}), isPending: false, isError: false }
+  }
+
+  it('shows the under review banner and keeps the Give panel', async () => {
+    flag('review')
+    renderPage()
+    expect(await screen.findByText('This Fundit is under review.')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: /give/i })).toBeTruthy()
+  })
+
+  it('shows the removed notice in place of the Give panel', async () => {
+    flag('removed')
+    renderPage()
+    expect(await screen.findByText('Fundit removed this fundraiser from the site after a review.')).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: /give/i })).toBeNull()
+  })
+
+  it('shows no notice when the moderation request fails', () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>', { status: 404 })))
+    hookState.current = { data: view({}), isPending: false, isError: false }
+    renderPage()
+    expect(screen.queryByText('This Fundit is under review.')).toBeNull()
+    expect(screen.queryByText(/removed this fundraiser/)).toBeNull()
   })
 })

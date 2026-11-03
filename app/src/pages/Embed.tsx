@@ -3,10 +3,12 @@ import { isAddress } from 'viem'
 import { NetworkTag, networkTagName } from '../components/NetworkTag'
 import { Progress } from '../components/Progress'
 import { campaignStatus, StatusBadge } from '../components/StatusBadge'
+import { Badge } from '../components/ui'
 import { NETWORK_TAG } from '../config'
 import { type CampaignView, fetchCampaign, type ReadClient } from '../lib/campaigns'
 import { arcClient } from '../lib/clients'
 import { formatAmount } from '../lib/format'
+import { EMPTY_MODERATION, fetchModeration, moderationFor } from '../lib/moderation'
 // The embed has no router, so it styles plain links and buttons with the ui button classes.
 import '../components/ui/Button.css'
 
@@ -34,6 +36,16 @@ export function Embed({ address, origin, client = arcClient }: Props) {
   }, [address, client])
 
   useEffect(load, [load])
+
+  // Fails open and never holds the card back: until the list answers, the Fundit reads as normal.
+  const [flags, setFlags] = useState(EMPTY_MODERATION)
+  useEffect(() => {
+    let live = true
+    void fetchModeration().then((m) => live && setFlags(m))
+    return () => {
+      live = false
+    }
+  }, [])
 
   useEffect(() => {
     if (state.kind === 'ready') document.title = `${state.view.summary.meta.title || 'A Fundit'} on Fundit`
@@ -71,6 +83,7 @@ export function Embed({ address, origin, client = arcClient }: Props) {
   const { summary, symbol } = state.view
   const status = campaignStatus(summary)
   const href = `${origin}/c/${state.view.address}`
+  const moderation = moderationFor(flags, state.view.address)
   return (
     <main className="embed">
       <div className="embed-top">
@@ -84,7 +97,11 @@ export function Embed({ address, origin, client = arcClient }: Props) {
         </p>
         <Progress raised={summary.raised} goal={summary.goal} />
       </div>
-      {summary.closed ? (
+      {moderation === 'removed' ? (
+        <div className="embed-foot">
+          <span className="embed-muted">Removed by Fundit</span>
+        </div>
+      ) : summary.closed ? (
         <div className="embed-foot">
           <span className="embed-muted">This Fundit is closed.</span>
           <a className="embed-link" href={href} target="_blank" rel="noopener">
@@ -94,6 +111,7 @@ export function Embed({ address, origin, client = arcClient }: Props) {
       ) : (
         <div className="embed-foot">
           <span className="embed-muted">{symbol} on Arc</span>
+          {moderation === 'review' && <Badge tone="attention">Under review</Badge>}
           <a className="ui-btn ui-btn-primary ui-btn-md embed-give" href={href} target="_blank" rel="noopener">
             Give
           </a>

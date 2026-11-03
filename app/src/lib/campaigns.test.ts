@@ -13,6 +13,7 @@ import {
   type Summary,
   uniqueByAddress,
 } from './campaigns'
+import { EMPTY_MODERATION } from './moderation'
 
 // One test account, written in lower case as in config.ts.
 vi.mock('../config', async (importOriginal) => ({
@@ -177,7 +178,7 @@ describe('test data on public lists', () => {
     const test = view(B, '0x2222222222222222222222222222222222222222')
     const testMixed = view(C, '0x2222222222222222222222222222222222222222'.toUpperCase().replace('0X', '0x') as Address)
     const real2 = view(ZERO, '0x3333333333333333333333333333333333333333')
-    expect(publicFundits([real1, test, testMixed, real2])).toEqual([real1, real2])
+    expect(publicFundits([real1, test, testMixed, real2], EMPTY_MODERATION)).toEqual([real1, real2])
     expect(isTestFundit(test)).toBe(true)
     expect(isTestFundit(testMixed)).toBe(true)
     expect(isTestFundit(real1)).toBe(false)

@@ -4,17 +4,20 @@ import { Link, Navigate, useParams } from 'react-router'
 import { type Address, encodeFunctionData, formatUnits, isAddress, isAddressEqual, zeroAddress } from 'viem'
 import { campaignAbi } from '../abi/campaign'
 import { erc20Abi } from '../abi/erc20'
+import { ModerationBadge } from '../components/ModerationBanner'
 import { PendingBridgeTracker } from '../components/PendingBridgeTracker'
 import { TxStatus, useTx } from '../components/TxStatus'
 import { Actions, AddressChip, AmountInput, Button, EmptyState, Field, PageHeader, Panel, StatusBox } from '../components/ui'
 import { ARC_DOMAIN, CHAIN_LABELS, TOKENS } from '../config'
 import { useCampaign } from '../hooks/useCampaigns'
+import { useModeration } from '../hooks/useModeration'
 import { useSender } from '../hooks/useSender'
 import { chainByKey, savePendingPayout } from '../lib/bridge'
 import { BALANCES_KEY } from '../lib/deposit'
 import type { CampaignView } from '../lib/campaigns'
 import { arcClient } from '../lib/clients'
 import { PlainError } from '../lib/errors'
+import { moderationFor } from '../lib/moderation'
 import { bpsToPercent, formatAmount, parseAmount } from '../lib/format'
 import { fetchForwardFee } from '../lib/iris'
 import { buildWithdrawCall, destDomain, netAfterWithdrawFee, type PayoutDest, payoutOptions } from '../lib/payout'
@@ -574,6 +577,7 @@ export function Manage() {
   const valid = isAddress(param)
   const query = useCampaign(valid ? param : undefined)
   const sender = useSender()
+  const moderation = useModeration()
 
   if (!valid || query.data === 'not-a-campaign') return <NotFound fundit />
 
@@ -611,7 +615,13 @@ export function Manage() {
   // phone the columns stack in the same order, so Close this Fundit comes last.
   return (
     <div className="manage">
-      <PageHeader title="Manage this Fundit" subtitle={<Link to={`/c/${view.address}`}>{view.summary.meta.title || 'Untitled Fundit'}</Link>} />
+      <PageHeader title="Manage this Fundit" subtitle={
+          <>
+            <Link to={`/c/${view.address}`}>{view.summary.meta.title || 'Untitled Fundit'}</Link>{' '}
+            <ModerationBadge state={moderationFor(moderation, view.address)} />
+          </>
+        }
+      />
       <div className="manage-grid">
         <div className="manage-col">
           <WithdrawSection view={view} sender={sender} />

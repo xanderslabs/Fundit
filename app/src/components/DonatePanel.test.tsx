@@ -82,7 +82,7 @@ function renderPanel(v: CampaignView, client = new QueryClient()) {
   render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
-        <DonatePanel view={v} />
+        <DonatePanel view={v} moderation="normal" />
       </MemoryRouter>
     </QueryClientProvider>,
   )

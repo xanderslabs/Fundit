@@ -4,6 +4,7 @@ import { ActivityList } from '../components/ActivityList'
 import { BackupBanner } from '../components/BackupBanner'
 import { CampaignImage } from '../components/CampaignImage'
 import { DonatePanel } from '../components/DonatePanel'
+import { ModerationBanner } from '../components/ModerationBanner'
 import { Name } from '../components/Name'
 import { Progress } from '../components/Progress'
 import { SharePanel } from '../components/SharePanel'
@@ -11,9 +12,11 @@ import { StatusBadge } from '../components/StatusBadge'
 import { Button, ButtonLink, Card, EmptyState, PageHeader, Stat } from '../components/ui'
 import { EXPLORER_URL } from '../config'
 import { useCampaign } from '../hooks/useCampaigns'
+import { useModeration } from '../hooks/useModeration'
 import { useSender } from '../hooks/useSender'
 import type { CampaignView } from '../lib/campaigns'
 import { bpsToPercent, formatAmount } from '../lib/format'
+import { moderationFor } from '../lib/moderation'
 import { shortAddress } from '../lib/names'
 import { safeHttpsUrl } from '../lib/urls'
 import { NotFound } from './NotFound'
@@ -84,6 +87,7 @@ function CampaignBody({ view }: { view: CampaignView }) {
   const { summary } = view
   const sender = useSender()
   const isCreator = sender !== null && isAddressEqual(sender.address, summary.creator)
+  const moderation = moderationFor(useModeration(), view.address)
   const created = new Date(Number(summary.createdAt) * 1000).toLocaleDateString(undefined, {
     year: 'numeric',
     month: 'long',
@@ -109,13 +113,14 @@ function CampaignBody({ view }: { view: CampaignView }) {
         }
       />
       <BackupBanner view={view} />
+      {moderation === 'review' && <ModerationBanner state="review" />}
       {/* DOM order is the narrow-screen and screen reader order. Wide screens place stats and Give in the
           right column with grid areas, so the left column runs on without gaps. */}
       <div className="campaign-grid">
         <CampaignImage url={summary.meta.imageUrl} title={summary.meta.title} className="campaign-hero" />
         <aside className="campaign-side">
           <CampaignStats view={view} />
-          <DonatePanel view={view} />
+          {moderation === 'removed' ? <ModerationBanner state="removed" /> : <DonatePanel view={view} moderation={moderation} />}
         </aside>
         <div className="campaign-body">
           <section>

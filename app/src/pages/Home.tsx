@@ -5,6 +5,7 @@ import { CampaignGrid, LoadError } from '../components/CampaignGrid'
 import { ButtonLink } from '../components/ui'
 import { CHAIN_NAMES, EMAIL_SIGNIN } from '../config'
 import { useCampaigns, useFeatured } from '../hooks/useCampaigns'
+import { useModeration } from '../hooks/useModeration'
 import { featuredFirst, publicFundits } from '../lib/campaigns'
 import { useSender } from '../hooks/useSender'
 import './Home.css'
@@ -154,8 +155,9 @@ function CreateFunditButton() {
 export function Home() {
   const featured = useFeatured()
   const newest = useCampaigns(0n)
-  // Test Fundits stay out of public lists (TEST_CREATORS). Their own pages still open.
-  const shown = newest.data && featuredFirst(publicFundits(newest.data), featured.data).slice(0, NEWEST_COUNT)
+  const moderation = useModeration()
+  // Test Fundits and Fundits under review or removed stay out of public lists. Their own pages still open.
+  const shown = newest.data && featuredFirst(publicFundits(newest.data, moderation), featured.data, moderation).slice(0, NEWEST_COUNT)
   const signedIn = useSender() !== null
 
   return (

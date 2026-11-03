@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { CampaignGrid, LoadError } from '../components/CampaignGrid'
 import { Button, ButtonLink, PageHeader } from '../components/ui'
 import { campaignsQuery, PAGE_SIZE, useFeatured } from '../hooks/useCampaigns'
+import { useModeration } from '../hooks/useModeration'
 import { useSender } from '../hooks/useSender'
 import { type CampaignView, featuredFirst, publicFundits, uniqueByAddress } from '../lib/campaigns'
 import './Explore.css'
@@ -43,12 +44,13 @@ export function Explore() {
   const [showClosed, setShowClosed] = useState(false)
   const signedIn = useSender() !== null
   const featured = useFeatured().data
+  const moderation = useModeration()
 
   const results = useQueries({
     queries: Array.from({ length: pages }, (_, i) => campaignsQuery(BigInt(i) * PAGE_SIZE)),
   })
-  // Test Fundits stay out of public lists (TEST_CREATORS). Their own pages still open.
-  const loaded = publicFundits(uniqueByAddress(results.flatMap((r) => r.data ?? [])))
+  // Test Fundits and Fundits under review or removed stay out of public lists, search included. Their own pages still open.
+  const loaded = publicFundits(uniqueByAddress(results.flatMap((r) => r.data ?? [])), moderation)
   const firstPending = results[0]?.isPending ?? true
   const failed = results.find((r) => r.isError)
   const last = results[results.length - 1]
@@ -58,7 +60,7 @@ export function Explore() {
 
   const term = search.trim().toLowerCase()
   // In the default order the featured Fundit comes first, even when it is older than the pages loaded so far.
-  const shown = (sort === 'newest' ? featuredFirst(loaded, featured) : loaded)
+  const shown = (sort === 'newest' ? featuredFirst(loaded, featured, moderation) : loaded)
     .filter((v) => showClosed || !v.summary.closed)
     .filter(
       (v) =>

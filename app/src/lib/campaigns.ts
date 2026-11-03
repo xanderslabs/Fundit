@@ -3,6 +3,7 @@ import { isAddressEqual, zeroAddress } from 'viem'
 import { campaignAbi } from '../abi/campaign'
 import { factoryAbi } from '../abi/factory'
 import { FACTORY_ADDRESS, TEST_CREATORS, TOKENS, type TokenSymbol } from '../config'
+import { type Moderation, moderationFor } from './moderation'
 
 export type Summary = ContractFunctionReturnType<typeof campaignAbi, 'view', 'summary'>
 
@@ -55,13 +56,14 @@ export function isTestFundit(view: CampaignView): boolean {
   return TEST_CREATORS.includes(view.summary.creator.toLowerCase())
 }
 
-export function publicFundits(views: CampaignView[]): CampaignView[] {
-  return views.filter((v) => !isTestFundit(v))
+// Fundits under review or removed are left out too. Their own pages still open.
+export function publicFundits(views: CampaignView[], m: Moderation): CampaignView[] {
+  return views.filter((v) => !isTestFundit(v) && moderationFor(m, v.address) === 'normal')
 }
 
-// The owner-set featured Fundit goes first, then the rest in their own order. A test Fundit is never put first.
-export function featuredFirst(views: CampaignView[], featured: CampaignView | null | undefined): CampaignView[] {
-  if (!featured || isTestFundit(featured)) return views
+// The owner-set featured Fundit goes first, then the rest in their own order. A test or flagged Fundit is never put first.
+export function featuredFirst(views: CampaignView[], featured: CampaignView | null | undefined, m: Moderation): CampaignView[] {
+  if (!featured || isTestFundit(featured) || moderationFor(m, featured.address) !== 'normal') return views
   const key = featured.address.toLowerCase()
   return [featured, ...views.filter((v) => v.address.toLowerCase() !== key)]
 }

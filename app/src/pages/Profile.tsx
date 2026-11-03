@@ -7,10 +7,12 @@ import { AccountWithdraw } from '../components/AccountWithdraw'
 import { AddMoneyPanel } from '../components/AddMoneyPanel'
 import { CampaignGrid, LoadError } from '../components/CampaignGrid'
 import { ChainBalances } from '../components/ChainBalances'
+import { ModerationBadge } from '../components/ModerationBanner'
 import { PendingBridgeTracker } from '../components/PendingBridgeTracker'
 import { ShareDialog } from '../components/SharePanel'
 import { AddressChip, Button, ButtonLink, Card, EmptyState, Panel, Stat, TabPanel, Tabs } from '../components/ui'
 import { EXPLORER_URL } from '../config'
+import { useModeration } from '../hooks/useModeration'
 import { blockTimes } from '../hooks/useActivity'
 import { useCampaign } from '../hooks/useCampaigns'
 import { useSender } from '../hooks/useSender'
@@ -23,6 +25,7 @@ import { arcClient } from '../lib/clients'
 import { balancesKey, fetchAccountBalances } from '../lib/deposit'
 import { readEmailSession } from '../lib/emailAccount'
 import { formatAmount } from '../lib/format'
+import { moderationFor } from '../lib/moderation'
 import { shortAddress } from '../lib/names'
 import type { Sender } from '../lib/sender'
 import { SignInRequired } from './SignInRequired'
@@ -75,6 +78,7 @@ function DonationRow({ item, time }: { item: DonationItem; time: bigint | undefi
 }
 
 function YourFundits({ address }: { address: Address }) {
+  const moderation = useModeration()
   const query = useQuery({
     queryKey: ['my-campaigns', address.toLowerCase()],
     queryFn: () => myCampaigns(arcClient, address),
@@ -97,6 +101,7 @@ function YourFundits({ address }: { address: Address }) {
           skeletons={3}
           action={(v) => (
             <>
+              <ModerationBadge state={moderationFor(moderation, v.address)} />
               <ButtonLink to={`/manage/${v.address}`} variant="secondary" aria-label={`Manage ${v.summary.meta.title || 'Untitled Fundit'}`}>
                 Manage
               </ButtonLink>
